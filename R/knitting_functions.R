@@ -1,4 +1,5 @@
 #' Exports file to subdirectory output and adds date to title
+#'
 #' @export
 knit_with_date <- function(input, ...) {
   rmarkdown::render(
