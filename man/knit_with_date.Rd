@@ -2,10 +2,10 @@
 % Please edit documentation in R/knitting_functions.R
 \name{knit_with_date}
 \alias{knit_with_date}
-\title{Knits into subdirectory and adds date to filename}
+\title{Knits multiple files into subdirectory and adds date to filename}
 \usage{
 knit_with_date(input, ...)
 }
 \description{
-Knits into subdirectory and adds date to filename
+Knits multiple files into subdirectory and adds date to filename
 }
