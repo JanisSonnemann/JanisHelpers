@@ -8,11 +8,13 @@
 
 Einzelne kleine Funktionen für alltägliche Probleme
 
--   knit with date: erstellt output in subdirectory mit aktuellem Datum
-    im Titel
--   knit-with-date: rmarkdown template das automatisch datiert dateien
+-   knit_multiple_dated: put in yaml behind “knit:” to automatically
+    knit dated versions to specified directory
+-   Auto-knit-report: rmarkdown template das automatisch datiert dateien
     in spezifische subdirectories erstellt
--   update_JanisHelpers: automatically updates the package from the local disk
+-   update_JanisHelpers: automatically updates the package from the
+    local disk
 
-Erstellung eigener Pakete über:
-“<https://r-pkgs.org/whole-game.html#create_package>”
+Erstellung eigener Pakete über: -
+“<https://r-pkgs.org/whole-game.html#create_package>” -
+“<https://r-pkgs.org/code.html>”

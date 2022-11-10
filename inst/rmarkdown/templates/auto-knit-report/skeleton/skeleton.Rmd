@@ -11,30 +11,27 @@ output:
     toc: yes
     toc_depth: 3
 editor_options: 
-  
   chunk_output_type: console
-knit: (function(input, ...) {
-      ),
-      output_format = "all",
-      envir = globalenv()
-      )
-    rmarkdown::render(
-      input,
-      output_dir = paste0("doc/output/XXX"),
-      output_file = paste0(
-        xfun::sans_ext(input), '-', Sys.Date()
+knit: (function(input, ...) {JanisHelpers::knit_multiple_dated(input, path = "XXX")})
 ---
 
 ```{r setup, include=FALSE}
 # Before start:
 ## in knit: output_dir replace XXX with short name for subdirectory
 ## in opts_chunk below replace XXX with same name
-
-librarian::shelf(tidyverse)
-
 knitr::opts_chunk$set(fig.path = paste0("output/XXX/figs/", Sys.Date(),"-"), dev = "png", 
                       warning = FALSE,
                       # hides code in pdf file
                       echo = knitr::is_html_output())
+
+
+# update JanisHelpers
+# install.packages("~/R/eigene R Pakete/JanisHelpers", repos = NULL, type = "source")
+# install.packages("librarian")
+
+librarian::shelf(tidyverse)
+
+
+
 ```
 

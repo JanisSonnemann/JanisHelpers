@@ -1,13 +1,20 @@
-#' Knits multiple files into subdirectory and adds date to filename
+#' Function for automatic knitting of dated files in subdirectory
 #'
+#' @param input unchanged
+#' @param path change to name of desired subdirectory
+#' @param ... further arguments
+#'
+#' @return
 #' @export
-knit_with_date <- function(input, ...) {
+#'
+#' @examples
+knit_multiple_dated <- function(input, path, ...) {
   rmarkdown::render(
     input,
+    output_dir = paste0("doc/output/", path),
     output_file = paste0(
-      xfun::sans_ext(input), '-', Sys.Date(), '.'
+      xfun::sans_ext(input), '-', Sys.Date()
     ),
-    output_dir = "output",
     output_format = "all",
     envir = globalenv()
   )
