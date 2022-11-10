@@ -2,3 +2,4 @@
 
 export(knit_with_date)
 export(strsplit1)
+export(update_JanisHelpers)
