@@ -10,6 +10,8 @@ Einzelne kleine Funktionen für alltägliche Probleme
 
 -   knit with date: erstellt output in subdirectory mit aktuellem Datum
     im Titel
+-   knit-with-date: rmarkdown template das automatisch datiert dateien
+    in spezifische subdirectories erstellt
 
 Erstellung eigener Pakete über:
 “<https://r-pkgs.org/whole-game.html#create_package>”
