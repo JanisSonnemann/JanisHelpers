@@ -1,0 +1,4 @@
+name: Auto-Knit-Report
+description: >
+   Automatically knits dated pdf, html and figs to subdirectory
+create_dir: FALSE
