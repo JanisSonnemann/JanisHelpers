@@ -26,7 +26,7 @@ knitr::opts_chunk$set(fig.path = paste0("output/XXX/figs/", Sys.Date(),"-"), dev
 
 
 # update JanisHelpers
-# install.packages("~/R/eigene R Pakete/JanisHelpers", repos = NULL, type = "source")
+# devtools::install("C:/Users/janis/Documents/R/eigene R Pakete/JanisHelpers")
 # install.packages("librarian")
 
 librarian::shelf(tidyverse)

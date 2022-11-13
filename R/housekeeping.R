@@ -5,5 +5,5 @@
 #'
 #' @examples
 update_JanisHelpers <- function(){
-  install.packages("~/R/eigene R Pakete/JanisHelpers", repos = NULL, type = "source")
+  devtools::install("C:/Users/janis/Documents/R/eigene R Pakete/JanisHelpers")
 }
