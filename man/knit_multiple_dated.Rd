@@ -4,12 +4,14 @@
 \alias{knit_multiple_dated}
 \title{Function for automatic knitting of dated files in subdirectory}
 \usage{
-knit_multiple_dated(input, path, ...)
+knit_multiple_dated(input, path, format, ...)
 }
 \arguments{
 \item{input}{unchanged}
 
 \item{path}{change to name of desired subdirectory}
+
+\item{format}{specify desired files to output in quotes: "html_document", "pdf_document", "all"}
 
 \item{...}{further arguments}
 }
