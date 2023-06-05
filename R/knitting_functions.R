@@ -8,6 +8,8 @@
 #' @return
 #' @export
 #'
+#'
+#'
 #' @examples
 knit_multiple_dated <- function(input, path, format, ...) {
   rmarkdown::render(
