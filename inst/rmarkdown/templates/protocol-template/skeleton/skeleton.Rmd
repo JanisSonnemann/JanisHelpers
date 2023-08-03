@@ -1,0 +1,62 @@
+---
+title: "Protocol Template"
+author: "Janis Sonnemann"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: yes
+    toc_float: true
+    code_folding: hide
+  pdf_document:
+    toc: yes
+    toc_depth: 3
+header-includes:
+- \usepackage{pdfpages}
+- \usepackage{float}
+- \usepackage{fancyhdr}
+- \usepackage{lastpage}
+- \pagestyle{fancy}
+# Put project name here 
+- \fancyhead[C]{MPO-mRNA}
+# put experiment name here
+- \fancyhead[R]{Exp1}
+- \fancyfoot[C]{\thepage\ von \pageref{LastPage}}
+editor_options: 
+  chunk_output_type: console
+#   replace XXX with experiment name
+knit: (function(input, ...) {JanisHelpers::knit_multiple_dated(input, path = "protocols", format = "pdf_document")})
+---
+
+```{r setup, include = knitr::is_html_output(), error = FALSE, message = FALSE, warning = FALSE}
+
+options(knitr.kable.NA = '')
+
+librarian::shelf(tidyverse, readxl, here, kableExtra, httr, jsonlite)
+
+
+
+```
+
+
+```{r get-protocol, echo = FALSE, include = FALSE}
+
+source(file = here("src", "get_protocol.R"))
+
+# Set name of protocol
+protocol_name <- "name"
+# Paste ID of protocol, comes after: https://www.protocols.io/edit/ e.g. https://www.protocols.io/edit/mpo-tetramer-testing5-cnq7vdzn 
+protocol_ID <- "ID"
+
+
+# Function to get and convert protocol
+get_pdf_protocol(protocol_name = protocol_name,
+             protocol_ID = protocol_ID)
+
+pdf_file <- paste0("output/protocols/raw/", Sys.Date(), "-", protocol_name, ".pdf")
+
+include_protocol <- paste0("\\includepdf[pages=-, scale = 1.1, pagecommand={}] {", pdf_file, "}")
+
+```
+
+`r include_protocol`
+
