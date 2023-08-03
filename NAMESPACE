@@ -2,4 +2,4 @@
 
 export(knit_multiple_dated)
 export(strsplit1)
-export(update_JanisHelpers)
+export(update_JanisHelpers_git)
