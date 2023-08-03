@@ -24,10 +24,15 @@ header-includes:
 editor_options: 
   chunk_output_type: console
 #   replace XXX with experiment name
-knit: (function(input, ...) {JanisHelpers::knit_multiple_dated(input, path = "protocols", format = "pdf_document")})
+knit: (function(input, ...) {JanisHelpers::knit_multiple_dated(input, path = "protocols/XXX", format = "pdf_document")})
 ---
 
 ```{r setup, include = knitr::is_html_output(), error = FALSE, message = FALSE, warning = FALSE}
+
+knitr::opts_chunk$set(fig.path = paste0("output/protocols/", protocol_name, "figs/", Sys.Date(),"/"), dev = "png", 
+                      warning = FALSE,
+                      # hides code in pdf file
+                      echo = knitr::is_html_output())
 
 options(knitr.kable.NA = '')
 
@@ -52,7 +57,7 @@ protocol_ID <- "ID"
 get_pdf_protocol(protocol_name = protocol_name,
              protocol_ID = protocol_ID)
 
-pdf_file <- paste0("output/protocols/raw/", Sys.Date(), "-", protocol_name, ".pdf")
+pdf_file <- paste0("output/protocols/", protocol_name, "/raw/", Sys.Date(), "-", protocol_name, ".pdf")
 
 include_protocol <- paste0("\\includepdf[pages=-, scale = 1.1, pagecommand={}] {", pdf_file, "}")
 

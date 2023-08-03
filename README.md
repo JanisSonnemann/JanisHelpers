@@ -12,8 +12,11 @@ Einzelne kleine Funktionen für alltägliche Probleme
   dated versions to specified directory
 - Auto-knit-report: rmarkdown template das automatisch datiert dateien
   in spezifische subdirectories erstellt
-- update_JanisHelpers: automatically updates the package from the local
-  disk
+- protocol-template: template für Protokolle
+
+Updaten des privaten Pakets:
+“devtools::install_github(”JanisSonnemann/JanisHelpers”, auth_token =
+gh::gh_token())”
 
 Erstellung eigener Pakete über: -
 “<https://r-pkgs.org/whole-game.html#create_package>” -
