@@ -13,6 +13,7 @@ Einzelne kleine Funktionen für alltägliche Probleme
 - Auto-knit-report: rmarkdown template das automatisch datiert dateien
   in spezifische subdirectories erstellt
 - protocol-template: template für Protokolle
+- Import FowJO workspace
 
 Updaten des privaten Pakets:
 “devtools::install_github(”JanisSonnemann/JanisHelpers”, auth_token =

@@ -1,6 +1,6 @@
 Package: JanisHelpers
 Title: Little Helpers For Everyday
-Version: 0.0.12.1
+Version: 0.0.13.1
 Authors@R: 
     person("Janis", "Sonnemann", , "janis.sonnemann@gmail.com", role = c("aut", "cre"),
            comment = c(ORCID = "YOUR-ORCID-ID"))
@@ -9,3 +9,9 @@ License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.2.3
+Imports: 
+    devtools,
+    fcexpr,
+    gh,
+    rmarkdown,
+    xfun

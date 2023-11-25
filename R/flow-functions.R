@@ -1,0 +1,57 @@
+# Function to import data from FlowJo workspace
+#' Import FlowJo workspace data using fcexpr package
+#'
+#' @param path path to FlowJo Space
+#' @param group group of samples from workspace to include in analysis
+#' @param r_stats import stats such as MFIs?
+#' @param keywords which keywords to export
+#'
+#' @return
+#' @export
+#'
+#' @examples
+import_workspace <- function(path, group, r_stats, keywords) {
+  # Create path to WS-file in local directory
+  path <- here("data", "raw", path)
+
+  # Import raw workspace
+  ps_raw <- fcexpr::wsx_get_popstats(ws = path, return_stats = r_stats, groups = group)
+
+  # Merge counts and stats if both are extracted
+  if (r_stats == TRUE) {
+    ps_clean <- left_join(
+      ps_raw[["counts"]],
+      ps_raw[["stats"]],
+      by = c("FileName", "PopulationFullPath")
+    ) %>%
+      select(FileName, PopulationFullPath, Population, Count, FractionOfParent, statistic, channel, value) %>%
+      mutate(
+        channel = str_remove_all(string = channel, pattern = c("Comp-|-A"))
+      ) %>%
+      pivot_wider(
+        names_from = c(statistic, channel),
+        names_sep = "_",
+        values_from = value
+      ) %>%
+      select(!NA_NA)
+    # Return only counts if stats are not extracted
+  } else {
+    ps_clean <- ps_raw %>%
+      select(FileName, PopulationFullPath, Population, Count, FractionOfParent)
+  }
+  # Extract keywords from workspace
+  keys <- fcexpr::wsx_get_keywords(ws = path) %>%
+    enframe() %>%
+    rename(
+      FileName = name
+    ) %>%
+    unnest(c(FileName, value)) %>%
+    rename(key = name) %>%
+    filter(key %in% c(keywords)) %>%
+    pivot_wider(
+      names_from = key,
+      values_from = value
+    )
+  # Merge workspace data with keywords
+  left_join(ps_clean, keys, by = "FileName")
+}
