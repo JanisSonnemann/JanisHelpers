@@ -14,7 +14,7 @@
 knit_multiple_dated <- function(input, path, format, ...) {
   rmarkdown::render(
     input,
-    output_dir = paste0("doc/output/", path),
+    output_dir = paste0("analysis/0-output/", path),
     output_file = paste0(
       xfun::sans_ext(input), '-', Sys.Date()
     ),
