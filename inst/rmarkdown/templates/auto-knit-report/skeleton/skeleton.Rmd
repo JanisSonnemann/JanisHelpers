@@ -19,7 +19,7 @@ knit: (function(input, ...) {JanisHelpers::knit_multiple_dated(input, path = "XX
 # Before start:
 ## in knit: output_dir replace XXX with short name for subdirectory
 ## in opts_chunk below replace XXX with same name
-knitr::opts_chunk$set(fig.path = paste0("output/XXX/figs/", Sys.Date(),"/"), dev = "png", 
+knitr::opts_chunk$set(fig.path = paste0("0-output/XXX/0-figs/", Sys.Date(),"/"), dev = "png", 
                       warning = FALSE,
                       # hides code in pdf file
                       echo = knitr::is_html_output())
