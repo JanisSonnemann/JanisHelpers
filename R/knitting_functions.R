@@ -22,3 +22,29 @@ knit_multiple_dated <- function(input, path, format, ...) {
     envir = globalenv()
   )
 }
+
+
+#' Panel knitting
+#' @description create panel
+#'
+#'
+#' @param input unchanged
+#' @param path path of experiment
+#' @param format pdf_document
+#' @param ... further parameters
+#'
+#' @return
+#' @export
+#'
+#' @examples
+knit_panel <- function(input, path, format, ...) {
+  rmarkdown::render(
+    input,
+    output_dir = paste0("data/", path),
+    output_file = paste0(
+      xfun::sans_ext(input), '-', Sys.Date()
+    ),
+    output_format = format,
+    envir = globalenv()
+  )
+}

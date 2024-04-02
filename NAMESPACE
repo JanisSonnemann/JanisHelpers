@@ -2,5 +2,6 @@
 
 export(import_workspace)
 export(knit_multiple_dated)
+export(knit_panel)
 export(strsplit1)
 export(update_JanisHelpers_git)
