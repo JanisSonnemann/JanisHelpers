@@ -55,3 +55,62 @@ import_workspace <- function(path, group, r_stats, keywords) {
   # Merge workspace data with keywords
   left_join(ps_clean, keys, by = "FileName")
 }
+
+
+
+
+
+
+
+#' Function to automate import of FlowJo workspace data automatically. Enables clean import from .wsp with
+#' simultaneous writing to excel.
+#'
+#'
+#' @param clean logic, decide if data should be newly imported from .wsp and then saved to excel or
+#' simply from previously created Excel
+#' @param location name of subdirectory where data is located
+#' @param wsp name of workspace file
+#' @param group name of group in which samples are organized
+#' @param stats logic indicating if stats should be imported
+#' @param keywords character vector of keywords to be imported
+#'
+#' @return
+#' @export
+#'
+#' @examples
+import_fcs_clean <- function(clean, location, wsp, group, stats, keywords) {
+
+  if(clean == TRUE) {
+
+    data <- JanisHelpers::import_workspace(
+      path = paste0(location, "/", wsp),
+      group = group,
+      r_stats = stats,
+      keywords = c("mouse_id", "tissue")
+    ) |>
+      dplyr::tibble()
+
+    file_name <- tools::file_path_sans_ext(wsp)
+    file_path <- paste0("/data/", location, "/clean/", file_name, ".xlsx")
+
+    xlsx::write.xlsx(data, file = paste0(here(), file_path))
+
+    print(paste("clean data imported from", wsp, "and written to", file_path))
+  }
+
+  if(clean == FALSE) {
+
+    file_name <- tools::file_path_sans_ext(wsp)
+
+    data <- read_excel(
+      paste0(here(), "/data/", location, "/clean/", file_name, ".xlsx")
+    ) |>
+      select(!...1)
+
+    print(paste("imported data from Excel:", file_name))
+
+  }
+
+  data |>
+    dplyr::tibble()
+}

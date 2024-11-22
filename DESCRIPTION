@@ -1,6 +1,6 @@
 Package: JanisHelpers
 Title: Little Helpers For Everyday
-Version: 0.0.13.1
+Version: 0.0.13.2
 Authors@R: 
     person("Janis", "Sonnemann", , "janis.sonnemann@gmail.com", role = c("aut", "cre"),
            comment = c(ORCID = "YOUR-ORCID-ID"))
@@ -14,4 +14,6 @@ Imports:
     fcexpr,
     gh,
     rmarkdown,
-    xfun
+    xfun,
+    xlsx,
+    dplyr

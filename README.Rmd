@@ -27,6 +27,7 @@ Einzelne kleine Funktionen für alltägliche Probleme
   in spezifische subdirectories erstellt
 - protocol-template: template für Protokolle
 - Import FowJO workspace
+- Automatically import and save FlowJo workspace to Excel
 
 Updaten des privaten Pakets: 
 "devtools::install_github("JanisSonnemann/JanisHelpers", auth_token = gh::gh_token())"
