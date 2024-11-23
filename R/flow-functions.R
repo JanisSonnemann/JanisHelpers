@@ -85,7 +85,7 @@ import_fcs_clean <- function(clean, location, wsp, group, stats, keywords) {
     data <- JanisHelpers::import_workspace(
       path = paste0(location, "/", wsp),
       group = group,
-      r_stats = stats,
+      stats = stats,
       keywords = c("mouse_id", "tissue")
     ) |>
       dplyr::tibble()
