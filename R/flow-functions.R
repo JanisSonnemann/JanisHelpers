@@ -86,7 +86,7 @@ import_fcs_clean <- function(clean, location, wsp, group, stats, keywords) {
       path = paste0(location, "/", wsp),
       group = group,
       stats = stats,
-      keywords = c("mouse_id", "tissue")
+      keywords = keywords
     ) |>
       dplyr::tibble()
 
