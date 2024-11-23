@@ -3,22 +3,22 @@
 #'
 #' @param path path to FlowJo Space
 #' @param group group of samples from workspace to include in analysis
-#' @param r_stats import stats such as MFIs?
+#' @param stats import stats such as MFIs?
 #' @param keywords which keywords to export
 #'
 #' @return
 #' @export
 #'
 #' @examples
-import_workspace <- function(path, group, r_stats, keywords) {
+import_workspace <- function(path, group, stats, keywords) {
   # Create path to WS-file in local directory
   path <- here("data", path)
 
   # Import raw workspace
-  ps_raw <- fcexpr::wsx_get_popstats(ws = path, return_stats = r_stats, groups = group)
+  ps_raw <- fcexpr::wsx_get_popstats(ws = path, return_stats = stats, groups = group)
 
   # Merge counts and stats if both are extracted
-  if (r_stats == TRUE) {
+  if (stats == TRUE) {
     ps_clean <- left_join(
       ps_raw[["counts"]],
       ps_raw[["stats"]],
