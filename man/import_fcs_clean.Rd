@@ -5,7 +5,7 @@
 \title{Function to automate import of FlowJo workspace data automatically. Enables clean import from .wsp with
 simultaneous writing to excel.}
 \usage{
-import_fcs_clean(clean, location, wsp, group, stats, keywords)
+import_fcs_clean(clean, location, wsp, group, r_stats, keywords)
 }
 \arguments{
 \item{clean}{logic, decide if data should be newly imported from .wsp and then saved to excel or
@@ -17,7 +17,7 @@ simply from previously created Excel}
 
 \item{group}{name of group in which samples are organized}
 
-\item{stats}{logic indicating if stats should be imported}
+\item{r_stats}{logic indicating if stats should be imported}
 
 \item{keywords}{character vector of keywords to be imported}
 }

@@ -4,14 +4,14 @@
 \alias{import_workspace}
 \title{Import FlowJo workspace data using fcexpr package}
 \usage{
-import_workspace(path, group, stats, keywords)
+import_workspace(path, group, r_stats, keywords)
 }
 \arguments{
 \item{path}{path to FlowJo Space}
 
 \item{group}{group of samples from workspace to include in analysis}
 
-\item{stats}{import stats such as MFIs?}
+\item{r_stats}{import stats such as MFIs?}
 
 \item{keywords}{which keywords to export}
 }

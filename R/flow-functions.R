@@ -3,22 +3,22 @@
 #'
 #' @param path path to FlowJo Space
 #' @param group group of samples from workspace to include in analysis
-#' @param stats import stats such as MFIs?
+#' @param r_stats import stats such as MFIs?
 #' @param keywords which keywords to export
 #'
 #' @return
 #' @export
 #'
 #' @examples
-import_workspace <- function(path, group, stats, keywords) {
+import_workspace <- function(path, group, r_stats, keywords) {
   # Create path to WS-file in local directory
   path <- here("data", path)
 
   # Import raw workspace
-  ps_raw <- fcexpr::wsx_get_popstats(ws = path, return_stats = stats, groups = group)
+  ps_raw <- fcexpr::wsx_get_popstats(ws = path, return_stats = r_stats, groups = group)
 
   # Merge counts and stats if both are extracted
-  if (stats == TRUE) {
+  if (r_stats == TRUE) {
     ps_clean <- left_join(
       ps_raw[["counts"]],
       ps_raw[["stats"]],
@@ -66,21 +66,21 @@ import_workspace <- function(path, group, stats, keywords) {
 #' @param location name of subdirectory where data is located
 #' @param wsp name of workspace file
 #' @param group name of group in which samples are organized
-#' @param stats logic indicating if stats should be imported
+#' @param r_stats logic indicating if stats should be imported
 #' @param keywords character vector of keywords to be imported
 #'
 #' @return
 #' @export
 #'
 #' @examples
-import_fcs_clean <- function(clean, location, wsp, group, stats, keywords) {
+import_fcs_clean <- function(clean, location, wsp, group, r_stats, keywords) {
 
   if(clean == TRUE) {
 
     data <- JanisHelpers::import_workspace(
       path = paste0(location, "/", wsp),
       group = group,
-      stats = stats,
+      r_stats = r_stats,
       keywords = keywords
     ) |>
       dplyr::tibble()
