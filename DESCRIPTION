@@ -16,4 +16,5 @@ Imports:
     rmarkdown,
     xfun,
     xlsx,
-    dplyr
+    dplyr, 
+    rstudioapi

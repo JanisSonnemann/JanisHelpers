@@ -24,6 +24,31 @@ knit_multiple_dated <- function(input, path, format, ...) {
 }
 
 
+#' New function for automatic knitting of dated files in subdirectory based on new experiment based subdirectories
+#'
+#' @param input unchanged
+#' @param format specify desired files to output in quotes: "html_document", "pdf_document", "all"
+#' @param ... further arguments
+#'
+#' @returns
+#' @export
+#'
+#' @examples
+knit_exp_structure <- function(input, format, ...) {
+  rmarkdown::render(
+    input,
+    output_dir = paste0(dirname(dirname(rstudioapi::getActiveDocumentContext()$path)), "/analysis/output/", xfun::sans_ext(basename(input))),
+    output_file = paste0(
+      xfun::sans_ext(input), '-', Sys.Date()
+    ),
+    output_format = format,
+    envir = globalenv()
+  )
+}
+
+
+
+
 #' Panel knitting
 #' @description create panel
 #'

@@ -1,0 +1,41 @@
+---
+title: "Title"
+author: "Janis Sonnemann"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: yes
+    toc_float: true
+    code_folding: hide
+  pdf_document:
+    toc: yes
+    toc_depth: 3
+editor_options: 
+  chunk_output_type: console
+knit: (function(input, ...) {JanisHelpers::knit_exp_structure(input, format = "all")})
+---
+
+```{r setup, include = knitr::is_html_output(), error = FALSE, message = FALSE, warning = FALSE}
+# Before start:
+## in knit: output_dir replace XXX with short name for subdirectory
+## in opts_chunk below replace XXX with same name
+knitr::opts_chunk$set(fig.path = paste0("0-output/XXX/0-figs/", Sys.Date(),"/"), dev = "png", 
+                      warning = FALSE,
+                      # hides code in pdf file
+                      echo = knitr::is_html_output())
+
+
+# update JanisHelpers
+# devtools::install("C:/Users/janis/Documents/R/eigene R Pakete/JanisHelpers")
+# install.packages("librarian")
+
+
+## Start
+library(tidyverse)
+library(here)
+
+
+
+
+```
+

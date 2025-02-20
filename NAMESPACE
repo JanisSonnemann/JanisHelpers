@@ -2,6 +2,7 @@
 
 export(import_fcs_clean)
 export(import_workspace)
+export(knit_exp_structure)
 export(knit_multiple_dated)
 export(knit_panel)
 export(strsplit1)
