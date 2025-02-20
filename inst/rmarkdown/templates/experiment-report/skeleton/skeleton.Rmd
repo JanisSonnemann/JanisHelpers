@@ -16,26 +16,30 @@ knit: (function(input, ...) {JanisHelpers::knit_exp_structure(input, format = "a
 ---
 
 ```{r setup, include = knitr::is_html_output(), error = FALSE, message = FALSE, warning = FALSE}
-# Before start:
-## in knit: output_dir replace XXX with short name for subdirectory
-## in opts_chunk below replace XXX with same name
-knitr::opts_chunk$set(fig.path = paste0("0-output/XXX/0-figs/", Sys.Date(),"/"), dev = "png", 
-                      warning = FALSE,
-                      # hides code in pdf file
-                      echo = knitr::is_html_output())
+# Before start save the file to location in experiment that is being analysed
+# set format and resolution of figure outputs
+fig_format <- "png"
+fig_res <- 300
 
+---#DO NOT CHANGE#----
+knitr::opts_chunk$set(
+  fig.path = paste0("output/", xfun::sans_ext(basename(rstudioapi::getActiveDocumentContext()$path)), "/figs/", Sys.Date(),"/"), 
+  dev = fig_format, 
+  dpi = fig_res,
+  warning = FALSE,
+  # hides code in pdf file
+  echo = knitr::is_html_output()
+)
+---####----
 
-# update JanisHelpers
-# devtools::install("C:/Users/janis/Documents/R/eigene R Pakete/JanisHelpers")
-# install.packages("librarian")
+# extract path of experiment, use this in addition to here to refer to experiment data
+exp_path <- rstudioapi::getActiveDocumentContext()$path |> 
+  dirname() |> 
+  dirname()
 
-
-## Start
-library(tidyverse)
 library(here)
-
-
-
+library(tidyverse)
+library(JanisHelpers)
 
 ```
 
