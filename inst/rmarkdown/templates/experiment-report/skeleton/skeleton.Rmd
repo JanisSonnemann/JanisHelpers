@@ -17,20 +17,23 @@ knit: (function(input, ...) {JanisHelpers::knit_exp_structure(input, format = "a
 
 ```{r setup, include = knitr::is_html_output(), error = FALSE, message = FALSE, warning = FALSE}
 # Before start save the file to location in experiment that is being analysed
-# set format and resolution of figure outputs
-fig_format <- "png"
-fig_res <- 300
 
----#DO NOT CHANGE#----
+# set format and resolution of figure outputs
+fig.format <- "png"
+fig.res <- 300
+
+####DO NOT CHANGE---- 
 knitr::opts_chunk$set(
   fig.path = paste0("output/", xfun::sans_ext(basename(rstudioapi::getActiveDocumentContext()$path)), "/figs/", Sys.Date(),"/"), 
-  dev = fig_format, 
-  dpi = fig_res,
+  dev = fig.format, 
+  dpi = fig.res, 
   warning = FALSE,
+  fig.width = 15, 
+  fig.height = 15,
   # hides code in pdf file
   echo = knitr::is_html_output()
 )
----####----
+####----
 
 # extract path of experiment, use this in addition to here to refer to experiment data
 exp_path <- rstudioapi::getActiveDocumentContext()$path |> 
