@@ -28,8 +28,9 @@ knitr::opts_chunk$set(
   dev = fig.format, 
   dpi = fig.res, 
   warning = FALSE,
-  fig.width = 15, 
-  fig.height = 15,
+  message = FALSE,
+  fig.width = 5, 
+  fig.height = 5,
   # hides code in pdf file
   echo = knitr::is_html_output()
 )
