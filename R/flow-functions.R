@@ -143,7 +143,7 @@ import_fcs <- function(clean, path, group, r_stats, keywords) {
 
     xlsx::write.xlsx(data, file = excel_path)
 
-    print(paste("clean data imported from", wsp, "and written to", excel_path))
+    print(paste("clean data imported from", file_name, "and written to", excel_path))
   }
 
   if(clean == FALSE) {
