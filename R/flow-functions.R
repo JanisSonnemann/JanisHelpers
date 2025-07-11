@@ -129,7 +129,7 @@ import_fcs <- function(clean, path, group, r_stats, keywords) {
     basename() |>
     tools::file_path_sans_ext()
 
-  excel_path <- paste0(dirname(path), "/clean", file_name, ".xlsx")
+  excel_path <- paste0(dirname(path), "/clean/", file_name, ".xlsx")
 
   if(clean == TRUE) {
 
