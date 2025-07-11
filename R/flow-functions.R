@@ -66,7 +66,7 @@ import_workspace <- function(path, group, r_stats, keywords) {
 #' @param location name of subdirectory where data is located
 #' @param wsp name of workspace file
 #' @param group name of group in which samples are organized
-#' @param r_stats logic indicating if stats should be imported
+#' @param r_stats logic indicating if stats (MFI etc.) should be imported
 #' @param keywords character vector of keywords to be imported
 #'
 #' @return
@@ -100,6 +100,57 @@ import_fcs_clean <- function(clean, location, wsp, group, r_stats, keywords) {
     data <- read_excel(
       paste0(here(), "/data/", location, "/clean/", file_name, ".xlsx")
     ) |>
+      select(!...1)
+
+    print(paste("imported data from Excel:", file_name))
+
+  }
+
+  data |>
+    dplyr::tibble()
+}
+
+
+#' Function to automate import of FlowJo workspace data automatically and work with lists. Enables clean import from .wsp with
+#' simultaneous writing to excel.
+#'
+#' @param clean logic, decide if data should be newly imported from .wsp and then saved to excel or
+#' simply from previously created Excel
+#' @param path location of wsp
+#' @param group name of group in which samples are organized
+#' @param r_stats logic indicating if stats (MFI etc.) should be imported
+#' @param keywords character vector of keywords to be imported
+#'
+#' @returns
+#' @export
+#'
+#' @examples
+import_fcs <- function(clean, path, group, r_stats, keywords) {
+
+  file_name <- path |>
+    basename() |>
+    tools::file_path_sans_ext()
+
+  excel_path <- paste0(dirname(path), "/clean", file_name, ".xlsx")
+
+  if(clean == TRUE) {
+
+    data <- JanisHelpers::import_workspace(
+      path = path,
+      group = group,
+      r_stats = r_stats,
+      keywords = keywords
+    ) |>
+      dplyr::tibble()
+
+    xlsx::write.xlsx(data, file = excel_path)
+
+    print(paste("clean data imported from", wsp, "and written to", excel_path))
+  }
+
+  if(clean == FALSE) {
+
+    data <- read_excel(excel_path) |>
       select(!...1)
 
     print(paste("imported data from Excel:", file_name))
