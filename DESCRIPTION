@@ -1,6 +1,6 @@
 Package: JanisHelpers
 Title: Little Helpers For Everyday
-Version: 0.0.13.3
+Version: 0.0.13.4
 Authors@R: 
     person("Janis", "Sonnemann", , "janis.sonnemann@gmail.com", role = c("aut", "cre"),
            comment = c(ORCID = "YOUR-ORCID-ID"))
