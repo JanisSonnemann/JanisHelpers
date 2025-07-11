@@ -11,8 +11,6 @@
 #'
 #' @examples
 import_workspace <- function(path, group, r_stats, keywords) {
-  # Create path to WS-file in local directory
-  path <- here("data", path)
 
   # Import raw workspace
   ps_raw <- fcexpr::wsx_get_popstats(ws = path, return_stats = r_stats, groups = group)
