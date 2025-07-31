@@ -1,0 +1,14 @@
+body {
+  max-width: 95%;
+  margin: auto;
+}
+
+.container, .main-container {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+pre, table, .gt_table {
+  width: 100% !important;
+  overflow-x: auto;
+}
