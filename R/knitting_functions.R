@@ -59,7 +59,7 @@ knit_exp_structure <- function(input, format, ...) {
 #' @examples
 knit_wide_html <- function(input, ...) {
   css_path <- system.file(
-    "rmarkdown", "templates", "wide-html", "skeleton", "wide-output.css",
+    "resources", "wide-output.css",
     package = "JanisHelpers"
   )
 
