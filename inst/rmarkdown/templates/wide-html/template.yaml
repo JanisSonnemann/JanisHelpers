@@ -1,4 +1,6 @@
-name: wide-html
+name: wide_report
 description: >
-   A description of the template
+  HTML report with wide layout
 create_dir: FALSE
+output:
+  html_document
