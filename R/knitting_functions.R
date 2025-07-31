@@ -50,7 +50,6 @@ knit_exp_structure <- function(input, format, ...) {
 #' function to generate wide html
 #'
 #' @param input file to be knitted
-#' @param format defaults to wide html_document
 #' @param ... further arguments
 #'
 #' @returns

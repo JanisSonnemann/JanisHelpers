@@ -10,8 +10,6 @@ knit_wide_html(input, ...)
 \item{input}{file to be knitted}
 
 \item{...}{further arguments}
-
-\item{format}{defaults to wide html_document}
 }
 \description{
 function to generate wide html

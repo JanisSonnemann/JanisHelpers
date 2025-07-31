@@ -17,4 +17,7 @@ Imports:
     xfun,
     xlsx,
     dplyr, 
-    rstudioapi
+    rstudioapi,
+    gt,
+    gtsummary,
+    rstatix
