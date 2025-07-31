@@ -119,7 +119,7 @@ create_posthoc_tables <- function(data, group_col = "group",
     kw_stat <- kw$statistic
 
     # if significant global difference is present perform post-hoc Dunn's test
-    if (kw_p < 0.5) {
+    if (kw_p < 0.05) {
       dunn <- rstatix::dunn_test(
         data = dat,
         formula = form,
