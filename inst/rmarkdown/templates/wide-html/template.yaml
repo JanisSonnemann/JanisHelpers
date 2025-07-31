@@ -3,4 +3,7 @@ description: >
   HTML report with wide layout
 create_dir: FALSE
 output:
-  html_document
+  html_document:
+    toc: yes
+    toc_float: true
+    code_folding: hide

@@ -64,7 +64,12 @@ knit_wide_html <- function(input, ...) {
   )
 
   # Inject the CSS into the format object
-  format <- rmarkdown::html_document(css = css_path)
+  format <- rmarkdown::html_document(
+    css = css_path,
+    toc = TRUE,
+    toc_float = TRUE,
+    code_folding = "hide"
+    )
 
   # Continue with rendering
   rmarkdown::render(
