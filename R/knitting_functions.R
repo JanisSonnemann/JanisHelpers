@@ -47,6 +47,35 @@ knit_exp_structure <- function(input, format, ...) {
 }
 
 
+#' function to generate wide html
+#'
+#' @param input file to be knitted
+#' @param format defaults to wide html_document
+#' @param ... further arguments
+#'
+#' @returns
+#' @export
+#'
+#' @examples
+knit_wide_html <- function(input, ...) {
+  css_path <- system.file(
+    "rmarkdown", "templates", "wide-html", "skeleton", "wide-output.css",
+    package = "JanisHelpers"
+  )
+
+  # Inject the CSS into the format object
+  format <- rmarkdown::html_document(css = css_path)
+
+  # Continue with rendering
+  rmarkdown::render(
+    input,
+    output_dir = file.path(dirname(dirname(rstudioapi::getActiveDocumentContext()$path)), "analysis/output", xfun::sans_ext(basename(input))),
+    output_file = paste0(xfun::sans_ext(input), "-", Sys.Date()),
+    output_format = format,
+    envir = globalenv(),
+    ...
+  )
+}
 
 
 #' Panel knitting

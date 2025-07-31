@@ -4,6 +4,7 @@ author: "Janis Sonnemann"
 date: "`r Sys.Date()`"
 output:
   html_document:
+    css: wide-output.css
     toc: yes
     toc_float: true
     code_folding: hide
@@ -12,7 +13,7 @@ output:
     toc_depth: 3
 editor_options: 
   chunk_output_type: console
-knit: (function(input, ...) {JanisHelpers::knit_exp_structure(input, format = "html_document")})
+knit: (function(input, ...) {JanisHelpers::knit_wide_html(input})
 ---
 
 ```{r setup, include = knitr::is_html_output(), error = FALSE, message = FALSE, warning = FALSE}
