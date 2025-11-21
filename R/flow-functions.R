@@ -15,43 +15,74 @@ import_workspace <- function(path, group, r_stats, keywords) {
   # Import raw workspace
   ps_raw <- fcexpr::wsx_get_popstats(ws = path, return_stats = r_stats, groups = group)
 
+  # Import keywords
+  keys <- fcexpr::wsx_get_keywords(ws = path) |>
+    enframe() |>
+    rename(
+      FileName = name
+    ) |>
+    unnest(c(FileName, value)) |>
+    rename(key = name)
+
+  # Extract channel labels from keywords
+  stains <- keys |>
+    filter(grepl("\\$P[0-9]+[NS]", key)) |>
+    mutate(
+      type = case_when(
+        grepl("\\$P[0-9]+N", key) ~ "channel",
+        grepl("\\$P[0-9]+S", key) ~ "stain"
+      ),
+      number = str_extract(key, "(?<=P)[0-9]+")
+    ) |>
+    select(!key) |>
+    pivot_wider(
+      names_from  = type,
+      values_from = value
+    ) |>
+    select(!number)
+
   # Merge counts and stats if both are extracted
   if (r_stats == TRUE) {
+
     ps_clean <- left_join(
       ps_raw[["counts"]],
       ps_raw[["stats"]],
       by = c("FileName", "PopulationFullPath")
-    ) %>%
-      select(FileName, PopulationFullPath, Population, Count, FractionOfParent, statistic, channel, value) %>%
+    ) |>
+      select(FileName, PopulationFullPath, Population, Count, FractionOfParent, statistic, channel, value) |>
+      left_join(
+        y = stains,
+        by = c("FileName", "channel")
+      ) |>
+      mutate(
+        stain = ifelse(stain == "", NA, stain)
+      ) |>
+      fill(stain, .direction = "downup") |>
       mutate(
         channel = str_remove_all(string = channel, pattern = c("Comp-|-A"))
-      ) %>%
+      ) |>
       pivot_wider(
-        names_from = c(statistic, channel),
+        names_from = c(statistic, channel, stain),
         names_sep = "_",
         values_from = value
-      ) %>%
-      select(!NA_NA)
-    # Return only counts if stats are not extracted
-  } else {
-    ps_clean <- ps_raw %>%
+      ) |>
+      select(!contains("NA_"))
+  }
+  # Return only counts if stats are not extracted
+  else {
+    ps_clean <- ps_raw |>
       select(FileName, PopulationFullPath, Population, Count, FractionOfParent)
   }
-  # Extract keywords from workspace
-  keys <- fcexpr::wsx_get_keywords(ws = path) %>%
-    enframe() %>%
-    rename(
-      FileName = name
-    ) %>%
-    unnest(c(FileName, value)) %>%
-    rename(key = name) %>%
+  # filter keywords
+  keys_clean <- keys |>
     filter(key %in% c(keywords)) %>%
     pivot_wider(
       names_from = key,
       values_from = value
     )
+
   # Merge workspace data with keywords
-  left_join(ps_clean, keys, by = "FileName")
+  left_join(ps_clean, keys_clean, by = "FileName")
 }
 
 
