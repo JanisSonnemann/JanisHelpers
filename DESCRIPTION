@@ -20,4 +20,5 @@ Imports:
     rstudioapi,
     gt,
     gtsummary,
-    rstatix
+    rstatix,
+    glue
