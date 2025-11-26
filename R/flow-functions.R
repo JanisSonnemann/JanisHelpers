@@ -16,7 +16,7 @@ import_workspace <- function(path, group, r_stats, keywords) {
   ps_raw <- fcexpr::wsx_get_popstats(ws = path, return_stats = r_stats, groups = group)
 
   # Import keywords
-  keys <- fcexpr::wsx_get_keywords(ws = path) |>
+  keys <- fcexpr::wsx_get_keywords(ws = path, return = "data.frame") |>
     enframe() |>
     rename(
       FileName = name
@@ -75,7 +75,7 @@ import_workspace <- function(path, group, r_stats, keywords) {
   }
   # filter keywords
   keys_clean <- keys |>
-    filter(key %in% c(keywords)) %>%
+    filter(key %in% c(keywords)) |>
     pivot_wider(
       names_from = key,
       values_from = value
