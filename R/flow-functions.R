@@ -254,8 +254,12 @@ import_workspace_long <- function(path, group = NULL, r_stats = FALSE, keywords 
       ) |>
       ## create new column which combined statistic name and channel label
       mutate(
-        stain = ifelse(stain == "", NA, stain),
-        metric = ifelse(!is.na(statistic), paste0(statistic, "_", stain), NA),
+        # treat "" as missing
+        stain = na_if(stain, ""),
+        # choose stain if present, else use channel as backup
+        label = coalesce(stain, channel),
+        # build metric with the chosen label
+        metric = ifelse(!is.na(statistic), paste0(statistic, "_", label), NA_character_),
         Population = basename(PopulationFullPath)
       ) |>
       select(FileName, PopulationFullPath, Population, metric, value)
