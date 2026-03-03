@@ -276,21 +276,39 @@ import_workspace_long <- function(path, group = NULL, r_stats = FALSE, keywords 
   }
   # extract selected keywords and pivot to wide
   keys_clean <- keys |>
-    filter(key %in% c(keywords)) |>
+    filter(key %in% keywords) |>
     pivot_wider(
-      names_from = key,
+      names_from  = key,
       values_from = value
     )
+
+  # Ensure all requested keyword columns exist
+  if (!is.null(keywords) && length(keywords) > 0) {
+
+    missing_cols <- setdiff(keywords, names(keys_clean))
+
+    if (length(missing_cols) > 0) {
+
+      # <-- ADD WARNING HERE
+      warning(
+        "The following requested keywords were not found in the workspace and were filled with NA: ",
+        paste(missing_cols, collapse = ", ")
+      )
+
+      # create missing columns as NA
+      keys_clean[missing_cols] <- NA_character_
+    }
+  }
 
   # Merge workspace data with keywords
   final <- left_join(df, keys_clean, by = "FileName") |>
     arrange(FileName, PopulationFullPath) |>
-    relocate(mouse_ID, tissue, PopulationFullPath, Population, metric, value)
+    relocate(any_of(c("mouse_ID", "tissue")), PopulationFullPath, Population, metric, value)
 
-  # create summary to make sure every thing was exported correctly
+  # create summary to make sure everything was exported correctly
   n_files <- n_distinct(final$FileName)
-  n_mice <- n_distinct(final$mouse_ID)
-  n_tissues <- n_distinct(final$tissue)
+  n_mice <- if ("mouse_ID" %in% names(final)) n_distinct(final$mouse_ID) else NA_integer_
+  n_tissues <- if ("tissue" %in% names(final)) n_distinct(final$tissue) else NA_integer_
 
   summary_text <- glue::glue(
     "
