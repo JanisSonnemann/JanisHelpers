@@ -1,11 +1,13 @@
 Package: JanisHelpers
 Title: Little Helpers For Everyday
-Version: 0.0.14
+Version: 0.0.15
 Authors@R: 
     person("Janis", "Sonnemann", , "janis.sonnemann@gmail.com", role = c("aut", "cre"),
            comment = c(ORCID = "YOUR-ORCID-ID"))
 Description: Little helper functions making everyday coding easier.
 License: MIT + file LICENSE
+Depends:
+    R (>= 4.1.0)
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2
@@ -21,4 +23,8 @@ Imports:
     gt,
     gtsummary,
     rstatix,
-    glue
+    glue,
+    purrr,
+    stringr,
+    tibble,
+    tidyr

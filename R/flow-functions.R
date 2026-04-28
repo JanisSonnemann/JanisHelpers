@@ -1,4 +1,125 @@
-# Function to import data from FlowJo workspace
+# ── Current function ──────────────────────────────────────────────────────────
+
+#' Import FlowJo workspace data in long format
+#'
+#' @param path path to .wsp file
+#' @param group group to extract from workspace, default = NULL (all groups)
+#' @param r_stats logical, whether to extract statistics such as MFI, default = FALSE
+#' @param keywords character vector of FCS keywords to attach to each row, default = NULL
+#'
+#' @returns tibble in long format with one row per file x population x metric,
+#'   returned invisibly — assign the result explicitly
+#' @export
+#'
+#' @examples
+import_wsp <- function(path, group = NULL, r_stats = FALSE, keywords = NULL) {
+
+  # Import raw workspace
+  ps_raw <- fcexpr::wsx_get_popstats(ws = path, return_stats = r_stats, groups = group)
+
+  # Extract counts and pivot to long
+  counts <- ps_raw[["counts"]] |>
+    dplyr::select(FileName, PopulationFullPath, Population, Count, FractionOfParent) |>
+    tidyr::pivot_longer(
+      cols      = c(Count, FractionOfParent),
+      names_to  = "metric",
+      values_to = "value"
+    )
+
+  # Only parse keywords from workspace when they are actually needed
+  if (!is.null(keywords) || r_stats) {
+    keys <- fcexpr::wsx_get_keywords(ws = path, return = "data.frame") |>
+      tibble::enframe() |>
+      dplyr::rename(FileName = name) |>
+      tidyr::unnest(c(FileName, value)) |>
+      dplyr::rename(key = name)
+  }
+
+  # Build stats if requested
+  if (r_stats) {
+
+    # Extract channel-to-stain lookup from $PnN / $PnS keywords
+    stains <- keys |>
+      dplyr::filter(grepl("\\$P[0-9]+[NS]", key)) |>
+      dplyr::mutate(
+        type   = dplyr::case_when(
+          grepl("\\$P[0-9]+N", key) ~ "channel",
+          grepl("\\$P[0-9]+S", key) ~ "stain"
+        ),
+        number = stringr::str_extract(key, "(?<=P)[0-9]+")
+      ) |>
+      dplyr::select(!key) |>
+      tidyr::pivot_wider(names_from = type, values_from = value) |>
+      dplyr::select(!number)
+
+    stats <- ps_raw[["stats"]] |>
+      dplyr::left_join(stains, by = c("FileName", "channel")) |>
+      dplyr::mutate(
+        stain      = dplyr::na_if(stain, ""),
+        label      = dplyr::coalesce(stain, channel),
+        metric     = dplyr::if_else(
+          !is.na(statistic) & nzchar(statistic),
+          paste0(statistic, "_", label),
+          NA_character_
+        ),
+        Population = basename(PopulationFullPath)
+      ) |>
+      dplyr::select(FileName, PopulationFullPath, Population, metric, value)
+
+    df <- dplyr::bind_rows(counts, stats)
+
+  } else {
+    df <- counts
+  }
+
+  # Filter, widen, and validate requested keywords
+  if (!is.null(keywords) && length(keywords) > 0) {
+
+    keys_clean <- keys |>
+      dplyr::filter(key %in% keywords) |>
+      tidyr::pivot_wider(names_from = key, values_from = value)
+
+    missing_cols <- setdiff(keywords, names(keys_clean))
+    if (length(missing_cols) > 0) {
+      warning(
+        "The following requested keywords were not found in the workspace and were filled with NA: ",
+        paste(missing_cols, collapse = ", ")
+      )
+      keys_clean[missing_cols] <- NA_character_
+    }
+
+    df <- dplyr::left_join(df, keys_clean, by = "FileName")
+  }
+
+  # Tidy column order — core flow columns first, keyword columns follow
+  final <- df |>
+    dplyr::relocate(FileName, PopulationFullPath, Population, metric, value)
+
+  # Print extraction summary
+  n_files <- dplyr::n_distinct(final$FileName)
+
+  keyword_summary <- if (!is.null(keywords) && length(keywords) > 0) {
+    purrr::map_chr(keywords, function(k) paste0(k, ": ", dplyr::n_distinct(final[[k]]))) |>
+      paste(collapse = "\n")
+  } else {
+    "none requested"
+  }
+
+  message(glue::glue(
+    "\nExtraction Summary",
+    "\n----------------------------------------------",
+    "\nExtracted groups:          {if (is.null(group)) 'all' else group}",
+    "\nNumber of samples:         {n_files}",
+    "\nKeyword distinct values:\n{keyword_summary}",
+    "\n----------------------------------------------\n"
+  ))
+
+  invisible(final)
+}
+
+
+# ── Deprecated functions ──────────────────────────────────────────────────────
+
 #' Import FlowJo workspace data using fcexpr package
 #'
 #' @param path path to FlowJo Space
@@ -8,9 +129,12 @@
 #'
 #' @return
 #' @export
+#' @deprecated Use [import_wsp()] instead.
 #'
 #' @examples
 import_workspace <- function(path, group, r_stats, keywords) {
+
+  .Deprecated("import_wsp")
 
   # Import raw workspace
   ps_raw <- fcexpr::wsx_get_popstats(ws = path, return_stats = r_stats, groups = group)
@@ -86,9 +210,7 @@ import_workspace <- function(path, group, r_stats, keywords) {
 }
 
 
-#' Function to automate import of FlowJo workspace data automatically. Enables clean import from .wsp with
-#' simultaneous writing to excel.
-#'
+#' Import and cache FlowJo workspace data to Excel
 #'
 #' @param clean logic, decide if data should be newly imported from .wsp and then saved to excel or
 #' simply from previously created Excel
@@ -100,9 +222,12 @@ import_workspace <- function(path, group, r_stats, keywords) {
 #'
 #' @return
 #' @export
+#' @deprecated Use [import_wsp()] instead.
 #'
 #' @examples
 import_fcs_clean <- function(clean, location, wsp, group, r_stats, keywords) {
+
+  .Deprecated("import_wsp")
 
   if(clean == TRUE) {
 
@@ -140,8 +265,7 @@ import_fcs_clean <- function(clean, location, wsp, group, r_stats, keywords) {
 }
 
 
-#' Function to automate import of FlowJo workspace data automatically and work with lists. Enables clean import from .wsp with
-#' simultaneous writing to excel.
+#' Import and cache FlowJo workspace data to Excel
 #'
 #' @param clean logic, decide if data should be newly imported from .wsp and then saved to excel or
 #' simply from previously created Excel
@@ -152,9 +276,12 @@ import_fcs_clean <- function(clean, location, wsp, group, r_stats, keywords) {
 #'
 #' @returns
 #' @export
+#' @deprecated Use [import_wsp()] instead.
 #'
 #' @examples
 import_fcs <- function(clean, path, group, r_stats, keywords) {
+
+  .Deprecated("import_wsp")
 
   file_name <- path |>
     basename() |>
@@ -200,9 +327,12 @@ import_fcs <- function(clean, path, group, r_stats, keywords) {
 #'
 #' @returns
 #' @export
+#' @deprecated Use [import_wsp()] instead.
 #'
 #' @examples
 import_workspace_long <- function(path, group = NULL, r_stats = FALSE, keywords = NULL) {
+
+  .Deprecated("import_wsp")
 
   # Import raw workspace
   ps_raw <- suppressMessages(fcexpr::wsx_get_popstats(ws = path, return_stats = r_stats, groups = group))
@@ -293,7 +423,6 @@ import_workspace_long <- function(path, group = NULL, r_stats = FALSE, keywords 
 
     if (length(missing_cols) > 0) {
 
-      # <-- ADD WARNING HERE
       warning(
         "The following requested keywords were not found in the workspace and were filled with NA: ",
         paste(missing_cols, collapse = ", ")
@@ -332,3 +461,4 @@ Unique tissues:            {n_tissues}
   invisible(final)
 
 }
+

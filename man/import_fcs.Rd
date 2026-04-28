@@ -2,8 +2,7 @@
 % Please edit documentation in R/flow-functions.R
 \name{import_fcs}
 \alias{import_fcs}
-\title{Function to automate import of FlowJo workspace data automatically and work with lists. Enables clean import from .wsp with
-simultaneous writing to excel.}
+\title{Import and cache FlowJo workspace data to Excel}
 \usage{
 import_fcs(clean, path, group, r_stats, keywords)
 }
@@ -20,6 +19,5 @@ simply from previously created Excel}
 \item{keywords}{character vector of keywords to be imported}
 }
 \description{
-Function to automate import of FlowJo workspace data automatically and work with lists. Enables clean import from .wsp with
-simultaneous writing to excel.
+Import and cache FlowJo workspace data to Excel
 }
