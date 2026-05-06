@@ -14,8 +14,18 @@
 #' @examples
 import_wsp <- function(path, group = NULL, r_stats = FALSE, keywords = NULL) {
 
-  # Import raw workspace
-  ps_raw <- fcexpr::wsx_get_popstats(ws = path, return_stats = r_stats, groups = group)
+  # Import raw workspace; fall back to legacy importer if FCS files were renamed after export
+  ps_raw <- tryCatch(
+    fcexpr::wsx_get_popstats(ws = path, return_stats = r_stats, groups = group),
+    error = function(e) {
+      if (grepl("object 'out' not found", conditionMessage(e), fixed = TRUE)) {
+        message("wsx_get_popstats failed (likely renamed FCS files) — retrying with legacy importer.")
+        fcexpr::wsx_get_popstats_legacy(ws = path, return_stats = r_stats, groups = group)
+      } else {
+        stop(e)
+      }
+    }
+  )
 
   # Extract counts and pivot to long
   counts <- ps_raw[["counts"]] |>
