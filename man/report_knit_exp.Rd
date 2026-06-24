@@ -13,6 +13,17 @@ report_knit_exp(input, format, ...)
 
 \item{...}{further arguments}
 }
+\value{
+path to the rendered output file, returned by \code{rmarkdown::render()}
+}
 \description{
 New function for automatic knitting of dated files in subdirectory based on new experiment based subdirectories
+}
+\examples{
+\dontrun{
+  report_knit_exp(
+    input  = "scripts/flow-report.Rmd",
+    format = "html_document"
+  )
+}
 }

@@ -10,6 +10,14 @@
 #' @export
 #'
 #' @examples
+#' \dontrun{
+#'   dat <- facs_import_wsp(
+#'     path     = "experiment.wsp",
+#'     group    = "Spleen",
+#'     r_stats  = TRUE,
+#'     keywords = c("mouse_ID", "group")
+#'   )
+#' }
 facs_import_wsp <- function(path, group = NULL, r_stats = FALSE, keywords = NULL) {
 
   # Import raw workspace; fall back to legacy importer if FCS files were renamed after export

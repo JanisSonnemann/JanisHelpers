@@ -20,6 +20,20 @@ analysis_summary_table(
 
 \item{cols}{specify columns to be analyzed. if blank all numeric columns are analyzed}
 }
+\value{
+a \code{gt} table, or a named list of \code{gt} tables (one per tissue level)
+when \code{tissue_col} is set
+}
 \description{
 Function to create descriptive statistics table with gtsummary
+}
+\examples{
+\dontrun{
+  df <- data.frame(
+    group   = rep(c("ctrl", "trt"), each = 10),
+    CD4_pct = c(stats::rnorm(10, 30, 5), stats::rnorm(10, 45, 5)),
+    CD8_pct = c(stats::rnorm(10, 20, 4), stats::rnorm(10, 28, 4))
+  )
+  analysis_summary_table(df, group_col = "group", tissue_col = NULL)
+}
 }

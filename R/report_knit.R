@@ -5,12 +5,17 @@
 #' @param format specify desired files to output in quotes: "html_document", "pdf_document", "all"
 #' @param ... further arguments
 #'
-#' @return
+#' @returns path to the rendered output file, returned by `rmarkdown::render()`
 #' @export
 #'
-#'
-#'
 #' @examples
+#' \dontrun{
+#'   report_knit_dated(
+#'     input  = "analysis/flow-report.Rmd",
+#'     path   = "flow-experiment-1",
+#'     format = "html_document"
+#'   )
+#' }
 report_knit_dated <- function(input, path, format, ...) {
   rmarkdown::render(
     input,
@@ -30,10 +35,16 @@ report_knit_dated <- function(input, path, format, ...) {
 #' @param format specify desired files to output in quotes: "html_document", "pdf_document", "all"
 #' @param ... further arguments
 #'
-#' @returns
+#' @returns path to the rendered output file, returned by `rmarkdown::render()`
 #' @export
 #'
 #' @examples
+#' \dontrun{
+#'   report_knit_exp(
+#'     input  = "scripts/flow-report.Rmd",
+#'     format = "html_document"
+#'   )
+#' }
 report_knit_exp <- function(input, format, ...) {
   rmarkdown::render(
     input,
@@ -52,10 +63,13 @@ report_knit_exp <- function(input, format, ...) {
 #' @param input file to be knitted
 #' @param ... further arguments
 #'
-#' @returns
+#' @returns path to the rendered output file, returned by `rmarkdown::render()`
 #' @export
 #'
 #' @examples
+#' \dontrun{
+#'   report_knit_wide(input = "scripts/flow-report.Rmd")
+#' }
 report_knit_wide <- function(input, ...) {
   css_path <- system.file(
     "resources", "wide-output.css",

@@ -13,6 +13,20 @@ analysis_posthoc_tables(data, group_col = "group", tissue_col = "tissue")
 
 \item{tissue_col}{if the dataframe contains multiple rows from the same animal (such as different tissues) this will subset the data}
 }
+\value{
+named list of post-hoc \code{gt} tables keyed by variable name (and by tissue
+when \code{tissue_col} is set); non-significant variables return a character message instead
+of a table
+}
 \description{
 Function to create summary table of post-hoc tests. Performs Kruskal-Wallis on all numeric columns and post-hoc Dunn's on all significant columns.
+}
+\examples{
+\dontrun{
+  df <- data.frame(
+    group   = rep(c("ctrl", "trt_A", "trt_B"), each = 8),
+    CD4_pct = c(stats::rnorm(8, 30, 3), stats::rnorm(8, 50, 3), stats::rnorm(8, 40, 3))
+  )
+  analysis_posthoc_tables(df, group_col = "group", tissue_col = NULL)
+}
 }

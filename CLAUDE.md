@@ -131,5 +131,14 @@ Current `Imports`: `fcexpr`, `dplyr`, `tidyr`, `stringr`, `tibble`, `purrr`, `gl
 
 - Every exported function needs `@param`, `@returns`, and `@export`.
 - `@returns` must have a value — empty tag causes a roxygen warning and blocks `devtools::document()`.
-- `@examples` — omit the tag entirely rather than leaving it empty. Add a `\dontrun{}` block if an example requires external files.
+- `@examples` — omit the tag entirely rather than leaving it empty. Use `\dontrun{}` when: (a) the example requires an external file (`.wsp`, `.Rmd`), or (b) the function lives in `analysis_stats.R` (bare-call debt causes examples to fail under `R CMD check`'s clean environment).
 - After any roxygen change: run `devtools::document()` before committing.
+
+---
+
+## Known check output
+
+`devtools::check()` currently produces **0 errors, 0 warnings, 2 notes**. Both notes are pre-existing:
+
+- `future file timestamps` — network/environment issue, not code.
+- `R code for possible problems` — bare `filter`, `select`, `map`, `set_names`, `%>%`, `where`, `cell_fill`, `cells_body`, `md`, `vars`, `reformulate` etc. throughout `analysis_stats.R`. Fix when next touching that file (see namespacing rules above).

@@ -11,6 +11,14 @@ report_knit_wide(input, ...)
 
 \item{...}{further arguments}
 }
+\value{
+path to the rendered output file, returned by \code{rmarkdown::render()}
+}
 \description{
 function to generate wide html
+}
+\examples{
+\dontrun{
+  report_knit_wide(input = "scripts/flow-report.Rmd")
+}
 }

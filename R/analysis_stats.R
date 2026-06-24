@@ -5,10 +5,19 @@
 #' @param tissue_col if the dataframe contains multiple rows from the same animal (such as different tissues) this will subset the data
 #' @param cols specify columns to be analyzed. if blank all numeric columns are analyzed
 #'
-#' @returns
+#' @returns a `gt` table, or a named list of `gt` tables (one per tissue level)
+#'   when `tissue_col` is set
 #' @export
 #'
 #' @examples
+#' \dontrun{
+#'   df <- data.frame(
+#'     group   = rep(c("ctrl", "trt"), each = 10),
+#'     CD4_pct = c(stats::rnorm(10, 30, 5), stats::rnorm(10, 45, 5)),
+#'     CD8_pct = c(stats::rnorm(10, 20, 4), stats::rnorm(10, 28, 4))
+#'   )
+#'   analysis_summary_table(df, group_col = "group", tissue_col = NULL)
+#' }
 analysis_summary_table <- function(data, group_col = "group",
                                      tissue_col = "tissue", cols = NULL) {
   # extract numeric variables to analyze
@@ -100,10 +109,19 @@ analysis_summary_table <- function(data, group_col = "group",
 #' @param group_col contains grouping variable
 #' @param tissue_col if the dataframe contains multiple rows from the same animal (such as different tissues) this will subset the data
 #'
-#' @returns
+#' @returns named list of post-hoc `gt` tables keyed by variable name (and by tissue
+#'   when `tissue_col` is set); non-significant variables return a character message instead
+#'   of a table
 #' @export
 #'
 #' @examples
+#' \dontrun{
+#'   df <- data.frame(
+#'     group   = rep(c("ctrl", "trt_A", "trt_B"), each = 8),
+#'     CD4_pct = c(stats::rnorm(8, 30, 3), stats::rnorm(8, 50, 3), stats::rnorm(8, 40, 3))
+#'   )
+#'   analysis_posthoc_tables(df, group_col = "group", tissue_col = NULL)
+#' }
 analysis_posthoc_tables <- function(data, group_col = "group",
                                   tissue_col = "tissue") {
 

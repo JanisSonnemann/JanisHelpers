@@ -22,3 +22,13 @@ returned invisibly -- assign the result explicitly
 \description{
 Import FlowJo workspace data in long format
 }
+\examples{
+\dontrun{
+  dat <- facs_import_wsp(
+    path     = "experiment.wsp",
+    group    = "Spleen",
+    r_stats  = TRUE,
+    keywords = c("mouse_ID", "group")
+  )
+}
+}

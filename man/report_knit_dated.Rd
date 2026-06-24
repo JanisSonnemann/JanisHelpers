@@ -15,6 +15,18 @@ report_knit_dated(input, path, format, ...)
 
 \item{...}{further arguments}
 }
+\value{
+path to the rendered output file, returned by \code{rmarkdown::render()}
+}
 \description{
 Function for automatic knitting of dated files in subdirectory
+}
+\examples{
+\dontrun{
+  report_knit_dated(
+    input  = "analysis/flow-report.Rmd",
+    path   = "flow-experiment-1",
+    format = "html_document"
+  )
+}
 }
