@@ -83,11 +83,103 @@ parse_panel_ <- function(doc, sample_ids = NULL) {
 }
 
 walk_pops_ <- function(node, file_name, path, parent_count, stain_lookup) {
-  stop("not yet implemented")
+  subpops <- xml2::xml_find_first(node, "Subpopulations")
+  if (inherits(subpops, "xml_missing")) return(tibble::tibble())
+
+  skip_stats <- c("count", "freq. of parent", "freq of parent", "frequency of parent")
+
+  purrr::map(xml2::xml_children(subpops), function(child) {
+    nm <- xml2::xml_name(child)
+
+    if (nm == "Population") {
+      pop_name  <- xml2::xml_attr(child, "name")
+      pop_count <- suppressWarnings(as.numeric(xml2::xml_attr(child, "count")))
+      pop_path  <- if (nzchar(path)) paste0(path, "/", pop_name) else pop_name
+
+      fop <- if (!is.na(parent_count) && parent_count > 0L) {
+        pop_count / parent_count
+      } else {
+        NA_real_
+      }
+
+      base_rows <- tibble::tibble(
+        file_name            = file_name,
+        population_full_path = pop_path,
+        population           = pop_name,
+        metric               = c("count", "fraction_of_parent"),
+        value                = c(pop_count, fop)
+      )
+
+      dplyr::bind_rows(
+        base_rows,
+        walk_pops_(child, file_name, pop_path, pop_count, stain_lookup)
+      )
+
+    } else if (nm == "Statistic") {
+      stat_type    <- xml2::xml_attr(child, "name")
+      stat_channel <- xml2::xml_attr(child, "id")
+      stat_value   <- suppressWarnings(as.numeric(xml2::xml_attr(child, "value")))
+
+      if (is.na(stat_type) || tolower(stat_type) %in% skip_stats) return(tibble::tibble())
+      if (is.na(stat_channel) || !nzchar(stat_channel))           return(tibble::tibble())
+
+      matched <- stain_lookup$label[stain_lookup$channel == stat_channel]
+      label   <- if (length(matched) > 0L && !is.na(matched[[1L]])) matched[[1L]] else stat_channel
+
+      tibble::tibble(
+        file_name            = file_name,
+        population_full_path = path,
+        population           = basename(path),
+        metric               = paste0(tolower(stat_type), "_", label),
+        value                = stat_value
+      )
+
+    } else {
+      tibble::tibble()
+    }
+  }) |>
+    dplyr::bind_rows()
 }
 
 parse_populations_ <- function(doc, sample_ids = NULL) {
-  stop("not yet implemented")
+  samples <- filter_samples_(
+    xml2::xml_find_all(doc, ".//SampleList/Sample"),
+    sample_ids
+  )
+
+  purrr::map(samples, function(sample) {
+    file_name <- basename(
+      xml2::xml_attr(xml2::xml_find_first(sample, "DataSet"), "uri")
+    )
+
+    # Build stain lookup: tibble(channel, label) for this sample
+    kw_nodes <- xml2::xml_find_all(sample, ".//Keywords/Keyword")
+    kw_df <- tibble::tibble(
+      key   = xml2::xml_attr(kw_nodes, "name"),
+      value = xml2::xml_attr(kw_nodes, "value")
+    )
+    panel_n <- kw_df |>
+      dplyr::filter(grepl("^\\$P[0-9]+N$", key)) |>
+      dplyr::mutate(number = stringr::str_extract(key, "(?<=\\$P)[0-9]+")) |>
+      dplyr::select(number, channel = value)
+    panel_s <- kw_df |>
+      dplyr::filter(grepl("^\\$P[0-9]+S$", key)) |>
+      dplyr::mutate(number = stringr::str_extract(key, "(?<=\\$P)[0-9]+")) |>
+      dplyr::select(number, stain = value)
+    stain_lookup <- dplyr::left_join(panel_n, panel_s, by = "number") |>
+      dplyr::mutate(
+        stain = dplyr::na_if(stain, ""),
+        label = dplyr::coalesce(stain, channel)
+      ) |>
+      dplyr::select(channel, label)
+
+    # Root tree node
+    root_node  <- xml2::xml_find_first(sample, "SampleNode")
+    root_count <- suppressWarnings(as.numeric(xml2::xml_attr(root_node, "count")))
+
+    walk_pops_(root_node, file_name, "", root_count, stain_lookup)
+  }) |>
+    dplyr::bind_rows()
 }
 
 # ---------------------------------------------------------------------------
