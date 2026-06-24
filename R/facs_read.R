@@ -22,15 +22,64 @@
 # ---------------------------------------------------------------------------
 
 filter_samples_ <- function(samples, ids) {
-  stop("not yet implemented")
+  if (is.null(ids)) return(samples)
+  found_ids <- purrr::map_chr(samples, function(s) {
+    xml2::xml_attr(xml2::xml_find_first(s, "DataSet"), "sampleID")
+  })
+  samples[found_ids %in% ids]
 }
 
 parse_keywords_ <- function(doc, sample_ids = NULL) {
-  stop("not yet implemented")
+  PANEL_PAT <- "^\\$P[0-9]+[NS]$"
+  samples   <- filter_samples_(
+    xml2::xml_find_all(doc, ".//SampleList/Sample"),
+    sample_ids
+  )
+
+  purrr::map(samples, function(sample) {
+    file_name <- basename(
+      xml2::xml_attr(xml2::xml_find_first(sample, "DataSet"), "uri")
+    )
+    kw_nodes <- xml2::xml_find_all(sample, ".//Keywords/Keyword")
+    tibble::tibble(
+      file_name = file_name,
+      key       = xml2::xml_attr(kw_nodes, "name"),
+      value     = xml2::xml_attr(kw_nodes, "value")
+    ) |>
+      dplyr::filter(!grepl(PANEL_PAT, key))
+  }) |>
+    dplyr::bind_rows()
 }
 
 parse_panel_ <- function(doc, sample_ids = NULL) {
-  stop("not yet implemented")
+  samples <- filter_samples_(
+    xml2::xml_find_all(doc, ".//SampleList/Sample"),
+    sample_ids
+  )
+  purrr::map(samples, function(sample) {
+    file_name <- basename(
+      xml2::xml_attr(xml2::xml_find_first(sample, "DataSet"), "uri")
+    )
+    kw_nodes <- xml2::xml_find_all(sample, ".//Keywords/Keyword")
+    kw_df <- tibble::tibble(
+      key   = xml2::xml_attr(kw_nodes, "name"),
+      value = xml2::xml_attr(kw_nodes, "value")
+    )
+    panel_n <- kw_df |>
+      dplyr::filter(grepl("^\\$P[0-9]+N$", key)) |>
+      dplyr::mutate(number = stringr::str_extract(key, "(?<=\\$P)[0-9]+")) |>
+      dplyr::select(number, channel = value)
+    panel_s <- kw_df |>
+      dplyr::filter(grepl("^\\$P[0-9]+S$", key)) |>
+      dplyr::mutate(number = stringr::str_extract(key, "(?<=\\$P)[0-9]+")) |>
+      dplyr::select(number, stain = value)
+    panel_long <- dplyr::left_join(panel_n, panel_s, by = "number") |>
+      dplyr::mutate(stain = dplyr::na_if(stain, "")) |>
+      dplyr::select(!number) |>
+      tidyr::pivot_wider(names_from = channel, values_from = stain)
+    tibble::add_column(panel_long, file_name = file_name, .before = 1L)
+  }) |>
+    dplyr::bind_rows()
 }
 
 walk_pops_ <- function(node, file_name, path, parent_count, stain_lookup) {
