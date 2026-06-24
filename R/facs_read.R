@@ -227,5 +227,86 @@ parse_populations_ <- function(doc, sample_ids = NULL) {
 #'   res$panel
 #' }
 facs_read_wsp <- function(path, group = NULL, keywords = NULL) {
-  stop("not yet implemented")
+  META_KEYS <- c("$DATE", "$BTIM", "$ETIM", "$CYT", "$INST", "$OP", "$TOT")
+
+  doc <- xml2::read_xml(path)
+
+  # Resolve group -> sample IDs for filtering
+  sample_ids <- NULL
+  if (!is.null(group)) {
+    group_node <- xml2::xml_find_first(
+      doc,
+      glue::glue(".//Groups/GroupNode[@name='{group}']")
+    )
+    if (inherits(group_node, "xml_missing")) {
+      available <- xml2::xml_attr(
+        xml2::xml_find_all(doc, ".//Groups/GroupNode"),
+        "name"
+      )
+      stop(glue::glue(
+        "Group '{group}' not found in workspace. ",
+        "Available groups: {paste(available, collapse = ', ')}"
+      ))
+    }
+    sample_ids <- xml2::xml_attr(
+      xml2::xml_find_all(group_node, ".//SampleRefs/SampleRef"),
+      "sampleID"
+    )
+  }
+
+  # Parse all components from the single open document
+  kws  <- parse_keywords_(doc, sample_ids)
+  pnl  <- parse_panel_(doc, sample_ids)
+  pops <- parse_populations_(doc, sample_ids)
+
+  # Build meta: system keywords, strip $ prefix, one row per file
+  meta_long <- kws |>
+    dplyr::filter(key %in% META_KEYS) |>
+    dplyr::mutate(key = stringr::str_remove(key, "^\\$"))
+
+  if (nrow(meta_long) > 0L) {
+    meta <- tidyr::pivot_wider(meta_long, names_from = key, values_from = value)
+  } else {
+    meta <- dplyr::distinct(pops, file_name)
+  }
+
+  # Ensure all META_KEY columns exist (fill missing ones with NA)
+  meta_col_names <- stringr::str_remove(META_KEYS, "^\\$")
+  missing_meta <- setdiff(meta_col_names, names(meta))
+  if (length(missing_meta) > 0L) meta[missing_meta] <- NA_character_
+
+  # Ensure one row per file (in case meta_long had 0 rows for some files)
+  meta <- dplyr::left_join(dplyr::distinct(pops, file_name), meta, by = "file_name")
+
+  # Build data: population rows + optional keyword join
+  data <- pops
+
+  if (!is.null(keywords) && length(keywords) > 0L) {
+    user_kws <- kws |>
+      dplyr::filter(key %in% keywords) |>
+      tidyr::pivot_wider(names_from = key, values_from = value)
+
+    missing_kws <- setdiff(keywords, names(user_kws))
+    if (length(missing_kws) > 0L) {
+      warning(
+        "The following requested keywords were not found in the workspace ",
+        "and were filled with NA: ",
+        paste(missing_kws, collapse = ", ")
+      )
+      user_kws[missing_kws] <- NA_character_
+    }
+
+    data <- dplyr::left_join(data, user_kws, by = "file_name")
+  }
+
+  n_files <- dplyr::n_distinct(data$file_name)
+  message(glue::glue(
+    "\nExtraction Summary",
+    "\n----------------------------------------------",
+    "\nExtracted groups:  {if (is.null(group)) 'all' else group}",
+    "\nNumber of samples: {n_files}",
+    "\n----------------------------------------------\n"
+  ))
+
+  list(data = data, meta = meta, panel = pnl)
 }
