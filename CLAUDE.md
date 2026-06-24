@@ -89,7 +89,7 @@ New functions must follow the `domain_verb` pattern. Never add a function that d
 ### `report_knit_*()` — knitting helpers
 - **Input**: `input` = path to `.Rmd` file (usually the active document).
 - **Output**: rendered HTML/PDF written to disk; returns the output path (from `rmarkdown::render()`).
-- `report_knit_exp()` and `report_knit_wide()` call `rstudioapi::getActiveDocumentContext()` — they require an active RStudio session. Do not refactor these to drop that dependency without checking.
+- `report_knit_exp()` and `report_knit_wide()` use `normalizePath(input)` to resolve the output directory — no RStudio dependency, works from Positron or the terminal.
 
 ---
 
@@ -99,7 +99,7 @@ New functions must follow the `domain_verb` pattern. Never add a function that d
 - **`Suggests`**: packages only needed in examples or vignettes. Currently none.
 - **Non-CRAN packages** (`fcexpr`): list in `Imports` as normal; document the install requirement in README. Do not add `remotes::` calls inside function bodies.
 
-Current `Imports`: `fcexpr`, `dplyr`, `tidyr`, `stringr`, `tibble`, `purrr`, `glue`, `rmarkdown`, `xfun`, `rstudioapi`, `gt`, `gtsummary`, `rstatix`.
+Current `Imports`: `fcexpr`, `dplyr`, `tidyr`, `stringr`, `tibble`, `purrr`, `glue`, `rmarkdown`, `xfun`, `gt`, `gtsummary`, `rstatix`.
 
 ---
 

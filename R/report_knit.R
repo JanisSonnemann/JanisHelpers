@@ -37,7 +37,7 @@ report_knit_dated <- function(input, path, format, ...) {
 report_knit_exp <- function(input, format, ...) {
   rmarkdown::render(
     input,
-    output_dir = paste0(dirname(dirname(rstudioapi::getActiveDocumentContext()$path)), "/analysis/output/", xfun::sans_ext(basename(input))),
+    output_dir = paste0(dirname(dirname(normalizePath(input, mustWork = FALSE))), "/analysis/output/", xfun::sans_ext(basename(input))),
     output_file = paste0(
       xfun::sans_ext(input), '-', Sys.Date()
     ),
@@ -73,7 +73,7 @@ report_knit_wide <- function(input, ...) {
   # Continue with rendering
   rmarkdown::render(
     input,
-    output_dir = file.path(dirname(dirname(rstudioapi::getActiveDocumentContext()$path)), "analysis/output", xfun::sans_ext(basename(input))),
+    output_dir = file.path(dirname(dirname(normalizePath(input, mustWork = FALSE))), "analysis/output", xfun::sans_ext(basename(input))),
     output_file = paste0(xfun::sans_ext(input), "-", Sys.Date()),
     output_format = format,
     envir = globalenv(),
