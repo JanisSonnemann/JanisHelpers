@@ -9,7 +9,7 @@
 #' @export
 #'
 #' @examples
-create_descriptive_table <- function(data, group_col = "group",
+analysis_summary_table <- function(data, group_col = "group",
                                      tissue_col = "tissue", cols = NULL) {
   # extract numeric variables to analyze
   if (is.null(cols)) {
@@ -104,7 +104,7 @@ create_descriptive_table <- function(data, group_col = "group",
 #' @export
 #'
 #' @examples
-create_posthoc_tables <- function(data, group_col = "group",
+analysis_posthoc_tables <- function(data, group_col = "group",
                                   tissue_col = "tissue") {
 
   # summary function to perform kruskal wallis and post-hoc dunns test, creates output in gt format
@@ -219,4 +219,3 @@ create_posthoc_tables <- function(data, group_col = "group",
   # return post-hoc tables
   return(tab)
 }
-

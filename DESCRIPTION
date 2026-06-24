@@ -1,6 +1,6 @@
 Package: JanisHelpers
 Title: Little Helpers For Everyday
-Version: 0.0.15
+Version: 0.1.0
 Authors@R: 
     person("Janis", "Sonnemann", , "janis.sonnemann@gmail.com", role = c("aut", "cre"),
            comment = c(ORCID = "YOUR-ORCID-ID"))
@@ -11,14 +11,11 @@ Depends:
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2
-Imports: 
-    devtools,
+Imports:
     fcexpr,
-    gh,
     rmarkdown,
     xfun,
-    xlsx,
-    dplyr, 
+    dplyr,
     rstudioapi,
     gt,
     gtsummary,
@@ -27,5 +24,4 @@ Imports:
     purrr,
     stringr,
     tibble,
-    tidyr,
-    stringdist
+    tidyr

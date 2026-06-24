@@ -11,7 +11,7 @@
 #'
 #'
 #' @examples
-knit_multiple_dated <- function(input, path, format, ...) {
+report_knit_dated <- function(input, path, format, ...) {
   rmarkdown::render(
     input,
     output_dir = paste0("analysis/0-output/", path),
@@ -34,7 +34,7 @@ knit_multiple_dated <- function(input, path, format, ...) {
 #' @export
 #'
 #' @examples
-knit_exp_structure <- function(input, format, ...) {
+report_knit_exp <- function(input, format, ...) {
   rmarkdown::render(
     input,
     output_dir = paste0(dirname(dirname(rstudioapi::getActiveDocumentContext()$path)), "/analysis/output/", xfun::sans_ext(basename(input))),
@@ -56,7 +56,7 @@ knit_exp_structure <- function(input, format, ...) {
 #' @export
 #'
 #' @examples
-knit_wide_html <- function(input, ...) {
+report_knit_wide <- function(input, ...) {
   css_path <- system.file(
     "resources", "wide-output.css",
     package = "JanisHelpers"
@@ -78,31 +78,5 @@ knit_wide_html <- function(input, ...) {
     output_format = format,
     envir = globalenv(),
     ...
-  )
-}
-
-
-#' Panel knitting
-#' @description create panel
-#'
-#'
-#' @param input unchanged
-#' @param path path of experiment
-#' @param format pdf_document
-#' @param ... further parameters
-#'
-#' @return
-#' @export
-#'
-#' @examples
-knit_panel <- function(input, path, format, ...) {
-  rmarkdown::render(
-    input,
-    output_dir = paste0("data/", path),
-    output_file = paste0(
-      xfun::sans_ext(input), '-', Sys.Date()
-    ),
-    output_format = format,
-    envir = globalenv()
   )
 }
