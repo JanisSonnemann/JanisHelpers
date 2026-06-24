@@ -141,4 +141,9 @@ Current `Imports`: `fcexpr`, `dplyr`, `tidyr`, `stringr`, `tibble`, `purrr`, `gl
 `devtools::check()` currently produces **0 errors, 0 warnings, 2 notes**. Both notes are pre-existing:
 
 - `future file timestamps` — network/environment issue, not code.
-- `R code for possible problems` — bare `filter`, `select`, `map`, `set_names`, `%>%`, `where`, `cell_fill`, `cells_body`, `md`, `vars`, `reformulate` etc. throughout `analysis_stats.R`. Fix when next touching that file (see namespacing rules above).
+- `R code for possible problems` — remaining items are all tidy-eval / gt false positives, not bare calls:
+  - `%>%` in `analysis_stats.R` — kept intentionally in the gtsummary method-dispatch chain (see pipe rule above).
+  - `.data` in `analysis_stats.R` — the rlang tidy-eval pronoun; required for dynamic column selection, cannot be namespaced.
+  - `p.adj`, `p.value` in `analysis_stats.R` — bare column names inside gt `rows =` predicates; this is how gt row selection works.
+  - `all_pops_fun` multiple definitions in `analysis_posthoc_tables` — two branches define the function with different signatures; structural issue, low priority.
+  - All `facs_import_wsp` variable-binding notes (`FileName`, `PopulationFullPath`, etc.) — bare column names inside dplyr verbs; valid tidy eval, flagged as a static-analysis false positive.
