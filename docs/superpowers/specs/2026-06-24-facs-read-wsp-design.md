@@ -48,12 +48,12 @@ Returns a named list (visibly) with three slots: `data`, `meta`, `panel`.
 
 | Column | Type | Notes |
 |---|---|---|
-| `FileName` | chr | FCS filename as stored in workspace |
-| `PopulationFullPath` | chr | Full gating hierarchy path |
-| `Population` | chr | Leaf gate name (`basename(PopulationFullPath)`) |
-| `metric` | chr | `"Count"`, `"FractionOfParent"`, or `"<Stat>_<Label>"` e.g. `"Median_CD19"` |
+| `file_name` | chr | FCS filename as stored in workspace |
+| `population_full_path` | chr | Full gating hierarchy path |
+| `population` | chr | Leaf gate name (`basename(population_full_path)`) |
+| `metric` | chr | `"count"`, `"fraction_of_parent"`, or `"<stat>_<label>"` e.g. `"median_CD19"` |
 | `value` | dbl | Numeric measurement |
-| `<keyword>` | chr | One column per entry in `keywords` arg, joined by `FileName` |
+| `<keyword>` | chr | One column per entry in `keywords` arg, joined by `file_name` |
 
 Stat labels use stain (`$PnS`) over channel (`$PnN`) via `dplyr::coalesce()`, matching current behaviour.
 
@@ -85,12 +85,12 @@ The document object is passed to all three helpers. The file is read exactly onc
 
 1. If `group` is not `NULL`, locate the matching `<GroupNode>` in `<Groups>`, collect its sample IDs from `<SampleRefs>`.
 2. Iterate over `<Sample>` nodes in `<SampleList>`, filtering to the relevant sample IDs.
-3. For each sample, extract `FileName` from the `<DataSet>` URI attribute.
+3. For each sample, extract `file_name` from the `<DataSet>` URI attribute.
 4. Traverse the `<Population>` / `<Subpopulations>` tree recursively, accumulating the full path string (`"root/Lymphocytes/CD4"`) as it descends.
 5. From each population node extract: count and fraction-of-parent (attributes), and any `<Statistic>` child nodes (Median, Mean, etc.).
 6. Pivot all metrics to long format; bind rows across samples.
 
-Returns a long tibble with columns: `FileName`, `PopulationFullPath`, `Population`, `metric`, `value`.
+Returns a long tibble with columns: `file_name`, `population_full_path`, `population`, `metric`, `value`.
 
 ### `parse_panel_(doc)`
 
@@ -99,7 +99,7 @@ Returns a long tibble with columns: `FileName`, `PopulationFullPath`, `Populatio
 3. Pivot wide: channel name (`N`) becomes column name, stain label (`S`) becomes value.
 4. Coerce empty stain strings to `NA_character_`.
 
-Returns a wide tibble with columns: `FileName`, then one column per channel.
+Returns a wide tibble with columns: `file_name`, then one column per channel.
 
 ### `parse_keywords_(doc)`
 
@@ -107,7 +107,7 @@ Returns a wide tibble with columns: `FileName`, then one column per channel.
 2. Return as a long tibble (`FileName`, `key`, `value`).
 
 Used two ways by the main function:
-- Filtered to entries in the `keywords` arg → pivoted wide → joined into `data` by `FileName`
+- Filtered to entries in the `keywords` arg → pivoted wide → joined into `data` by `file_name`
 - The fixed meta set extracted separately (same XML pass) → `meta`
 
 ---
