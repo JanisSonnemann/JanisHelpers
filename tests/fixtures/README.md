@@ -31,18 +31,18 @@ A minimal FlowJo 10 workspace containing:
 ### Planned smoke test (tests/testthat/test-facs_import.R)
 
 ```r
-skip_if_not(file.exists(test_path("fixtures", "minimal.wsp")))
-
 test_that("facs_import_wsp returns long tibble with required columns", {
-  dat <- facs_import_wsp(test_path("fixtures", "minimal.wsp"))
+  skip_if_not(file.exists(testthat::test_path("fixtures", "minimal.wsp")))
+  dat <- facs_import_wsp(testthat::test_path("fixtures", "minimal.wsp"))
   expect_s3_class(dat, "tbl_df")
   expect_true(all(c("FileName", "PopulationFullPath", "Population",
                     "metric", "value") %in% names(dat)))
 })
 
 test_that("facs_import_wsp attaches keyword columns", {
+  skip_if_not(file.exists(testthat::test_path("fixtures", "minimal.wsp")))
   dat <- facs_import_wsp(
-    test_path("fixtures", "minimal.wsp"),
+    testthat::test_path("fixtures", "minimal.wsp"),
     keywords = "mouse_ID"
   )
   expect_true("mouse_ID" %in% names(dat))
