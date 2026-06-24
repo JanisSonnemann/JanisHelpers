@@ -83,12 +83,25 @@ test_that("group filtering restricts to that group's samples", {
   groups <- xml2::xml_attr(xml2::xml_find_all(doc, ".//Groups/GroupNode"), "name")
   skip_if(length(groups) == 0L, "No groups in fixture")
 
-  result_all   <- suppressMessages(facs_read_wsp(wsp_path))
-  result_group <- suppressMessages(facs_read_wsp(wsp_path, group = groups[[1]]))
-  expect_lte(
-    dplyr::n_distinct(result_group$data$file_name),
-    dplyr::n_distinct(result_all$data$file_name)
-  )
+  result_all <- suppressMessages(facs_read_wsp(wsp_path))
+  n_all      <- dplyr::n_distinct(result_all$data$file_name)
+
+  # Find a group that has strictly fewer samples than the total
+  strict_group <- NULL
+  for (g in groups) {
+    res_g <- tryCatch(
+      suppressMessages(facs_read_wsp(wsp_path, group = g)),
+      error = function(e) NULL
+    )
+    if (!is.null(res_g) && dplyr::n_distinct(res_g$data$file_name) < n_all) {
+      strict_group <- g
+      break
+    }
+  }
+  skip_if(is.null(strict_group), "No group with fewer samples than total in fixture")
+
+  result_group <- suppressMessages(facs_read_wsp(wsp_path, group = strict_group))
+  expect_lt(dplyr::n_distinct(result_group$data$file_name), n_all)
 })
 
 test_that("invalid group name stops with informative error", {

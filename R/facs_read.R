@@ -234,15 +234,16 @@ facs_read_wsp <- function(path, group = NULL, keywords = NULL) {
   # Resolve group -> sample IDs for filtering
   sample_ids <- NULL
   if (!is.null(group)) {
-    group_node <- xml2::xml_find_first(
-      doc,
-      glue::glue(".//Groups/GroupNode[@name='{group}']")
-    )
-    if (inherits(group_node, "xml_missing")) {
-      available <- xml2::xml_attr(
-        xml2::xml_find_all(doc, ".//Groups/GroupNode"),
-        "name"
-      )
+    all_group_nodes <- xml2::xml_find_all(doc, ".//Groups/GroupNode")
+    group_node <- NULL
+    for (gn in all_group_nodes) {
+      if (identical(xml2::xml_attr(gn, "name"), group)) {
+        group_node <- gn
+        break
+      }
+    }
+    if (is.null(group_node)) {
+      available <- xml2::xml_attr(all_group_nodes, "name")
       stop(glue::glue(
         "Group '{group}' not found in workspace. ",
         "Available groups: {paste(available, collapse = ', ')}"
@@ -252,6 +253,12 @@ facs_read_wsp <- function(path, group = NULL, keywords = NULL) {
       xml2::xml_find_all(group_node, ".//SampleRefs/SampleRef"),
       "sampleID"
     )
+    if (length(sample_ids) == 0L) {
+      warning(glue::glue(
+        "Group '{group}' exists but has no sample references. ",
+        "Returning empty result."
+      ))
+    }
   }
 
   # Parse all components from the single open document

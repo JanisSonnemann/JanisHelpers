@@ -7,7 +7,6 @@ test_that("facs_import_wsp() emits a deprecation warning", {
     suppressMessages(
       facs_import_wsp(testthat::test_path("../fixtures/minimal.wsp"))
     ),
-    regexp = "deprecated",
-    ignore.case = TRUE
+    class = "deprecatedWarning"
   )
 })
