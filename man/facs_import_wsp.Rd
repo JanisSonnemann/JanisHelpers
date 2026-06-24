@@ -20,7 +20,7 @@ tibble in long format with one row per file x population x metric,
 returned invisibly -- assign the result explicitly
 }
 \description{
-\strong{Deprecated.} Use \code{\link{facs_read_wsp}} instead.
+\strong{Deprecated.} Use \code{facs_read_wsp} instead.
 }
 \examples{
 \dontrun{

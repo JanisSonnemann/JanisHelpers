@@ -1,7 +1,7 @@
 #' Import FlowJo workspace data in long format
 #'
 #' @description
-#' **Deprecated.** Use \code{\link{facs_read_wsp}} instead.
+#' **Deprecated.** Use \code{facs_read_wsp} instead.
 #'
 #' @param path path to .wsp file
 #' @param group group to extract from workspace, default = NULL (all groups)
