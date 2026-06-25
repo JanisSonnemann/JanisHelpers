@@ -1,5 +1,8 @@
 #' Import FlowJo workspace data in long format
 #'
+#' @description
+#' **Deprecated.** Use \code{facs_read_wsp} instead.
+#'
 #' @param path path to .wsp file
 #' @param group group to extract from workspace, default = NULL (all groups)
 #' @param r_stats logical, whether to extract statistics such as MFI, default = FALSE
@@ -19,6 +22,7 @@
 #'   )
 #' }
 facs_import_wsp <- function(path, group = NULL, r_stats = FALSE, keywords = NULL) {
+  .Deprecated("facs_read_wsp")
 
   # Import raw workspace; fall back to legacy importer if FCS files were renamed after export
   ps_raw <- tryCatch(
