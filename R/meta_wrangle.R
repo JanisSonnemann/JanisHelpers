@@ -47,3 +47,55 @@ meta_read <- function(path, sheet = 1) {
 
   invisible(dat)
 }
+
+#' Annotate experimental data with subject metadata
+#'
+#' @description
+#' Left-joins a metadata tibble (typically from \code{meta_read()}) onto any
+#' experimental data tibble (e.g. \code{facs_read_wsp(...)$data}) by a shared
+#' identifier column. Errors if the join column is missing from either side,
+#' or if any non-join column names collide between the two tibbles. Warns if
+#' any \code{by} value present in \code{data} has no match in \code{meta}
+#' (those rows keep \code{NA} for all meta columns).
+#'
+#' @param data tibble to annotate, e.g. \code{facs_read_wsp(...)$data}
+#' @param meta metadata tibble, e.g. from \code{meta_read()}
+#' @param by name of the shared identifier column, default = "mouse_ID"
+#'
+#' @returns \code{data} left-joined with \code{meta}, returned invisibly --
+#'   assign the result explicitly
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#'   dat <- meta_annotate(facs_read_wsp("experiment.wsp")$data, meta_read("meta.xlsx"))
+#' }
+meta_annotate <- function(data, meta, by = "mouse_ID") {
+  if (!by %in% names(data)) {
+    stop(glue::glue("Join column '{by}' not found in `data`."))
+  }
+  if (!by %in% names(meta)) {
+    stop(glue::glue("Join column '{by}' not found in `meta`."))
+  }
+
+  colliding <- setdiff(intersect(names(data), names(meta)), by)
+  if (length(colliding) > 0L) {
+    stop(glue::glue(
+      "Column name(s) present in both `data` and `meta`: ",
+      "{paste(colliding, collapse = ', ')}. ",
+      "Rename or drop them before calling meta_annotate()."
+    ))
+  }
+
+  joined <- dplyr::left_join(data, meta, by = by)
+
+  unmatched <- setdiff(unique(data[[by]]), unique(meta[[by]]))
+  if (length(unmatched) > 0L) {
+    warning(glue::glue(
+      "The following '{by}' values in `data` have no match in `meta`: ",
+      "{paste(unmatched, collapse = ', ')}"
+    ))
+  }
+
+  invisible(joined)
+}

@@ -43,3 +43,40 @@ test_that("meta_read() trims whitespace and drops empty rows/cols", {
   }
   expect_true(all(!vapply(meta, function(x) all(is.na(x)), logical(1))))
 })
+
+test_that("meta_annotate() left-joins data and meta on the by column", {
+  data <- tibble::tibble(mouse_ID = c("A", "B"), value = c(1, 2))
+  meta <- tibble::tibble(mouse_ID = c("A", "B"), sex = c("m", "f"))
+  result <- meta_annotate(data, meta)
+  expect_true("sex" %in% names(result))
+  expect_equal(result$sex, c("m", "f"))
+})
+
+test_that("meta_annotate() warns and keeps NA for unmatched by values", {
+  data <- tibble::tibble(mouse_ID = c("A", "B"), value = c(1, 2))
+  meta <- tibble::tibble(mouse_ID = "A", sex = "m")
+  expect_warning(
+    result <- meta_annotate(data, meta),
+    regexp = "B",
+    fixed = TRUE
+  )
+  expect_true(is.na(result$sex[result$mouse_ID == "B"]))
+})
+
+test_that("meta_annotate() errors when by column missing from data", {
+  data <- tibble::tibble(id = "A", value = 1)
+  meta <- tibble::tibble(mouse_ID = "A", sex = "m")
+  expect_error(meta_annotate(data, meta), regexp = "data", ignore.case = TRUE)
+})
+
+test_that("meta_annotate() errors when by column missing from meta", {
+  data <- tibble::tibble(mouse_ID = "A", value = 1)
+  meta <- tibble::tibble(id = "A", sex = "m")
+  expect_error(meta_annotate(data, meta), regexp = "meta", ignore.case = TRUE)
+})
+
+test_that("meta_annotate() errors on colliding non-by column names", {
+  data <- tibble::tibble(mouse_ID = "A", sex = "unknown")
+  meta <- tibble::tibble(mouse_ID = "A", sex = "m")
+  expect_error(meta_annotate(data, meta), regexp = "sex", fixed = TRUE)
+})
