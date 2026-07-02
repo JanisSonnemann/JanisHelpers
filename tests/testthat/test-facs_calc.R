@@ -56,3 +56,81 @@ test_that("facs_calc_pct_of() warns and fills NA when ref_pop has no match for a
   expect_equal(f1_row$value, 0.3)
   expect_true(all(is.na(f2_rows$value)))
 })
+
+# ── facs_calc_count_per_g ────────────────────────────────────────────────────
+
+count_per_g_data <- tibble::tibble(
+  file_name             = "s1",
+  population_full_path  = "CD45+",
+  population             = "CD45+",
+  metric                 = "count",
+  value                  = 1000,
+  mouse_ID               = "m1",
+  tissue                  = "kidney"
+)
+
+count_per_g_meta <- tibble::tibble(
+  mouse_ID           = "m1",
+  vol_total          = 1000,
+  vol_stained        = 100,
+  vol_resuspended    = 500,
+  vol_measured       = 50,
+  organ_piece_weight = 200
+)
+
+test_that("facs_calc_count_per_g() HTS formula matches manual calculation (columns)", {
+  result <- facs_calc_count_per_g(
+    count_per_g_data, count_per_g_meta, tissue = "kidney",
+    vol_total = "vol_total", vol_stained = "vol_stained",
+    vol_resuspended = "vol_resuspended", vol_measured = "vol_measured",
+    organ_piece_weight = "organ_piece_weight"
+  )
+  new_row <- dplyr::filter(result, metric == "count_per_g")
+  expect_equal(new_row$value, 500000)
+})
+
+test_that("facs_calc_count_per_g() accepts numeric constants in place of column names", {
+  meta_no_total <- dplyr::select(count_per_g_meta, !vol_total)
+
+  result <- facs_calc_count_per_g(
+    count_per_g_data, meta_no_total, tissue = "kidney",
+    vol_total = 1000, vol_stained = "vol_stained",
+    vol_resuspended = "vol_resuspended", vol_measured = "vol_measured",
+    organ_piece_weight = "organ_piece_weight"
+  )
+  new_row <- dplyr::filter(result, metric == "count_per_g")
+  expect_equal(new_row$value, 500000)
+})
+
+test_that("facs_calc_count_per_g() only processes rows matching the tissue argument", {
+  data_multi <- dplyr::bind_rows(
+    count_per_g_data,
+    tibble::tibble(
+      file_name = "s2", population_full_path = "CD45+", population = "CD45+",
+      metric = "count", value = 2000, mouse_ID = "m1", tissue = "spleen"
+    )
+  )
+
+  result <- facs_calc_count_per_g(
+    data_multi, count_per_g_meta, tissue = "kidney",
+    vol_total = "vol_total", vol_stained = "vol_stained",
+    vol_resuspended = "vol_resuspended", vol_measured = "vol_measured",
+    organ_piece_weight = "organ_piece_weight"
+  )
+  new_rows <- dplyr::filter(result, metric == "count_per_g")
+  expect_equal(nrow(new_rows), 1L)
+  expect_equal(new_rows$file_name, "s1")
+})
+
+test_that("facs_calc_count_per_g() errors when a volume argument is neither a column nor a numeric constant", {
+  expect_error(
+    facs_calc_count_per_g(
+      count_per_g_data, count_per_g_meta, tissue = "kidney",
+      vol_total = TRUE, vol_stained = "vol_stained",
+      vol_resuspended = "vol_resuspended", vol_measured = "vol_measured",
+      organ_piece_weight = "organ_piece_weight"
+    ),
+    regexp = "vol_total",
+    fixed = TRUE
+  )
+})
