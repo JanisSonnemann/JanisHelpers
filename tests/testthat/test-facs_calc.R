@@ -235,3 +235,37 @@ test_that("facs_calc_count_per_g() warns and fills NA when bead method resolved 
   new_row <- dplyr::filter(result, metric == "count_per_g")
   expect_true(is.na(new_row$value))
 })
+
+# ── end-to-end fixture test ─────────────────────────────────────────────────
+
+test_that("facs_calc_pct_of() and facs_calc_count_per_g() work end-to-end on real fixture data", {
+  skip_if_not(file.exists(wsp_path), wsp_skip_msg)
+
+  facs_data <- suppressMessages(
+    facs_read_wsp(wsp_path, keywords = c("mouse_ID", "tissue"))
+  )$data
+
+  pct_result <- facs_calc_pct_of(facs_data, ref_pop = "Singlets")
+  pct_rows <- dplyr::filter(pct_result, metric == "pct_of_Singlets")
+  expect_true(nrow(pct_rows) > 0L)
+  expect_true(all(pct_rows$value >= 0 & pct_rows$value <= 1, na.rm = TRUE))
+
+  meta <- tibble::tibble(
+    mouse_ID           = "26-1-17",
+    vol_total          = 1000,
+    vol_stained        = 100,
+    vol_resuspended    = 500,
+    vol_measured       = 50,
+    organ_piece_weight = 200
+  )
+
+  count_result <- facs_calc_count_per_g(
+    facs_data, meta, tissue = "kidney",
+    vol_total = "vol_total", vol_stained = "vol_stained",
+    vol_resuspended = "vol_resuspended", vol_measured = "vol_measured",
+    organ_piece_weight = "organ_piece_weight"
+  )
+  count_rows <- dplyr::filter(count_result, metric == "count_per_g")
+  expect_equal(dplyr::n_distinct(count_rows$file_name), 1L)
+  expect_equal(unique(count_rows$file_name), "26-1-17_whole_kidney_E05.fcs")
+})

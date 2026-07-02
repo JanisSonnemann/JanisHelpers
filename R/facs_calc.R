@@ -109,7 +109,7 @@ resolve_var_ <- function(df, var, arg_name) {
 #' @param bead_pop character; leaf population name used to look up bead
 #'   counts, default \code{"beads"}.
 #' @param bead_concentration numeric; reference bead concentration
-#'   (beads/\u00b5L), default \code{10400}.
+#'   (beads per microliter), default \code{10400}.
 #'
 #' @returns \code{data} with additional rows appended:
 #'   \code{metric = "count_per_g"}. Errors if \code{method_col} is not found

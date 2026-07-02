@@ -54,7 +54,7 @@ sample.}
 counts, default \code{"beads"}.}
 
 \item{bead_concentration}{numeric; reference bead concentration
-(beads/\u00b5L), default \code{10400}.}
+(beads per microliter), default \code{10400}.}
 }
 \value{
 \code{data} with additional rows appended:
