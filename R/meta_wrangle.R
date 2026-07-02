@@ -1,29 +1,6 @@
 is_posixct_ <- function(x) inherits(x, "POSIXct")
 
-#' Read and clean an experiment metadata spreadsheet
-#'
-#' @description
-#' Reads an Excel sheet of per-subject experiment metadata (e.g. mouse ID,
-#' cage, sex, group, dates) and applies standard cleaning: blank rows and
-#' columns removed, column names standardized to snake_case (except
-#' \code{mouse_ID}, preserved verbatim so it stays joinable against FlowJo
-#' keyword data such as \code{facs_read_wsp(keywords = "mouse_ID")}),
-#' character columns trimmed of whitespace, date/time columns coerced to
-#' \code{Date}, and a \code{group} column (if present) coerced to a factor.
-#'
-#' @param path path to \code{.xlsx} metadata file
-#' @param sheet sheet name or index to read, default = 1
-#'
-#' @returns cleaned tibble, one row per subject, returned invisibly --
-#'   assign the result explicitly
-#' @export
-#'
-#' @examples
-#' \dontrun{
-#'   meta <- meta_read("meta.xlsx")
-#' }
-meta_read <- function(path, sheet = 1) {
-  dat <- readxl::read_excel(path, sheet = sheet)
+meta_clean_sheet_ <- function(dat) {
   dat <- janitor::remove_empty(dat, which = c("rows", "cols"))
   dat <- janitor::clean_names(dat)
 
@@ -45,7 +22,40 @@ meta_read <- function(path, sheet = 1) {
     dat <- dplyr::mutate(dat, group = factor(group))
   }
 
-  invisible(dat)
+  dat
+}
+
+#' Read and clean every sheet of an experiment metadata spreadsheet
+#'
+#' @description
+#' Reads every sheet of an Excel workbook of experiment metadata and applies
+#' standard cleaning to each: blank rows and columns removed, column names
+#' standardized to snake_case (except \code{mouse_ID}, preserved verbatim so
+#' it stays joinable against FlowJo keyword data such as
+#' \code{facs_read_wsp(keywords = "mouse_ID")}), character columns trimmed
+#' of whitespace, date/time columns coerced to \code{Date}, and a
+#' \code{group} column (if present) coerced to a factor.
+#'
+#' @param path path to \code{.xlsx} metadata file
+#'
+#' @returns named list of cleaned tibbles, one per sheet, named after the
+#'   sheet (e.g. \code{list(meta = ..., organ_weights = ..., facs_volumes =
+#'   ...)}); returned invisibly -- assign the result explicitly
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#'   meta_list <- meta_read("meta.xlsx")
+#'   meta_list$meta
+#' }
+meta_read <- function(path) {
+  sheet_names <- readxl::excel_sheets(path)
+
+  result <- sheet_names |>
+    purrr::map(~ meta_clean_sheet_(readxl::read_excel(path, sheet = .x))) |>
+    purrr::set_names(sheet_names)
+
+  invisible(result)
 }
 
 #' Annotate experimental data with subject metadata

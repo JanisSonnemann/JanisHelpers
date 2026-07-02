@@ -2,30 +2,30 @@
 % Please edit documentation in R/meta_wrangle.R
 \name{meta_read}
 \alias{meta_read}
-\title{Read and clean an experiment metadata spreadsheet}
+\title{Read and clean every sheet of an experiment metadata spreadsheet}
 \usage{
-meta_read(path, sheet = 1)
+meta_read(path)
 }
 \arguments{
 \item{path}{path to \code{.xlsx} metadata file}
-
-\item{sheet}{sheet name or index to read, default = 1}
 }
 \value{
-cleaned tibble, one row per subject, returned invisibly --
-assign the result explicitly
+named list of cleaned tibbles, one per sheet, named after the
+sheet (e.g. \code{list(meta = ..., organ_weights = ..., facs_volumes =
+  ...)}); returned invisibly -- assign the result explicitly
 }
 \description{
-Reads an Excel sheet of per-subject experiment metadata (e.g. mouse ID,
-cage, sex, group, dates) and applies standard cleaning: blank rows and
-columns removed, column names standardized to snake_case (except
-\code{mouse_ID}, preserved verbatim so it stays joinable against FlowJo
-keyword data such as \code{facs_read_wsp(keywords = "mouse_ID")}),
-character columns trimmed of whitespace, date/time columns coerced to
-\code{Date}, and a \code{group} column (if present) coerced to a factor.
+Reads every sheet of an Excel workbook of experiment metadata and applies
+standard cleaning to each: blank rows and columns removed, column names
+standardized to snake_case (except \code{mouse_ID}, preserved verbatim so
+it stays joinable against FlowJo keyword data such as
+\code{facs_read_wsp(keywords = "mouse_ID")}), character columns trimmed
+of whitespace, date/time columns coerced to \code{Date}, and a
+\code{group} column (if present) coerced to a factor.
 }
 \examples{
 \dontrun{
-  meta <- meta_read("meta.xlsx")
+  meta_list <- meta_read("meta.xlsx")
+  meta_list$meta
 }
 }

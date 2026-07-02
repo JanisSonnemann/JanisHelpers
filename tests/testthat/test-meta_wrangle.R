@@ -6,17 +6,28 @@ wsp_path  <- testthat::test_path("../fixtures/minimal.wsp")
 meta_skip_msg <- "meta_minimal.xlsx fixture not available"
 wsp_skip_msg  <- "minimal.wsp fixture not available"
 
-test_that("meta_read() returns a tibble with mouse_ID preserved verbatim", {
+test_that("meta_read() returns a named list with one tibble per sheet", {
   skip_if_not(file.exists(meta_path), meta_skip_msg)
-  meta <- meta_read(meta_path)
-  expect_s3_class(meta, "tbl_df")
-  expect_true("mouse_ID" %in% names(meta))
-  expect_false("mouse_id" %in% names(meta))
+  meta_list <- meta_read(meta_path)
+  expect_type(meta_list, "list")
+  expect_setequal(names(meta_list), c("meta", "organ_weights", "facs_volumes"))
+  expect_s3_class(meta_list$meta, "tbl_df")
+  expect_s3_class(meta_list$organ_weights, "tbl_df")
+  expect_s3_class(meta_list$facs_volumes, "tbl_df")
 })
 
-test_that("meta_read() coerces date columns to Date", {
+test_that("meta_read() preserves mouse_ID verbatim in every sheet", {
   skip_if_not(file.exists(meta_path), meta_skip_msg)
-  meta <- meta_read(meta_path)
+  meta_list <- meta_read(meta_path)
+  for (sheet in meta_list) {
+    expect_true("mouse_ID" %in% names(sheet))
+    expect_false("mouse_id" %in% names(sheet))
+  }
+})
+
+test_that("meta_read() coerces date columns to Date in the meta sheet", {
+  skip_if_not(file.exists(meta_path), meta_skip_msg)
+  meta <- meta_read(meta_path)$meta
   date_cols <- intersect(names(meta), c("dob", "start_date", "bmt_date", "death_date"))
   expect_true(length(date_cols) > 0L)
   for (col in date_cols) {
@@ -24,16 +35,16 @@ test_that("meta_read() coerces date columns to Date", {
   }
 })
 
-test_that("meta_read() coerces group to a factor", {
+test_that("meta_read() coerces group to a factor in the meta sheet", {
   skip_if_not(file.exists(meta_path), meta_skip_msg)
-  meta <- meta_read(meta_path)
+  meta <- meta_read(meta_path)$meta
   expect_true("group" %in% names(meta))
   expect_s3_class(meta$group, "factor")
 })
 
 test_that("meta_read() trims whitespace and drops empty rows/cols", {
   skip_if_not(file.exists(meta_path), meta_skip_msg)
-  meta <- meta_read(meta_path)
+  meta <- meta_read(meta_path)$meta
   chr_cols <- names(meta)[vapply(meta, is.character, logical(1))]
   for (col in chr_cols) {
     vals <- stats::na.omit(meta[[col]])
@@ -88,7 +99,7 @@ test_that("facs_read_wsp() data can be annotated end-to-end with meta_read()", {
   facs_data <- suppressMessages(
     facs_read_wsp(wsp_path, keywords = "mouse_ID")
   )$data
-  meta <- meta_read(meta_path)
+  meta <- meta_read(meta_path)$meta
 
   result <- expect_no_warning(meta_annotate(facs_data, meta))
 
@@ -125,21 +136,23 @@ test_that("meta_annotate() warns listing unmatched mouse_ID/tissue combinations"
 
 test_that("meta_read() skips the mouse_id rename when no such column exists", {
   testthat::local_mocked_bindings(
-    read_excel = function(...) tibble::tibble(subject = "A", sex = "m"),
+    excel_sheets = function(...) "sheet1",
+    read_excel   = function(...) tibble::tibble(subject = "A", sex = "m"),
     .package = "readxl"
   )
-  meta <- meta_read("fake/path.xlsx")
-  expect_false("mouse_ID" %in% names(meta))
-  expect_false("mouse_id" %in% names(meta))
-  expect_true("subject" %in% names(meta))
+  meta_list <- meta_read("fake/path.xlsx")
+  expect_false("mouse_ID" %in% names(meta_list$sheet1))
+  expect_false("mouse_id" %in% names(meta_list$sheet1))
+  expect_true("subject" %in% names(meta_list$sheet1))
 })
 
 test_that("meta_read() skips group factor coercion when no group column exists", {
   testthat::local_mocked_bindings(
-    read_excel = function(...) tibble::tibble(mouse_id = "A", sex = "m"),
+    excel_sheets = function(...) "sheet1",
+    read_excel   = function(...) tibble::tibble(mouse_id = "A", sex = "m"),
     .package = "readxl"
   )
-  meta <- meta_read("fake/path.xlsx")
-  expect_false("group" %in% names(meta))
-  expect_true("mouse_ID" %in% names(meta))
+  meta_list <- meta_read("fake/path.xlsx")
+  expect_false("group" %in% names(meta_list$sheet1))
+  expect_true("mouse_ID" %in% names(meta_list$sheet1))
 })
