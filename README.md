@@ -8,7 +8,7 @@
 
 Einzelne kleine Funktionen für alltägliche Probleme
 
-- knit_multiple_dated: put in yaml behind “knit:” to automatically knit
+- report_knit_dated: put in yaml behind “knit:” to automatically knit
   dated versions to specified directory
 - Auto-knit-report: rmarkdown template das automatisch datiert dateien
   in spezifische subdirectories erstellt

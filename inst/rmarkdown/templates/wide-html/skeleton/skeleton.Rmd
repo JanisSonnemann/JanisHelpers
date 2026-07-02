@@ -9,7 +9,7 @@ output:
     code_folding: hide
 editor_options: 
   chunk_output_type: console
-knit: (function(input, ...) {JanisHelpers::knit_wide_html(input)})
+knit: (function(input, ...) {JanisHelpers::report_knit_wide(input)})
 ---
 
 ```{r setup, include = knitr::is_html_output(), error = FALSE, message = FALSE, warning = FALSE}

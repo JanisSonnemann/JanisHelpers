@@ -12,7 +12,7 @@ output:
     toc_depth: 3
 editor_options: 
   chunk_output_type: console
-knit: (function(input, ...) {JanisHelpers::knit_exp_structure(input, format = "html_document")})
+knit: (function(input, ...) {JanisHelpers::report_knit_exp(input, format = "html_document")})
 ---
 
 ```{r setup, include = knitr::is_html_output(), error = FALSE, message = FALSE, warning = FALSE}
@@ -24,7 +24,7 @@ fig.res <- 300
 
 ####DO NOT CHANGE---- 
 knitr::opts_chunk$set(
-  fig.path = paste0("output/", xfun::sans_ext(basename(rstudioapi::getActiveDocumentContext()$path)), "/figs/", Sys.Date(),"/"), 
+  fig.path = paste0("output/", xfun::sans_ext(knitr::current_input()), "/figs/", Sys.Date(),"/"),
   dev = fig.format, 
   dpi = fig.res, 
   warning = FALSE,
@@ -37,8 +37,8 @@ knitr::opts_chunk$set(
 ####----
 
 # extract path of experiment, use this in addition to here to refer to experiment data
-exp_path <- rstudioapi::getActiveDocumentContext()$path |> 
-  dirname() |> 
+exp_path <- knitr::current_input(dir = TRUE) |>
+  dirname() |>
   dirname()
 
 library(here)

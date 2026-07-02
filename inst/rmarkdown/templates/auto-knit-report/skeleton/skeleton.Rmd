@@ -12,7 +12,7 @@ output:
     toc_depth: 3
 editor_options: 
   chunk_output_type: console
-knit: (function(input, ...) {JanisHelpers::knit_multiple_dated(input, path = "XXX", format = "all")})
+knit: (function(input, ...) {JanisHelpers::report_knit_dated(input, path = "XXX", format = "all")})
 ---
 
 ```{r setup, include = knitr::is_html_output(), error = FALSE, message = FALSE, warning = FALSE}

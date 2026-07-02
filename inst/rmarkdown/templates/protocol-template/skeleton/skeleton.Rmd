@@ -24,7 +24,7 @@ header-includes:
 editor_options: 
   chunk_output_type: console
 #   replace XXX with experiment name
-knit: (function(input, ...) {JanisHelpers::knit_multiple_dated(input, path = "protocols/XXX", format = "pdf_document")})
+knit: (function(input, ...) {JanisHelpers::report_knit_dated(input, path = "protocols/XXX", format = "pdf_document")})
 ---
 
 ```{r setup, include = knitr::is_html_output(), error = FALSE, message = FALSE, warning = FALSE}
