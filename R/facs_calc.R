@@ -35,7 +35,7 @@ facs_calc_pct_of <- function(data, ref_pop) {
     stop(glue::glue(
       "ref_pop '{ref_pop}' matches more than one population for file_name(s): ",
       "{paste(dup_files, collapse = ', ')}. Leaf population name is ambiguous ",
-      "— rename the gate(s) in FlowJo or disambiguate before calling facs_calc_pct_of()."
+      "\u2014 rename the gate(s) in FlowJo or disambiguate before calling facs_calc_pct_of()."
     ))
   }
 
