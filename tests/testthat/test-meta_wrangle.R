@@ -95,3 +95,33 @@ test_that("facs_read_wsp() data can be annotated end-to-end with meta_read()", {
   expect_true(all(c("sex", "group", "cage") %in% names(result)))
   expect_false(any(is.na(result$sex)))
 })
+
+test_that("meta_annotate() silently drops by values present only in meta", {
+  data <- tibble::tibble(mouse_ID = "A", value = 1)
+  meta <- tibble::tibble(mouse_ID = c("A", "B"), sex = c("m", "f"))
+  result <- expect_no_warning(meta_annotate(data, meta))
+  expect_equal(nrow(result), 1L)
+  expect_equal(result$mouse_ID, "A")
+  expect_false("B" %in% result$mouse_ID)
+})
+
+test_that("meta_read() skips the mouse_id rename when no such column exists", {
+  testthat::local_mocked_bindings(
+    read_excel = function(...) tibble::tibble(subject = "A", sex = "m"),
+    .package = "readxl"
+  )
+  meta <- meta_read("fake/path.xlsx")
+  expect_false("mouse_ID" %in% names(meta))
+  expect_false("mouse_id" %in% names(meta))
+  expect_true("subject" %in% names(meta))
+})
+
+test_that("meta_read() skips group factor coercion when no group column exists", {
+  testthat::local_mocked_bindings(
+    read_excel = function(...) tibble::tibble(mouse_id = "A", sex = "m"),
+    .package = "readxl"
+  )
+  meta <- meta_read("fake/path.xlsx")
+  expect_false("group" %in% names(meta))
+  expect_true("mouse_ID" %in% names(meta))
+})

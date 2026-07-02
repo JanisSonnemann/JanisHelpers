@@ -56,7 +56,10 @@ meta_read <- function(path, sheet = 1) {
 #' identifier column. Errors if the join column is missing from either side,
 #' or if any non-join column names collide between the two tibbles. Warns if
 #' any \code{by} value present in \code{data} has no match in \code{meta}
-#' (those rows keep \code{NA} for all meta columns).
+#' (those rows keep \code{NA} for all meta columns). \code{group} is a
+#' particularly likely candidate for this column-collision error, since
+#' \code{facs_read_wsp(..., keywords = "group")} and \code{meta_read()} both
+#' commonly produce a \code{group} column.
 #'
 #' @param data tibble to annotate, e.g. \code{facs_read_wsp(...)$data}
 #' @param meta metadata tibble, e.g. from \code{meta_read()}
