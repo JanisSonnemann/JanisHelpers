@@ -3,6 +3,8 @@
 # Root sample tree node name (child of <Sample>):          SampleNode
 # Population container element:                            Subpopulations
 # Individual population element:                           Population
+# Boolean-gate population elements (same attrs/children
+# as Population; AND/OR/NOT combinations of other gates):  OrNode, AndNode, NotNode
 # Population count attribute:                              count
 # Population name attribute:                               name
 # Keyword container element (child of <Sample>):           Keywords (capital K)
@@ -87,11 +89,15 @@ walk_pops_ <- function(node, file_name, path, parent_count, stain_lookup) {
   if (inherits(subpops, "xml_missing")) return(tibble::tibble())
 
   skip_stats <- c("count", "freq. of parent", "freq of parent", "frequency of parent")
+  # FlowJo represents boolean-gate populations (AND/OR/NOT of other gates) as
+  # sibling element types to <Population>, not as <Population> itself, but
+  # they carry the same name/count attributes and Subpopulations structure.
+  pop_node_types <- c("Population", "OrNode", "AndNode", "NotNode")
 
   purrr::map(xml2::xml_children(subpops), function(child) {
     nm <- xml2::xml_name(child)
 
-    if (nm == "Population") {
+    if (nm %in% pop_node_types) {
       pop_name  <- xml2::xml_attr(child, "name")
       pop_count <- suppressWarnings(as.numeric(xml2::xml_attr(child, "count")))
       pop_path  <- if (nzchar(path)) paste0(path, "/", pop_name) else pop_name

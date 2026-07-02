@@ -112,3 +112,37 @@ test_that("invalid group name stops with informative error", {
     ignore.case = TRUE
   )
 })
+
+test_that("boolean gate populations (NotNode/AndNode/OrNode) are exported", {
+  skip_if_not(file.exists(wsp_path), skip_msg)
+  result <- suppressMessages(facs_read_wsp(wsp_path))
+
+  boolean_pop <- result$data |>
+    dplyr::filter(
+      file_name == "26-1-17_percoll-kidney_E06.fcs",
+      population_full_path == "Singlets/non-debris-"
+    )
+
+  expect_true(nrow(boolean_pop) > 0)
+  expect_equal(
+    boolean_pop$value[boolean_pop$metric == "count"],
+    378685
+  )
+})
+
+test_that("populations gated downstream of a boolean gate are exported", {
+  skip_if_not(file.exists(wsp_path), skip_msg)
+  result <- suppressMessages(facs_read_wsp(wsp_path))
+
+  child_pop <- result$data |>
+    dplyr::filter(
+      file_name == "26-1-17_percoll-kidney_E06.fcs",
+      population_full_path == "Singlets/non-debris-/CD45+"
+    )
+
+  expect_true(nrow(child_pop) > 0)
+  expect_equal(
+    child_pop$value[child_pop$metric == "count"],
+    984
+  )
+})
