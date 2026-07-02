@@ -52,18 +52,22 @@ meta_read <- function(path, sheet = 1) {
 #'
 #' @description
 #' Left-joins a metadata tibble (typically from \code{meta_read()}) onto any
-#' experimental data tibble (e.g. \code{facs_read_wsp(...)$data}) by a shared
-#' identifier column. Errors if the join column is missing from either side,
-#' or if any non-join column names collide between the two tibbles. Warns if
-#' any \code{by} value present in \code{data} has no match in \code{meta}
-#' (those rows keep \code{NA} for all meta columns). \code{group} is a
-#' particularly likely candidate for this column-collision error, since
-#' \code{facs_read_wsp(..., keywords = "group")} and \code{meta_read()} both
-#' commonly produce a \code{group} column.
+#' experimental data tibble (e.g. \code{facs_read_wsp(...)$data}) by one or
+#' more shared identifier columns. Errors if any \code{by} column is missing
+#' from either side, or if any non-\code{by} column names collide between
+#' the two tibbles. Warns if any \code{by} combination present in
+#' \code{data} has no match in \code{meta} (those rows keep \code{NA} for
+#' all meta columns). \code{group} is a particularly likely candidate for
+#' the column-collision error, since \code{facs_read_wsp(..., keywords =
+#' "group")} and \code{meta_read()} both commonly produce a \code{group}
+#' column.
 #'
 #' @param data tibble to annotate, e.g. \code{facs_read_wsp(...)$data}
-#' @param meta metadata tibble, e.g. from \code{meta_read()}
-#' @param by name of the shared identifier column, default = "mouse_ID"
+#' @param meta metadata tibble, e.g. one element of \code{meta_read()}'s
+#'   result
+#' @param by character vector of shared identifier column name(s), default
+#'   = \code{"mouse_ID"}. Pass e.g. \code{c("mouse_ID", "tissue")} to join
+#'   on multiple columns.
 #'
 #' @returns \code{data} left-joined with \code{meta}, returned invisibly --
 #'   assign the result explicitly
@@ -71,14 +75,21 @@ meta_read <- function(path, sheet = 1) {
 #'
 #' @examples
 #' \dontrun{
-#'   dat <- meta_annotate(facs_read_wsp("experiment.wsp")$data, meta_read("meta.xlsx"))
+#'   meta_list <- meta_read("meta.xlsx")
+#'   dat <- meta_annotate(facs_read_wsp("experiment.wsp")$data, meta_list$meta)
 #' }
 meta_annotate <- function(data, meta, by = "mouse_ID") {
-  if (!by %in% names(data)) {
-    stop(glue::glue("Join column '{by}' not found in `data`."))
+  missing_in_data <- setdiff(by, names(data))
+  if (length(missing_in_data) > 0L) {
+    stop(glue::glue(
+      "Join column(s) not found in `data`: {paste(missing_in_data, collapse = ', ')}."
+    ))
   }
-  if (!by %in% names(meta)) {
-    stop(glue::glue("Join column '{by}' not found in `meta`."))
+  missing_in_meta <- setdiff(by, names(meta))
+  if (length(missing_in_meta) > 0L) {
+    stop(glue::glue(
+      "Join column(s) not found in `meta`: {paste(missing_in_meta, collapse = ', ')}."
+    ))
   }
 
   colliding <- setdiff(intersect(names(data), names(meta)), by)
@@ -92,11 +103,21 @@ meta_annotate <- function(data, meta, by = "mouse_ID") {
 
   joined <- dplyr::left_join(data, meta, by = by)
 
-  unmatched <- setdiff(unique(data[[by]]), unique(meta[[by]]))
-  if (length(unmatched) > 0L) {
+  data_keys <- dplyr::distinct(data, dplyr::across(dplyr::all_of(by)))
+  meta_keys <- dplyr::distinct(meta, dplyr::across(dplyr::all_of(by)))
+  unmatched <- dplyr::anti_join(data_keys, meta_keys, by = by)
+
+  if (nrow(unmatched) > 0L) {
+    unmatched_desc <- purrr::pmap_chr(
+      unmatched,
+      function(...) {
+        row <- list(...)
+        paste(paste0(names(row), "=", row), collapse = ", ")
+      }
+    )
     warning(glue::glue(
-      "The following '{by}' values in `data` have no match in `meta`: ",
-      "{paste(unmatched, collapse = ', ')}"
+      "The following '{paste(by, collapse = ', ')}' combination(s) in `data` have no match in `meta`: ",
+      "{paste(unmatched_desc, collapse = '; ')}"
     ))
   }
 

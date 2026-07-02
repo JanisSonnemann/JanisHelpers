@@ -9,9 +9,12 @@ meta_annotate(data, meta, by = "mouse_ID")
 \arguments{
 \item{data}{tibble to annotate, e.g. \code{facs_read_wsp(...)$data}}
 
-\item{meta}{metadata tibble, e.g. from \code{meta_read()}}
+\item{meta}{metadata tibble, e.g. one element of \code{meta_read()}'s
+result}
 
-\item{by}{name of the shared identifier column, default = "mouse_ID"}
+\item{by}{character vector of shared identifier column name(s), default
+= \code{"mouse_ID"}. Pass e.g. \code{c("mouse_ID", "tissue")} to join
+on multiple columns.}
 }
 \value{
 \code{data} left-joined with \code{meta}, returned invisibly --
@@ -19,17 +22,19 @@ assign the result explicitly
 }
 \description{
 Left-joins a metadata tibble (typically from \code{meta_read()}) onto any
-experimental data tibble (e.g. \code{facs_read_wsp(...)$data}) by a shared
-identifier column. Errors if the join column is missing from either side,
-or if any non-join column names collide between the two tibbles. Warns if
-any \code{by} value present in \code{data} has no match in \code{meta}
-(those rows keep \code{NA} for all meta columns). \code{group} is a
-particularly likely candidate for this column-collision error, since
-\code{facs_read_wsp(..., keywords = "group")} and \code{meta_read()} both
-commonly produce a \code{group} column.
+experimental data tibble (e.g. \code{facs_read_wsp(...)$data}) by one or
+more shared identifier columns. Errors if any \code{by} column is missing
+from either side, or if any non-\code{by} column names collide between
+the two tibbles. Warns if any \code{by} combination present in
+\code{data} has no match in \code{meta} (those rows keep \code{NA} for
+all meta columns). \code{group} is a particularly likely candidate for
+the column-collision error, since \code{facs_read_wsp(..., keywords =
+"group")} and \code{meta_read()} both commonly produce a \code{group}
+column.
 }
 \examples{
 \dontrun{
-  dat <- meta_annotate(facs_read_wsp("experiment.wsp")$data, meta_read("meta.xlsx"))
+  meta_list <- meta_read("meta.xlsx")
+  dat <- meta_annotate(facs_read_wsp("experiment.wsp")$data, meta_list$meta)
 }
 }

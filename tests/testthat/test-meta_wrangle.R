@@ -105,6 +105,24 @@ test_that("meta_annotate() silently drops by values present only in meta", {
   expect_false("B" %in% result$mouse_ID)
 })
 
+test_that("meta_annotate() joins on multiple by columns", {
+  data <- tibble::tibble(mouse_ID = c("A", "A"), tissue = c("kidney", "lung"), value = c(1, 2))
+  meta <- tibble::tibble(mouse_ID = c("A", "A"), tissue = c("kidney", "lung"), weight = c(100, 50))
+  result <- meta_annotate(data, meta, by = c("mouse_ID", "tissue"))
+  expect_equal(result$weight, c(100, 50))
+})
+
+test_that("meta_annotate() warns listing unmatched mouse_ID/tissue combinations", {
+  data <- tibble::tibble(mouse_ID = c("A", "A"), tissue = c("kidney", "lung"), value = c(1, 2))
+  meta <- tibble::tibble(mouse_ID = "A", tissue = "kidney", weight = 100)
+  expect_warning(
+    result <- meta_annotate(data, meta, by = c("mouse_ID", "tissue")),
+    regexp = "tissue=lung",
+    fixed = TRUE
+  )
+  expect_true(is.na(result$weight[result$tissue == "lung"]))
+})
+
 test_that("meta_read() skips the mouse_id rename when no such column exists", {
   testthat::local_mocked_bindings(
     read_excel = function(...) tibble::tibble(subject = "A", sex = "m"),
