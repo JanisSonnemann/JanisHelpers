@@ -80,3 +80,18 @@ test_that("meta_annotate() errors on colliding non-by column names", {
   meta <- tibble::tibble(mouse_ID = "A", sex = "m")
   expect_error(meta_annotate(data, meta), regexp = "sex", fixed = TRUE)
 })
+
+test_that("facs_read_wsp() data can be annotated end-to-end with meta_read()", {
+  skip_if_not(file.exists(meta_path), meta_skip_msg)
+  skip_if_not(file.exists(wsp_path), wsp_skip_msg)
+
+  facs_data <- suppressMessages(
+    facs_read_wsp(wsp_path, keywords = "mouse_ID")
+  )$data
+  meta <- meta_read(meta_path)
+
+  result <- expect_no_warning(meta_annotate(facs_data, meta))
+
+  expect_true(all(c("sex", "group", "cage") %in% names(result)))
+  expect_false(any(is.na(result$sex)))
+})

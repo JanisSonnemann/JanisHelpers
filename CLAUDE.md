@@ -92,6 +92,16 @@ New functions must follow the `domain_verb` pattern. Never add a function that d
 - **Output**: rendered HTML/PDF written to disk; returns the output path (from `rmarkdown::render()`).
 - `report_knit_exp()` and `report_knit_wide()` use `normalizePath(input)` to resolve the output directory — no RStudio dependency, works from Positron or the terminal.
 
+### `meta_read()` / `meta_annotate()` — experiment metadata
+- **`meta_read(path, sheet = 1)`**: reads an Excel sheet into a cleaned tibble --
+  blank rows/columns dropped, column names snake_cased (except `mouse_ID`,
+  preserved verbatim), character columns trimmed, date columns coerced to
+  `Date`, `group` coerced to a factor if present.
+- **`meta_annotate(data, meta, by = "mouse_ID")`**: left-joins `meta` onto
+  `data` by `by`. Errors if `by` is missing from either side or if non-`by`
+  column names collide. Warns (row kept, `NA` filled) if a `by` value in
+  `data` has no match in `meta`.
+
 ---
 
 ## Dependency philosophy
@@ -139,12 +149,15 @@ Current `Imports`: `fcexpr`, `dplyr`, `tidyr`, `stringr`, `tibble`, `purrr`, `gl
 
 ## Known check output
 
-`devtools::check()` currently produces **0 errors, 0 warnings, 2 notes**. Both notes are pre-existing:
+`devtools::check()` currently produces **0 errors, 0 warnings**, plus a small set of pre-existing notes:
 
 - `future file timestamps` — network/environment issue, not code.
+- `checking for hidden files and directories` (`.git`) — only observed when running `check()` from inside a git worktree, where `.git` is a file (pointing at the real gitdir) rather than a directory; R's default VCS-ignore logic doesn't recognize the file form. Does not appear when checking from a normal clone.
+- `checking top-level files` (`docs`) — the `docs/superpowers/` directory (planning/spec notes from the `sdd` workflow, not package documentation) isn't covered by `.Rbuildignore`. Pre-existing since the `facs_read_wsp` work; not introduced or addressed by the `meta_` domain work.
 - `R code for possible problems` — remaining items are all tidy-eval / gt false positives, not bare calls:
   - `%>%` in `analysis_stats.R` — kept intentionally in the gtsummary method-dispatch chain (see pipe rule above).
   - `.data` in `analysis_stats.R` — the rlang tidy-eval pronoun; required for dynamic column selection, cannot be namespaced.
   - `p.adj`, `p.value` in `analysis_stats.R` — bare column names inside gt `rows =` predicates; this is how gt row selection works.
   - `all_pops_fun` multiple definitions in `analysis_posthoc_tables` — two branches define the function with different signatures; structural issue, low priority.
   - All `facs_import_wsp` variable-binding notes (`FileName`, `PopulationFullPath`, etc.) — bare column names inside dplyr verbs; valid tidy eval, flagged as a static-analysis false positive.
+  - All `meta_read`/`meta_annotate` variable-binding notes (`mouse_id`, `mouse_ID`, `group`) — bare column names inside dplyr verbs; valid tidy eval, flagged as a static-analysis false positive.
