@@ -134,3 +134,104 @@ test_that("facs_calc_count_per_g() errors when a volume argument is neither a co
     fixed = TRUE
   )
 })
+
+# ── bead path + method_col resolution ────────────────────────────────────────
+
+bead_row <- tibble::tibble(
+  file_name = "s1", population_full_path = "beads", population = "beads",
+  metric = "count", value = 5200, mouse_ID = "m1", tissue = "kidney"
+)
+
+test_that("facs_calc_count_per_g() bead formula matches manual calculation (method_col in meta)", {
+  data_beads <- dplyr::bind_rows(count_per_g_data, bead_row)
+  meta_beads <- dplyr::mutate(count_per_g_meta, method = "beads")
+
+  result <- facs_calc_count_per_g(
+    data_beads, meta_beads, tissue = "kidney",
+    vol_total = "vol_total", vol_stained = "vol_stained",
+    vol_resuspended = "vol_resuspended", vol_measured = "vol_measured",
+    organ_piece_weight = "organ_piece_weight",
+    method_col = "method"
+  )
+  new_row <- dplyr::filter(result, metric == "count_per_g", population == "CD45+")
+  expect_equal(new_row$value, 100000)
+})
+
+test_that("facs_calc_count_per_g() resolves method_col from data (per-sample) over meta", {
+  data_beads_kw <- dplyr::bind_rows(count_per_g_data, bead_row) |>
+    dplyr::mutate(method = "beads")
+
+  result <- facs_calc_count_per_g(
+    data_beads_kw, count_per_g_meta, tissue = "kidney",
+    vol_total = "vol_total", vol_stained = "vol_stained",
+    vol_resuspended = "vol_resuspended", vol_measured = "vol_measured",
+    organ_piece_weight = "organ_piece_weight",
+    method_col = "method"
+  )
+  new_row <- dplyr::filter(result, metric == "count_per_g", population == "CD45+")
+  expect_equal(new_row$value, 100000)
+})
+
+test_that("facs_calc_count_per_g() defaults NA method_col values to hts with no warning", {
+  meta_na_method <- dplyr::mutate(count_per_g_meta, method = NA_character_)
+
+  expect_no_warning(
+    result <- facs_calc_count_per_g(
+      count_per_g_data, meta_na_method, tissue = "kidney",
+      vol_total = "vol_total", vol_stained = "vol_stained",
+      vol_resuspended = "vol_resuspended", vol_measured = "vol_measured",
+      organ_piece_weight = "organ_piece_weight",
+      method_col = "method"
+    )
+  )
+  new_row <- dplyr::filter(result, metric == "count_per_g")
+  expect_equal(new_row$value, 500000)
+})
+
+test_that("facs_calc_count_per_g() errors on an invalid method_col value", {
+  meta_bad_method <- dplyr::mutate(count_per_g_meta, method = "unknown")
+
+  expect_error(
+    facs_calc_count_per_g(
+      count_per_g_data, meta_bad_method, tissue = "kidney",
+      vol_total = "vol_total", vol_stained = "vol_stained",
+      vol_resuspended = "vol_resuspended", vol_measured = "vol_measured",
+      organ_piece_weight = "organ_piece_weight",
+      method_col = "method"
+    ),
+    regexp = "unknown",
+    fixed = TRUE
+  )
+})
+
+test_that("facs_calc_count_per_g() errors when method_col is not found in data or meta", {
+  expect_error(
+    facs_calc_count_per_g(
+      count_per_g_data, count_per_g_meta, tissue = "kidney",
+      vol_total = "vol_total", vol_stained = "vol_stained",
+      vol_resuspended = "vol_resuspended", vol_measured = "vol_measured",
+      organ_piece_weight = "organ_piece_weight",
+      method_col = "nonexistent"
+    ),
+    regexp = "nonexistent",
+    fixed = TRUE
+  )
+})
+
+test_that("facs_calc_count_per_g() warns and fills NA when bead method resolved but no bead count found", {
+  meta_beads_missing <- dplyr::mutate(count_per_g_meta, method = "beads")
+
+  expect_warning(
+    result <- facs_calc_count_per_g(
+      count_per_g_data, meta_beads_missing, tissue = "kidney",
+      vol_total = "vol_total", vol_stained = "vol_stained",
+      vol_resuspended = "vol_resuspended", vol_measured = "vol_measured",
+      organ_piece_weight = "organ_piece_weight",
+      method_col = "method"
+    ),
+    regexp = "s1",
+    fixed = TRUE
+  )
+  new_row <- dplyr::filter(result, metric == "count_per_g")
+  expect_true(is.na(new_row$value))
+})
