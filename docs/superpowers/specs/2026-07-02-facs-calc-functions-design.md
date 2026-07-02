@@ -56,33 +56,41 @@ Returns `data` with additional rows appended, invisibly.
 | `vol_resuspended` | chr or dbl | — | Column name or constant: volume the stained pellet was resuspended in |
 | `vol_measured` | chr or dbl | — | Column name or constant: volume actually run/measured on the cytometer |
 | `organ_piece_weight` | chr or dbl | — | Column name or constant: weight (mg) of the organ piece processed |
-| `method_col` | chr | `NULL` | Column name in `meta` with values `"beads"` or `"hts"` per mouse. `NULL` (default) → every sample uses the HTS formula |
+| `method_col` | chr | `NULL` | Column name (in `data` **or** `meta`) with values `"beads"` or `"hts"`. `NULL` (default) → every sample uses the HTS formula |
 | `bead_pop` | chr | `"beads"` | Population name (leaf) used to look up bead counts |
 | `bead_concentration` | dbl | `10400` | Reference bead concentration (beads/µL) used in the bead formula |
 
 Returns `data` with additional rows appended, invisibly.
 
-**Method resolution per mouse (in order):**
+**Method resolution (in order):**
 
 1. If `method_col` is `NULL`: every sample uses **HTS**.
-2. If `method_col` is given: look up `meta[[method_col]]` per `mouse_ID`.
+2. If `method_col` is given, locate it:
+   - If `method_col %in% names(data)`: use it directly, per `file_name` (the more granular source — a keyword joined via `facs_read_wsp(keywords = ...)`, so counting method can vary by sample even within one mouse).
+   - Else if `method_col %in% names(meta)`: use it per `mouse_ID`, joined onto the per-sample rows.
+   - Else: `stop()` — `method_col` not found in either `data` or `meta`.
+3. Resolved method value, per row:
    - `"hts"` → HTS formula.
    - `"beads"` → bead formula.
    - `NA` → defaults to **HTS** (documented fallback, not a warning — HTS is the standard method).
-   - Any other value → `stop()` listing the offending `mouse_ID`s and values.
+   - Any other value → `stop()` listing the offending `file_name`/`mouse_ID`s and values.
 
 **Processing steps, in order:**
 
 1. `resolve_var_(meta, x)` helper: if `x` is a length-1 character naming a column in `meta`, return that column; if `x` is a length-1 numeric, recycle it to `nrow(meta)`; else `stop()`.
-2. Build `m <- meta` with resolved `vol_total`, `vol_stained`, `vol_resuspended`, `vol_measured`, `organ_piece_weight`, and (if `method_col` supplied) the resolved method per mouse, defaulting `NA` to `"hts"`.
+2. Build `m <- meta` with resolved `vol_total`, `vol_stained`, `vol_resuspended`, `vol_measured`, `organ_piece_weight`. If `method_col` is supplied and found in `meta` (not `data`), also carry it through, defaulting `NA` to `"hts"`.
 3. Extract bead counts from the **unfiltered** `data`: `dplyr::filter(population == bead_pop, metric == "count")`, keyed by `file_name` (bead counts live in the same per-tissue FCS file as the sample, so `file_name` already disambiguates tissue).
 4. Filter `data` to `metric == "count" & tissue == tissue`, left-join bead counts (by `file_name`) and `m` (by `mouse_ID`).
-5. If any sample resolves to the bead method but has no matching bead count: `warning()` listing those `file_name`s; `value = NA_real_` for those rows.
-6. Compute, row-wise based on resolved method:
+5. Resolve the per-row method column:
+   - If `method_col` was found in `data`: it's already present on the filtered rows (defaulting `NA` to `"hts"`).
+   - If found in `meta`: already joined in via step 4 (as part of `m`).
+   - If `method_col` is `NULL`: treat every row as `"hts"`.
+6. If any sample resolves to the bead method but has no matching bead count: `warning()` listing those `file_name`s; `value = NA_real_` for those rows.
+7. Compute, row-wise based on resolved method:
    - HTS: `((value / (vol_measured / vol_resuspended)) / (vol_stained / vol_total)) / (organ_piece_weight / 1000)`
    - Beads: `((value / (bead_count / bead_concentration)) / (vol_stained / vol_total)) / (organ_piece_weight / 1000)`
-7. New rows get `metric = "count_per_g"`.
-8. `dplyr::bind_rows(data, new_rows) |> dplyr::arrange(file_name, population_full_path)`.
+8. New rows get `metric = "count_per_g"`.
+9. `dplyr::bind_rows(data, new_rows) |> dplyr::arrange(file_name, population_full_path)`.
 
 ---
 
@@ -92,7 +100,8 @@ Returns `data` with additional rows appended, invisibly.
 |---|---|
 | `facs_calc_pct_of()`: `ref_pop` matches >1 row for a `file_name` | `stop()`, lists `file_name`s and full paths |
 | `facs_calc_pct_of()`: `ref_pop` matches 0 rows for a `file_name` | `warning()`, lists `file_name`s; result rows `NA` |
-| `facs_calc_count_per_g()`: `method_col` value outside `{"beads","hts",NA}` | `stop()`, lists `mouse_ID`s and bad values |
+| `facs_calc_count_per_g()`: `method_col` not found in `data` or `meta` | `stop()` |
+| `facs_calc_count_per_g()`: `method_col` value outside `{"beads","hts",NA}` | `stop()`, lists `file_name`/`mouse_ID`s and bad values |
 | `facs_calc_count_per_g()`: `method_col` value is `NA` | Defaults to `"hts"`, no warning |
 | `facs_calc_count_per_g()`: bead method resolved but no bead count found | `warning()`, lists `file_name`s; result rows `NA` |
 | `resolve_var_()`: argument is neither a valid column name nor a single numeric | `stop()` |
@@ -111,9 +120,11 @@ New file `tests/testthat/test-facs_calc.R`, following `test-meta_wrangle.R`'s pa
 
 **`facs_calc_count_per_g()`:**
 - HTS formula produces the expected value for a simple case (`method_col = NULL`)
-- Bead formula produces the expected value when `method_col` selects `"beads"`
+- Bead formula produces the expected value when `method_col` (found in `meta`) selects `"beads"`
+- Bead formula produces the expected value when `method_col` (found in `data`, e.g. a keyword column) selects `"beads"`
 - `NA` in `method_col` falls back to HTS with no warning
 - Errors on an invalid `method_col` value
+- Errors when `method_col` is not found in either `data` or `meta`
 - Warns and fills `NA` when bead method resolved but no bead count present
 - `tissue` argument correctly restricts which rows are processed
 - `vol_total`/`vol_stained`/etc. accept both a column name and a numeric constant
