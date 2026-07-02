@@ -87,7 +87,7 @@ New file `tests/testthat/test-meta_wrangle.R`. Uses the real fixture `tests/fixt
 
 **`meta_read()`:**
 - Returns a tibble with expected columns, `mouse_ID` present and exactly named (not `mouse_id`)
-- `DOB`, `start_date`, `bmt_date`, `death_date` are class `Date`
+- `dob`, `start_date`, `bmt_date`, `death_date` (note: `DOB` is cleaned to `dob` like any other column — only `mouse_ID` is exempted from `clean_names()`) are class `Date`
 - `group` is a factor
 - No fully-empty rows/columns remain
 - Character columns have no leading/trailing whitespace
