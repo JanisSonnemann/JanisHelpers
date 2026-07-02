@@ -122,6 +122,23 @@ test_that("facs_calc_count_per_g() only processes rows matching the tissue argum
   expect_equal(new_rows$file_name, "s1")
 })
 
+test_that("facs_calc_count_per_g() warns and fills NA when mouse_ID has no match in meta", {
+  meta_wrong_mouse <- dplyr::mutate(count_per_g_meta, mouse_ID = "m2")
+
+  expect_warning(
+    result <- facs_calc_count_per_g(
+      count_per_g_data, meta_wrong_mouse, tissue = "kidney",
+      vol_total = "vol_total", vol_stained = "vol_stained",
+      vol_resuspended = "vol_resuspended", vol_measured = "vol_measured",
+      organ_piece_weight = "organ_piece_weight"
+    ),
+    regexp = "m1",
+    fixed = TRUE
+  )
+  new_row <- dplyr::filter(result, metric == "count_per_g")
+  expect_true(is.na(new_row$value))
+})
+
 test_that("facs_calc_count_per_g() errors when a volume argument is neither a column nor a numeric constant", {
   expect_error(
     facs_calc_count_per_g(
@@ -160,9 +177,10 @@ test_that("facs_calc_count_per_g() bead formula matches manual calculation (meth
 test_that("facs_calc_count_per_g() resolves method_col from data (per-sample) over meta", {
   data_beads_kw <- dplyr::bind_rows(count_per_g_data, bead_row) |>
     dplyr::mutate(method = "beads")
+  meta_conflicting <- dplyr::mutate(count_per_g_meta, method = "hts")
 
   result <- facs_calc_count_per_g(
-    data_beads_kw, count_per_g_meta, tissue = "kidney",
+    data_beads_kw, meta_conflicting, tissue = "kidney",
     vol_total = "vol_total", vol_stained = "vol_stained",
     vol_resuspended = "vol_resuspended", vol_measured = "vol_measured",
     organ_piece_weight = "organ_piece_weight",

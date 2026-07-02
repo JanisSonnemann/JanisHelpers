@@ -167,6 +167,14 @@ facs_calc_count_per_g <- function(
     dplyr::left_join(beads, by = "file_name") |>
     dplyr::left_join(m, by = "mouse_ID")
 
+  unmatched_mice <- setdiff(unique(filtered$mouse_ID), unique(meta$mouse_ID))
+  if (length(unmatched_mice) > 0L) {
+    warning(glue::glue(
+      "The following mouse_ID value(s) in `data` have no match in `meta`: ",
+      "{paste(unmatched_mice, collapse = ', ')}. Result filled with NA."
+    ))
+  }
+
   filtered$method <- if (is.null(method_col)) {
     "hts"
   } else {
