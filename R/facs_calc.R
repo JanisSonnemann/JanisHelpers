@@ -109,7 +109,7 @@ resolve_var_ <- function(df, var, arg_name) {
 #' @param bead_pop character; leaf population name used to look up bead
 #'   counts, default \code{"beads"}.
 #' @param bead_concentration numeric; reference bead concentration
-#'   (beads/µL), default \code{10400}.
+#'   (beads/\u00b5L), default \code{10400}.
 #'
 #' @returns \code{data} with additional rows appended:
 #'   \code{metric = "count_per_g"}. Errors if \code{method_col} is not found
@@ -163,7 +163,7 @@ facs_calc_count_per_g <- function(
     dplyr::select(file_name, bead_count = value)
 
   filtered <- data |>
-    dplyr::filter(metric == "count", tissue == .env$tissue) |>
+    dplyr::filter(metric == "count", population != bead_pop, tissue == .env$tissue) |>
     dplyr::left_join(beads, by = "file_name") |>
     dplyr::left_join(m, by = "mouse_ID")
 
