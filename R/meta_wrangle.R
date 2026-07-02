@@ -133,3 +133,55 @@ meta_annotate <- function(data, meta, by = "mouse_ID") {
 
   invisible(joined)
 }
+
+pivot_organ_weights_long_ <- function(organ_weights) {
+  tidyr::pivot_longer(
+    organ_weights,
+    cols = !mouse_ID,
+    names_to = c("tissue", ".value"),
+    names_pattern = "^(.*)_(total_weight|facs_weight)$"
+  )
+}
+
+#' Combine cleaned organ-weight and FACS-volume sheets into one meta tibble
+#'
+#' @description
+#' Takes the named list returned by \code{meta_read()} and prepares the
+#' \code{meta} argument expected by \code{facs_calc_count_per_g()}: pivots
+#' the \code{organ_weights} sheet from wide-by-tissue (e.g.
+#' \code{kidney_total_weight}, \code{kidney_facs_weight}) to long
+#' (\code{mouse_ID}, \code{tissue}, \code{total_weight}, \code{facs_weight}),
+#' then left-joins it with the \code{facs_volumes} sheet (already long by
+#' \code{tissue}) on \code{mouse_ID} and \code{tissue} via
+#' \code{meta_annotate()}.
+#'
+#' @param meta_list named list as returned by \code{meta_read()}; must
+#'   contain \code{organ_weights} and \code{facs_volumes} elements.
+#'
+#' @returns tibble, one row per \code{mouse_ID} x \code{tissue}, combining
+#'   \code{total_weight}/\code{facs_weight} (from \code{organ_weights}) with
+#'   the staining-volume columns (from \code{facs_volumes}); returned
+#'   invisibly -- assign the result explicitly. Errors if
+#'   \code{organ_weights} or \code{facs_volumes} is missing from
+#'   \code{meta_list}.
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#'   meta_combined <- meta_read("meta.xlsx") |> meta_clean()
+#' }
+meta_clean <- function(meta_list) {
+  required <- c("organ_weights", "facs_volumes")
+  missing_sheets <- setdiff(required, names(meta_list))
+  if (length(missing_sheets) > 0L) {
+    stop(glue::glue(
+      "`meta_list` is missing required sheet(s): ",
+      "{paste(missing_sheets, collapse = ', ')}. Did you read the metadata ",
+      "file with meta_read()?"
+    ))
+  }
+
+  organ_weights_long <- pivot_organ_weights_long_(meta_list$organ_weights)
+
+  meta_annotate(organ_weights_long, meta_list$facs_volumes, by = c("mouse_ID", "tissue"))
+}
