@@ -71,6 +71,7 @@ count_per_g_data <- tibble::tibble(
 
 count_per_g_meta <- tibble::tibble(
   mouse_ID           = "m1",
+  tissue              = "kidney",
   vol_total          = 1000,
   vol_stained        = 100,
   vol_resuspended    = 500,
@@ -80,7 +81,7 @@ count_per_g_meta <- tibble::tibble(
 
 test_that("facs_calc_count_per_g() HTS formula matches manual calculation (columns)", {
   result <- facs_calc_count_per_g(
-    count_per_g_data, count_per_g_meta, tissue = "kidney",
+    count_per_g_data, count_per_g_meta,
     vol_total = "vol_total", vol_stained = "vol_stained",
     vol_resuspended = "vol_resuspended", vol_measured = "vol_measured",
     organ_piece_weight = "organ_piece_weight"
@@ -93,7 +94,7 @@ test_that("facs_calc_count_per_g() accepts numeric constants in place of column 
   meta_no_total <- dplyr::select(count_per_g_meta, !vol_total)
 
   result <- facs_calc_count_per_g(
-    count_per_g_data, meta_no_total, tissue = "kidney",
+    count_per_g_data, meta_no_total,
     vol_total = 1000, vol_stained = "vol_stained",
     vol_resuspended = "vol_resuspended", vol_measured = "vol_measured",
     organ_piece_weight = "organ_piece_weight"
@@ -102,7 +103,7 @@ test_that("facs_calc_count_per_g() accepts numeric constants in place of column 
   expect_equal(new_row$value, 500000)
 })
 
-test_that("facs_calc_count_per_g() only processes rows matching the tissue argument", {
+test_that("facs_calc_count_per_g() computes count_per_g for every tissue present in data", {
   data_multi <- dplyr::bind_rows(
     count_per_g_data,
     tibble::tibble(
@@ -110,24 +111,33 @@ test_that("facs_calc_count_per_g() only processes rows matching the tissue argum
       metric = "count", value = 2000, mouse_ID = "m1", tissue = "spleen"
     )
   )
+  meta_multi <- dplyr::bind_rows(
+    count_per_g_meta,
+    tibble::tibble(
+      mouse_ID = "m1", tissue = "spleen",
+      vol_total = 1000, vol_stained = 100, vol_resuspended = 500,
+      vol_measured = 50, organ_piece_weight = 200
+    )
+  )
 
   result <- facs_calc_count_per_g(
-    data_multi, count_per_g_meta, tissue = "kidney",
+    data_multi, meta_multi,
     vol_total = "vol_total", vol_stained = "vol_stained",
     vol_resuspended = "vol_resuspended", vol_measured = "vol_measured",
     organ_piece_weight = "organ_piece_weight"
   )
-  new_rows <- dplyr::filter(result, metric == "count_per_g")
-  expect_equal(nrow(new_rows), 1L)
-  expect_equal(new_rows$file_name, "s1")
+  new_rows <- dplyr::filter(result, metric == "count_per_g") |> dplyr::arrange(file_name)
+  expect_equal(nrow(new_rows), 2L)
+  expect_equal(new_rows$file_name, c("s1", "s2"))
+  expect_equal(new_rows$value, c(500000, 1000000))
 })
 
-test_that("facs_calc_count_per_g() warns and fills NA when mouse_ID has no match in meta", {
+test_that("facs_calc_count_per_g() warns and fills NA when a mouse_ID/tissue combination has no match in meta", {
   meta_wrong_mouse <- dplyr::mutate(count_per_g_meta, mouse_ID = "m2")
 
   expect_warning(
     result <- facs_calc_count_per_g(
-      count_per_g_data, meta_wrong_mouse, tissue = "kidney",
+      count_per_g_data, meta_wrong_mouse,
       vol_total = "vol_total", vol_stained = "vol_stained",
       vol_resuspended = "vol_resuspended", vol_measured = "vol_measured",
       organ_piece_weight = "organ_piece_weight"
@@ -142,7 +152,7 @@ test_that("facs_calc_count_per_g() warns and fills NA when mouse_ID has no match
 test_that("facs_calc_count_per_g() errors when a volume argument is neither a column nor a numeric constant", {
   expect_error(
     facs_calc_count_per_g(
-      count_per_g_data, count_per_g_meta, tissue = "kidney",
+      count_per_g_data, count_per_g_meta,
       vol_total = TRUE, vol_stained = "vol_stained",
       vol_resuspended = "vol_resuspended", vol_measured = "vol_measured",
       organ_piece_weight = "organ_piece_weight"
@@ -164,7 +174,7 @@ test_that("facs_calc_count_per_g() bead formula matches manual calculation (meth
   meta_beads <- dplyr::mutate(count_per_g_meta, method = "beads")
 
   result <- facs_calc_count_per_g(
-    data_beads, meta_beads, tissue = "kidney",
+    data_beads, meta_beads,
     vol_total = "vol_total", vol_stained = "vol_stained",
     vol_resuspended = "vol_resuspended", vol_measured = "vol_measured",
     organ_piece_weight = "organ_piece_weight",
@@ -180,7 +190,7 @@ test_that("facs_calc_count_per_g() resolves method_col from data (per-sample) ov
   meta_conflicting <- dplyr::mutate(count_per_g_meta, method = "hts")
 
   result <- facs_calc_count_per_g(
-    data_beads_kw, meta_conflicting, tissue = "kidney",
+    data_beads_kw, meta_conflicting,
     vol_total = "vol_total", vol_stained = "vol_stained",
     vol_resuspended = "vol_resuspended", vol_measured = "vol_measured",
     organ_piece_weight = "organ_piece_weight",
@@ -195,7 +205,7 @@ test_that("facs_calc_count_per_g() defaults NA method_col values to hts with no 
 
   expect_no_warning(
     result <- facs_calc_count_per_g(
-      count_per_g_data, meta_na_method, tissue = "kidney",
+      count_per_g_data, meta_na_method,
       vol_total = "vol_total", vol_stained = "vol_stained",
       vol_resuspended = "vol_resuspended", vol_measured = "vol_measured",
       organ_piece_weight = "organ_piece_weight",
@@ -211,7 +221,7 @@ test_that("facs_calc_count_per_g() errors on an invalid method_col value", {
 
   expect_error(
     facs_calc_count_per_g(
-      count_per_g_data, meta_bad_method, tissue = "kidney",
+      count_per_g_data, meta_bad_method,
       vol_total = "vol_total", vol_stained = "vol_stained",
       vol_resuspended = "vol_resuspended", vol_measured = "vol_measured",
       organ_piece_weight = "organ_piece_weight",
@@ -225,7 +235,7 @@ test_that("facs_calc_count_per_g() errors on an invalid method_col value", {
 test_that("facs_calc_count_per_g() errors when method_col is not found in data or meta", {
   expect_error(
     facs_calc_count_per_g(
-      count_per_g_data, count_per_g_meta, tissue = "kidney",
+      count_per_g_data, count_per_g_meta,
       vol_total = "vol_total", vol_stained = "vol_stained",
       vol_resuspended = "vol_resuspended", vol_measured = "vol_measured",
       organ_piece_weight = "organ_piece_weight",
@@ -241,7 +251,7 @@ test_that("facs_calc_count_per_g() warns and fills NA when bead method resolved 
 
   expect_warning(
     result <- facs_calc_count_per_g(
-      count_per_g_data, meta_beads_missing, tissue = "kidney",
+      count_per_g_data, meta_beads_missing,
       vol_total = "vol_total", vol_stained = "vol_stained",
       vol_resuspended = "vol_resuspended", vol_measured = "vol_measured",
       organ_piece_weight = "organ_piece_weight",
@@ -268,8 +278,12 @@ test_that("facs_calc_pct_of() and facs_calc_count_per_g() work end-to-end on rea
   expect_true(nrow(pct_rows) > 0L)
   expect_true(all(pct_rows$value >= 0 & pct_rows$value <= 1, na.rm = TRUE))
 
+  # minimal.wsp has one mouse (26-1-17) with two tissue values: "kidney" and
+  # "percoll-kidney" (one FCS file each) -- covering both in `meta` exercises
+  # facs_calc_count_per_g() processing multiple tissues in a single call.
   meta <- tibble::tibble(
     mouse_ID           = "26-1-17",
+    tissue              = c("kidney", "percoll-kidney"),
     vol_total          = 1000,
     vol_stained        = 100,
     vol_resuspended    = 500,
@@ -277,13 +291,16 @@ test_that("facs_calc_pct_of() and facs_calc_count_per_g() work end-to-end on rea
     organ_piece_weight = 200
   )
 
-  count_result <- facs_calc_count_per_g(
-    facs_data, meta, tissue = "kidney",
+  count_result <- expect_no_warning(facs_calc_count_per_g(
+    facs_data, meta,
     vol_total = "vol_total", vol_stained = "vol_stained",
     vol_resuspended = "vol_resuspended", vol_measured = "vol_measured",
     organ_piece_weight = "organ_piece_weight"
-  )
+  ))
   count_rows <- dplyr::filter(count_result, metric == "count_per_g")
-  expect_equal(dplyr::n_distinct(count_rows$file_name), 1L)
-  expect_equal(unique(count_rows$file_name), "26-1-17_whole_kidney_E05.fcs")
+  expect_equal(dplyr::n_distinct(count_rows$file_name), 2L)
+  expect_setequal(
+    count_rows$file_name,
+    c("26-1-17_whole_kidney_E05.fcs", "26-1-17_percoll-kidney_E06.fcs")
+  )
 })

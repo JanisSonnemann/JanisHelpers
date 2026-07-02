@@ -7,7 +7,6 @@
 facs_calc_count_per_g(
   data,
   meta,
-  tissue,
   vol_total,
   vol_stained,
   vol_resuspended,
@@ -23,11 +22,9 @@ facs_calc_count_per_g(
 include \code{mouse_ID} and \code{tissue} columns (e.g. joined via
 \code{facs_read_wsp(keywords = c("mouse_ID", "tissue"))}).}
 
-\item{meta}{tibble of per-mouse metadata keyed by \code{mouse_ID}, e.g.
-from \code{meta_read()} merged with organ-weight/volume columns.}
-
-\item{tissue}{character; value to filter \code{data$tissue} on (e.g.
-\code{"kidney"}).}
+\item{meta}{tibble of per-mouse, per-tissue metadata with \code{mouse_ID}
+and \code{tissue} columns, e.g. from \code{meta_read()}'s sheets
+combined via \code{meta_clean()}.}
 
 \item{vol_total}{column name in \code{meta} (character) or a single
 numeric constant: total organ digest volume.}
@@ -60,24 +57,30 @@ counts, default \code{"beads"}.}
 \code{data} with additional rows appended:
 \code{metric = "count_per_g"}. Errors if \code{method_col} is not found
 in \code{data} or \code{meta}, or contains a value outside
-\code{{"beads", "hts", NA}}. Warns and fills \code{NA} if the bead
-method is resolved for a sample with no matching bead count.
+\code{{"beads", "hts", NA}}. Warns and fills \code{NA} if a
+\code{mouse_ID}/\code{tissue} combination in \code{data} has no match
+in \code{meta}, or if the bead method is resolved for a sample with no
+matching bead count.
 }
 \description{
 Converts raw event counts into cells per gram of processed tissue, using
-per-mouse organ weights and staining volumes from \code{meta}. Supports
-two counting methods: HTS/volumetric (the default for every sample unless
-\code{method_col} says otherwise) and bead-based (using a reference bead
-population's count and a known bead concentration).
+per-mouse, per-tissue organ weights and staining volumes from
+\code{meta}. Every \code{mouse_ID} x \code{tissue} combination present in
+\code{data} is processed in one call (joined against \code{meta} on
+\code{mouse_ID} and \code{tissue}). Supports two counting methods:
+HTS/volumetric (the default for every sample unless \code{method_col}
+says otherwise) and bead-based (using a reference bead population's
+count and a known bead concentration).
 }
 \examples{
 \dontrun{
   dat <- facs_read_wsp("experiment.wsp", keywords = c("mouse_ID", "tissue"))$data
+  meta_combined <- meta_read("meta.xlsx") |> meta_clean()
   facs_calc_count_per_g(
-    dat, meta_read("meta.xlsx"), tissue = "kidney",
-    vol_total = "kidney_vol_total", vol_stained = "kidney_vol_stained",
-    vol_resuspended = "kidney_vol_resuspended", vol_measured = "kidney_vol_measured",
-    organ_piece_weight = "kidney_piece_weight"
+    dat, meta_combined,
+    vol_total = "total_vol", vol_stained = "overview_vol",
+    vol_resuspended = "overview_resuspended_vol", vol_measured = "overview_measured_vol",
+    organ_piece_weight = "facs_weight"
   )
 }
 }

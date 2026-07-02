@@ -79,18 +79,20 @@ resolve_var_ <- function(df, var, arg_name) {
 #'
 #' @description
 #' Converts raw event counts into cells per gram of processed tissue, using
-#' per-mouse organ weights and staining volumes from \code{meta}. Supports
-#' two counting methods: HTS/volumetric (the default for every sample unless
-#' \code{method_col} says otherwise) and bead-based (using a reference bead
-#' population's count and a known bead concentration).
+#' per-mouse, per-tissue organ weights and staining volumes from
+#' \code{meta}. Every \code{mouse_ID} x \code{tissue} combination present in
+#' \code{data} is processed in one call (joined against \code{meta} on
+#' \code{mouse_ID} and \code{tissue}). Supports two counting methods:
+#' HTS/volumetric (the default for every sample unless \code{method_col}
+#' says otherwise) and bead-based (using a reference bead population's
+#' count and a known bead concentration).
 #'
 #' @param data tibble shaped like \code{facs_read_wsp(...)$data}, must
 #'   include \code{mouse_ID} and \code{tissue} columns (e.g. joined via
 #'   \code{facs_read_wsp(keywords = c("mouse_ID", "tissue"))}).
-#' @param meta tibble of per-mouse metadata keyed by \code{mouse_ID}, e.g.
-#'   from \code{meta_read()} merged with organ-weight/volume columns.
-#' @param tissue character; value to filter \code{data$tissue} on (e.g.
-#'   \code{"kidney"}).
+#' @param meta tibble of per-mouse, per-tissue metadata with \code{mouse_ID}
+#'   and \code{tissue} columns, e.g. from \code{meta_read()}'s sheets
+#'   combined via \code{meta_clean()}.
 #' @param vol_total column name in \code{meta} (character) or a single
 #'   numeric constant: total organ digest volume.
 #' @param vol_stained column name or constant: volume of digest taken for
@@ -114,24 +116,26 @@ resolve_var_ <- function(df, var, arg_name) {
 #' @returns \code{data} with additional rows appended:
 #'   \code{metric = "count_per_g"}. Errors if \code{method_col} is not found
 #'   in \code{data} or \code{meta}, or contains a value outside
-#'   \code{{"beads", "hts", NA}}. Warns and fills \code{NA} if the bead
-#'   method is resolved for a sample with no matching bead count.
+#'   \code{{"beads", "hts", NA}}. Warns and fills \code{NA} if a
+#'   \code{mouse_ID}/\code{tissue} combination in \code{data} has no match
+#'   in \code{meta}, or if the bead method is resolved for a sample with no
+#'   matching bead count.
 #' @export
 #'
 #' @examples
 #' \dontrun{
 #'   dat <- facs_read_wsp("experiment.wsp", keywords = c("mouse_ID", "tissue"))$data
+#'   meta_combined <- meta_read("meta.xlsx") |> meta_clean()
 #'   facs_calc_count_per_g(
-#'     dat, meta_read("meta.xlsx"), tissue = "kidney",
-#'     vol_total = "kidney_vol_total", vol_stained = "kidney_vol_stained",
-#'     vol_resuspended = "kidney_vol_resuspended", vol_measured = "kidney_vol_measured",
-#'     organ_piece_weight = "kidney_piece_weight"
+#'     dat, meta_combined,
+#'     vol_total = "total_vol", vol_stained = "overview_vol",
+#'     vol_resuspended = "overview_resuspended_vol", vol_measured = "overview_measured_vol",
+#'     organ_piece_weight = "facs_weight"
 #'   )
 #' }
 facs_calc_count_per_g <- function(
     data,
     meta,
-    tissue,
     vol_total,
     vol_stained,
     vol_resuspended,
@@ -149,7 +153,7 @@ facs_calc_count_per_g <- function(
       vol_measured       = resolve_var_(meta, .env$vol_measured, "vol_measured"),
       organ_piece_weight = resolve_var_(meta, .env$organ_piece_weight, "organ_piece_weight")
     ) |>
-    dplyr::select(mouse_ID, vol_total, vol_stained, vol_resuspended, vol_measured, organ_piece_weight)
+    dplyr::select(mouse_ID, tissue, vol_total, vol_stained, vol_resuspended, vol_measured, organ_piece_weight)
 
   if (!is.null(method_col) && !method_col %in% names(data) && method_col %in% names(meta)) {
     m[[method_col]] <- meta[[method_col]]
@@ -163,15 +167,23 @@ facs_calc_count_per_g <- function(
     dplyr::select(file_name, bead_count = value)
 
   filtered <- data |>
-    dplyr::filter(metric == "count", population != bead_pop, tissue == .env$tissue) |>
+    dplyr::filter(metric == "count", population != bead_pop) |>
     dplyr::left_join(beads, by = "file_name") |>
-    dplyr::left_join(m, by = "mouse_ID")
+    dplyr::left_join(m, by = c("mouse_ID", "tissue"))
 
-  unmatched_mice <- setdiff(unique(filtered$mouse_ID), unique(meta$mouse_ID))
-  if (length(unmatched_mice) > 0L) {
+  unmatched_combos <- dplyr::anti_join(
+    dplyr::distinct(filtered, mouse_ID, tissue),
+    dplyr::distinct(m, mouse_ID, tissue),
+    by = c("mouse_ID", "tissue")
+  )
+  if (nrow(unmatched_combos) > 0L) {
+    unmatched_desc <- purrr::pmap_chr(
+      unmatched_combos,
+      function(mouse_ID, tissue) glue::glue("mouse_ID={mouse_ID}, tissue={tissue}")
+    )
     warning(glue::glue(
-      "The following mouse_ID value(s) in `data` have no match in `meta`: ",
-      "{paste(unmatched_mice, collapse = ', ')}. Result filled with NA."
+      "The following mouse_ID/tissue combination(s) in `data` have no match in `meta`: ",
+      "{paste(unmatched_desc, collapse = '; ')}"
     ))
   }
 
