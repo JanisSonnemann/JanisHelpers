@@ -36,6 +36,7 @@ devtools::install()    # full install
 - `facs_` — FlowJo / flow cytometry
 - `analysis_` — statistical summaries and tests
 - `report_` — RMarkdown rendering
+- `meta_` — experiment/subject metadata import and annotation
 - `wrangle_` — general data wrangling [stub — no functions yet]
 - `db_` — database access [stub — no functions yet]
 
