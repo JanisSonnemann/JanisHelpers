@@ -92,15 +92,25 @@ New functions must follow the `domain_verb` pattern. Never add a function that d
 - **Output**: rendered HTML/PDF written to disk; returns the output path (from `rmarkdown::render()`).
 - `report_knit_exp()` and `report_knit_wide()` use `normalizePath(input)` to resolve the output directory — no RStudio dependency, works from Positron or the terminal.
 
-### `meta_read()` / `meta_annotate()` — experiment metadata
-- **`meta_read(path, sheet = 1)`**: reads an Excel sheet into a cleaned tibble --
-  blank rows/columns dropped, column names snake_cased (except `mouse_ID`,
+### `meta_read()` / `meta_clean()` / `meta_annotate()` — experiment metadata
+- **`meta_read(path)`**: reads every sheet of an Excel workbook into a named
+  list of cleaned tibbles (one per sheet, named after the sheet) -- blank
+  rows/columns dropped, column names snake_cased (except `mouse_ID`,
   preserved verbatim), character columns trimmed, date columns coerced to
-  `Date`, `group` coerced to a factor if present.
+  `Date`, `group` coerced to a factor if present (each rule applied
+  independently per sheet, only where applicable columns exist).
+- **`meta_clean(meta_list)`**: takes the list from `meta_read()`, pivots its
+  `organ_weights` element from wide-by-tissue (e.g. `kidney_total_weight`,
+  `kidney_facs_weight`) to long (`mouse_ID`, `tissue`, `total_weight`,
+  `facs_weight`), then joins it with `facs_volumes` (already long by
+  `tissue`) via `meta_annotate(by = c("mouse_ID", "tissue"))`. Returns one
+  tibble ready to pass as `meta` to `facs_calc_count_per_g()`. Errors if
+  `organ_weights` or `facs_volumes` is missing from `meta_list`.
 - **`meta_annotate(data, meta, by = "mouse_ID")`**: left-joins `meta` onto
-  `data` by `by`. Errors if `by` is missing from either side or if non-`by`
-  column names collide. Warns (row kept, `NA` filled) if a `by` value in
-  `data` has no match in `meta`.
+  `data` by `by`, a character vector of one or more shared column names
+  (e.g. `c("mouse_ID", "tissue")`). Errors if any `by` column is missing
+  from either side or if non-`by` column names collide. Warns (rows kept,
+  `NA` filled) if a `by` combination in `data` has no match in `meta`.
 
 ---
 
@@ -161,4 +171,5 @@ Current `Imports`: `fcexpr`, `dplyr`, `tidyr`, `stringr`, `tibble`, `purrr`, `gl
   - `all_pops_fun` multiple definitions in `analysis_posthoc_tables` — two branches define the function with different signatures; structural issue, low priority.
   - All `facs_import_wsp` variable-binding notes (`FileName`, `PopulationFullPath`, etc.) — bare column names inside dplyr verbs; valid tidy eval, flagged as a static-analysis false positive.
   - All `meta_read`/`meta_annotate` variable-binding notes (`mouse_id`, `mouse_ID`, `group`) — bare column names inside dplyr verbs; valid tidy eval, flagged as a static-analysis false positive.
-  - All `facs_calc_pct_of`/`facs_calc_count_per_g` variable-binding notes (`population`, `metric`, `value`, `file_name`, `population_full_path`, `ref_count`, `mouse_ID`, `method`, `bead_count`, `.env`) — bare column names inside dplyr verbs; valid tidy eval, flagged as a static-analysis false positive. Note: the function's own formal arguments (`tissue`, `vol_total`, `vol_stained`, `vol_resuspended`, `vol_measured`, `organ_piece_weight`, `method_col`, `bead_pop`, `bead_concentration`) are also referenced bare inside `dplyr` verbs but are not flagged, since codetools resolves them against the matching parameter name in scope.
+  - All `facs_calc_pct_of`/`facs_calc_count_per_g` variable-binding notes (`population`, `metric`, `value`, `file_name`, `population_full_path`, `ref_count`, `mouse_ID`, `tissue`, `method`, `bead_count`, `.env`) — bare column names inside dplyr verbs; valid tidy eval, flagged as a static-analysis false positive. `tissue` is a bare column reference (not a formal argument, unlike in the old single-tissue signature) — `facs_calc_count_per_g()` now joins `meta` on `mouse_ID` + `tissue` and processes every tissue present in `data` in one call. Note: the function's own formal arguments (`vol_total`, `vol_stained`, `vol_resuspended`, `vol_measured`, `organ_piece_weight`, `method_col`, `bead_pop`, `bead_concentration`) are also referenced bare inside `dplyr` verbs but are not flagged, since codetools resolves them against the matching parameter name in scope.
+  - `pivot_organ_weights_long_` (the internal `meta_clean()` helper that pivots `organ_weights` to long format) variable-binding note (`mouse_ID`) — bare column name inside a `tidyr::pivot_longer()` deselection (`cols = !mouse_ID`); valid tidy eval, flagged as a static-analysis false positive, same pattern as the existing `meta_read`/`meta_annotate` note above. (`meta_clean_sheet_`, the internal `meta_read()` per-sheet helper, also produces `mouse_id`/`group` notes -- already covered by the `meta_read`/`meta_annotate` bullet above.)
