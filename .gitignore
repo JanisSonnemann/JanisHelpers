@@ -4,3 +4,7 @@
 .httr-oauth
 .DS_Store
 .positai
+
+# FACS test fixtures containing real research metadata (see tests/fixtures/README.md)
+tests/fixtures/Treg.wsp
+tests/fixtures/Treg/
