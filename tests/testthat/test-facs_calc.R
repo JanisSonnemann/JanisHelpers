@@ -304,3 +304,68 @@ test_that("facs_calc_pct_of() and facs_calc_count_per_g() work end-to-end on rea
     c("26-1-17_whole_kidney_E05.fcs", "26-1-17_percoll-kidney_E06.fcs")
   )
 })
+
+# ── facs_calc_log2fc / facs_calc_diff (shared calc_restim_proportions_) ─────
+
+log2fc_data <- tibble::tibble(
+  file_name             = c("f1", "f1", "f2", "f2"),
+  population_full_path  = c("CD3+", "CD3+/CD4+", "CD3+", "CD3+/CD4+"),
+  population             = c("CD3+", "CD4+", "CD3+", "CD4+"),
+  metric                 = "count",
+  value                  = c(1000, 100, 1000, 400),
+  mouse_ID               = "m1",
+  tissue                  = "spleen",
+  restimulation           = c("unstim", "unstim", "MPO", "MPO")
+)
+
+test_that("facs_calc_log2fc() computes log2 fold-change of a stim condition vs unstim", {
+  result <- facs_calc_log2fc(log2fc_data, ref_pop = "CD3+")
+
+  expect_equal(nrow(result), 1L)
+  expect_equal(result$restimulation, "MPO")
+  expect_equal(result$population, "CD4+")
+
+  unstim_prop <- (100 + 0.5) / 1000
+  mpo_prop    <- (400 + 0.5) / 1000
+  expect_equal(result$log2fc, log2(mpo_prop / unstim_prop))
+})
+
+test_that("facs_calc_log2fc() excludes ref_pop and ref_level from the output", {
+  result <- facs_calc_log2fc(log2fc_data, ref_pop = "CD3+")
+
+  expect_false("CD3+" %in% result$population)
+  expect_false("unstim" %in% result$restimulation)
+})
+
+test_that("facs_calc_log2fc() pseudocount avoids -Inf when a condition has zero events", {
+  data_zero <- dplyr::mutate(
+    log2fc_data,
+    value = dplyr::if_else(restimulation == "MPO" & population == "CD4+", 0, value)
+  )
+
+  result <- facs_calc_log2fc(data_zero, ref_pop = "CD3+")
+  expect_true(is.finite(result$log2fc))
+})
+
+test_that("facs_calc_log2fc() errors when ref_pop matches more than one row per mouse_ID/tissue/restim-level combo", {
+  data_dup <- dplyr::bind_rows(
+    log2fc_data,
+    tibble::tibble(
+      file_name = "f1", population_full_path = "OtherPath/CD3+", population = "CD3+",
+      metric = "count", value = 500, mouse_ID = "m1", tissue = "spleen", restimulation = "unstim"
+    )
+  )
+
+  expect_error(facs_calc_log2fc(data_dup, ref_pop = "CD3+"), regexp = "m1", fixed = TRUE)
+})
+
+test_that("facs_calc_log2fc() warns and fills NA when ref_pop has no match for a combo", {
+  data_missing_refpop <- dplyr::filter(log2fc_data, !(restimulation == "MPO" & population == "CD3+"))
+
+  expect_warning(
+    result <- facs_calc_log2fc(data_missing_refpop, ref_pop = "CD3+"),
+    regexp = "m1",
+    fixed = TRUE
+  )
+  expect_true(is.na(result$log2fc))
+})
