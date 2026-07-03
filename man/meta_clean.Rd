@@ -11,12 +11,13 @@ meta_clean(meta_list)
 contain \code{organ_weights} and \code{facs_volumes} elements.}
 }
 \value{
-tibble, one row per \code{mouse_ID} x \code{tissue}, combining
-\code{total_weight}/\code{facs_weight} (from \code{organ_weights}) with
-the staining-volume columns (from \code{facs_volumes}); returned
-invisibly -- assign the result explicitly. Errors if
-\code{organ_weights} or \code{facs_volumes} is missing from
-\code{meta_list}.
+tibble, one row per \code{mouse_ID} x \code{tissue} (tissue as
+given in \code{facs_volumes}, not the base organ), combining
+\code{total_weight}/\code{facs_weight} (from \code{organ_weights}, of
+the base organ) with the staining-volume columns (from
+\code{facs_volumes}); returned invisibly -- assign the result
+explicitly. Errors if \code{organ_weights} or \code{facs_volumes} is
+missing from \code{meta_list}.
 }
 \description{
 Takes the named list returned by \code{meta_read()} and prepares the
@@ -24,9 +25,17 @@ Takes the named list returned by \code{meta_read()} and prepares the
 the \code{organ_weights} sheet from wide-by-tissue (e.g.
 \code{kidney_total_weight}, \code{kidney_facs_weight}) to long
 (\code{mouse_ID}, \code{tissue}, \code{total_weight}, \code{facs_weight}),
-then left-joins it with the \code{facs_volumes} sheet (already long by
-\code{tissue}) on \code{mouse_ID} and \code{tissue} via
-\code{meta_annotate()}.
+then left-joins it onto the \code{facs_volumes} sheet (already long by
+\code{tissue}) via \code{meta_annotate()}. The join is keyed on
+\code{mouse_ID} and a \emph{base organ} derived from each
+\code{facs_volumes} tissue value (the substring before the first hyphen),
+so a tissue variant that shares the same organ but has no
+\code{organ_weights} columns of its own -- e.g. \code{kidney-whole}, an
+aliquot taken before further processing of the same kidney -- reuses that
+organ's \code{total_weight}/\code{facs_weight} instead of requiring
+duplicate \code{kidney_whole_total_weight}/\code{kidney_whole_facs_weight}
+columns in \code{organ_weights}. The original (non-truncated) tissue
+label is preserved in the output.
 }
 \examples{
 \dontrun{

@@ -162,14 +162,30 @@ test_that("meta_clean() pivots organ_weights long and joins with facs_volumes", 
   meta_list <- meta_read(meta_path)
   result <- meta_clean(meta_list)
 
-  expect_equal(nrow(result), 9L)
+  expect_equal(nrow(result), 12L)
   expect_true(all(c("mouse_ID", "tissue", "total_weight", "facs_weight",
                      "total_vol", "overview_vol", "treg_vol") %in% names(result)))
-  expect_setequal(unique(result$tissue), c("kidney", "lung", "spleen"))
+  expect_setequal(unique(result$tissue), c("kidney", "lung", "spleen", "kidney-whole"))
 
   kidney_row <- dplyr::filter(result, mouse_ID == "26-1-1", tissue == "kidney")
   expect_equal(kidney_row$total_weight, 300)
   expect_equal(kidney_row$facs_weight, 200)
+})
+
+test_that("meta_clean() reuses the base organ's weight for a hyphenated tissue variant", {
+  skip_if_not(file.exists(meta_path), meta_skip_msg)
+  meta_list <- meta_read(meta_path)
+  result <- expect_no_warning(meta_clean(meta_list))
+
+  whole_row <- dplyr::filter(result, mouse_ID == "26-1-1", tissue == "kidney-whole")
+  kidney_row <- dplyr::filter(result, mouse_ID == "26-1-1", tissue == "kidney")
+
+  expect_equal(nrow(whole_row), 1L)
+  expect_equal(whole_row$total_weight, kidney_row$total_weight)
+  expect_equal(whole_row$facs_weight, kidney_row$facs_weight)
+  # own staining volumes, not copied from the base organ
+  expect_equal(whole_row$total_vol, 30000)
+  expect_equal(kidney_row$total_vol, 900)
 })
 
 test_that("meta_clean() errors when organ_weights or facs_volumes is missing", {
