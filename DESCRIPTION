@@ -11,8 +11,11 @@ Depends:
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 Imports:
+    CytoML,
     dplyr,
     fcexpr,
+    flowCore,
+    flowWorkspace,
     glue,
     gt,
     gtsummary,
