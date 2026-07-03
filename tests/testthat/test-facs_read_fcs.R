@@ -44,14 +44,15 @@ test_that("facs_read_fcs_gated() attaches requested keyword columns", {
 test_that("facs_read_fcs_gated() warns and skips every sample when gate_path matches none", {
   skip_if_not(dir.exists(fcs_dir), skip_msg)
 
-  expect_warning(
+  warns <- testthat::capture_warnings(
     result <- facs_read_fcs_gated(
       wsp_path  = wsp_path,
       gate_path = "Nonexistent/Path",
       markers   = c("CD4")
-    ),
-    "not found"
+    )
   )
+  expect_true(all(grepl("not found", warns)))
+  expect_length(warns, 6L)
   expect_equal(nrow(result), 0L)
 })
 

@@ -109,7 +109,7 @@ primary deliverable, not a side effect of an import+message step.
 |---|---|
 | `gate_path` missing for a sample | Warn (listing affected `file_name`s), skip that sample, continue processing the rest |
 | A requested marker doesn't match any channel/stain in a sample's panel | Error immediately, listing the unmatched marker(s) and affected sample |
-| A requested keyword is missing for a sample | Warn (matching `facs_read_wsp()`), fill `NA` |
+| A requested keyword is missing for every sample | Warn (matching `facs_read_wsp()`'s whole-workspace check), fill `NA`. A keyword missing for only some samples is filled `NA` for those without a warning — legitimate per-sample variation, not an error condition. |
 | An `.fcs` file referenced by the workspace can't be found under `fcs_dir` | Error — indicates a broken file layout, not legitimate per-sample variation, so it does not get warn-and-skip treatment |
 
 ---
