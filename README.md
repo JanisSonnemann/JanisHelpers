@@ -8,7 +8,7 @@
 
 Einzelne kleine Funktionen für alltägliche Probleme
 
-- report_knit_dated: put in yaml behind “knit:” to automatically knit
+- report_knit_dated: put in yaml behind "knit:" to automatically knit
   dated versions to specified directory
 - Auto-knit-report: rmarkdown template das automatisch datiert dateien
   in spezifische subdirectories erstellt
@@ -21,14 +21,14 @@ needs `CytoML`/`flowWorkspace`/`flowCore`, which are Bioconductor packages
 not available on CRAN. Install them first:
 
 ``` r
-if (!requireNamespace(“BiocManager”, quietly = TRUE)) install.packages(“BiocManager”)
-BiocManager::install(c(“CytoML”, “flowWorkspace”, “flowCore”))
+if (!requireNamespace("BiocManager", quietly = TRUE)) install.packages("BiocManager")
+BiocManager::install(c("CytoML", "flowWorkspace", "flowCore"))
 ```
 
 Updaten des privaten Pakets:
-“devtools::install_github(”JanisSonnemann/JanisHelpers”, auth_token =
-gh::gh_token())”
+"devtools::install_github("JanisSonnemann/JanisHelpers", auth_token =
+gh::gh_token())"
 
 Erstellung eigener Pakete über: -
-“<https://r-pkgs.org/whole-game.html#create_package>” -
-“<https://r-pkgs.org/code.html>”
+"<https://r-pkgs.org/whole-game.html#create_package>" -
+"<https://r-pkgs.org/code.html>"

@@ -27,6 +27,7 @@ Imports:
     stringr,
     tibble,
     tidyr,
+    tools,
     xml2,
     xfun
 Suggests: 
