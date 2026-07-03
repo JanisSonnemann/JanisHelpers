@@ -399,7 +399,7 @@ facs_calc_log2fc <- function(
 #'   baseline; every other distinct value is compared against it. Default
 #'   \code{"unstim"}.
 #' @param pseudocount numeric; added to every \code{value} before computing
-#'   the \code{ref_pop} proportion. Default \code{0} \u2014 unlike
+#'   the \code{ref_pop} proportion. Default \code{0} -- unlike
 #'   \code{facs_calc_log2fc()}, subtraction has no divide-by-zero/log-of-zero
 #'   failure mode, so no pseudocount is needed unless comparable proportions
 #'   to a \code{facs_calc_log2fc()} call are desired.
