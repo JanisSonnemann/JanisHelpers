@@ -40,3 +40,46 @@ test_that("facs_read_fcs_gated() attaches requested keyword columns", {
   expect_false(any(is.na(result$tissue)))
   expect_setequal(unique(result$tissue), c("kidney", "lung", "spleen"))
 })
+
+test_that("facs_read_fcs_gated() warns and skips every sample when gate_path matches none", {
+  skip_if_not(dir.exists(fcs_dir), skip_msg)
+
+  expect_warning(
+    result <- facs_read_fcs_gated(
+      wsp_path  = wsp_path,
+      gate_path = "Nonexistent/Path",
+      markers   = c("CD4")
+    ),
+    "not found"
+  )
+  expect_equal(nrow(result), 0L)
+})
+
+test_that("facs_read_fcs_gated() errors immediately when a marker cannot be matched", {
+  skip_if_not(dir.exists(fcs_dir), skip_msg)
+
+  expect_error(
+    facs_read_fcs_gated(
+      wsp_path  = wsp_path,
+      gate_path = cd45_gate,
+      markers   = c("CD4", "NotARealMarker")
+    ),
+    "NotARealMarker"
+  )
+})
+
+test_that("facs_read_fcs_gated() warns and fills NA when a keyword is missing for every sample", {
+  skip_if_not(dir.exists(fcs_dir), skip_msg)
+
+  expect_warning(
+    result <- facs_read_fcs_gated(
+      wsp_path  = wsp_path,
+      gate_path = cd45_gate,
+      markers   = c("CD4"),
+      keywords  = c("mouse_ID", "not_a_real_keyword")
+    ),
+    "not_a_real_keyword"
+  )
+  expect_true(all(is.na(result$not_a_real_keyword)))
+  expect_false(any(is.na(result$mouse_ID)))
+})
