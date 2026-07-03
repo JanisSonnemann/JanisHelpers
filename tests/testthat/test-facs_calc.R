@@ -428,3 +428,55 @@ test_that("facs_calc_log2fc() works with non-default restim_col/ref_level names"
   result <- facs_calc_log2fc(data_custom, ref_pop = "CD3+", restim_col = "condition", ref_level = "baseline")
   expect_equal(result$condition, "MPO")
 })
+
+# ── facs_calc_diff ───────────────────────────────────────────
+
+test_that("facs_calc_diff() computes proportion_stim - proportion_unstim with pseudocount = 0 by default", {
+  result <- facs_calc_diff(log2fc_data, ref_pop = "CD3+")
+
+  expect_equal(nrow(result), 1L)
+  expect_equal(result$restimulation, "MPO")
+  expect_equal(result$population, "CD4+")
+
+  unstim_prop <- 100 / 1000
+  mpo_prop    <- 400 / 1000
+  expect_equal(result$diff, mpo_prop - unstim_prop)
+})
+
+test_that("facs_calc_diff() accepts a nonzero pseudocount", {
+  result <- facs_calc_diff(log2fc_data, ref_pop = "CD3+", pseudocount = 0.5)
+
+  unstim_prop <- (100 + 0.5) / 1000
+  mpo_prop    <- (400 + 0.5) / 1000
+  expect_equal(result$diff, mpo_prop - unstim_prop)
+})
+
+test_that("facs_calc_diff() excludes ref_pop and ref_level from the output", {
+  result <- facs_calc_diff(log2fc_data, ref_pop = "CD3+")
+
+  expect_false("CD3+" %in% result$population)
+  expect_false("unstim" %in% result$restimulation)
+})
+
+test_that("facs_calc_diff() errors when ref_pop matches more than one row per mouse_ID/tissue/restim-level combo", {
+  data_dup <- dplyr::bind_rows(
+    log2fc_data,
+    tibble::tibble(
+      file_name = "f1", population_full_path = "OtherPath/CD3+", population = "CD3+",
+      metric = "count", value = 500, mouse_ID = "m1", tissue = "spleen", restimulation = "unstim"
+    )
+  )
+
+  expect_error(facs_calc_diff(data_dup, ref_pop = "CD3+"), regexp = "m1", fixed = TRUE)
+})
+
+test_that("facs_calc_diff() warns and fills NA when ref_level is missing for a mouse_ID/tissue group", {
+  data_no_unstim <- dplyr::filter(log2fc_data, restimulation != "unstim")
+
+  expect_warning(
+    result <- facs_calc_diff(data_no_unstim, ref_pop = "CD3+"),
+    regexp = "m1",
+    fixed = TRUE
+  )
+  expect_true(is.na(result$diff))
+})

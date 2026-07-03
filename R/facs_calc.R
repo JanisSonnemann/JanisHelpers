@@ -377,3 +377,73 @@ facs_calc_log2fc <- function(
       values_to = "log2fc"
     )
 }
+
+#' Compute per-mouse difference of restimulated vs unstimulated conditions
+#'
+#' @description
+#' Normalizes each population's count to a reference population's count (an
+#' event-count proportion), then compares every non-reference
+#' \code{restim_col} level against \code{ref_level} within the same
+#' \code{mouse_ID} x \code{tissue} group by subtraction. See
+#' \code{\link{facs_calc_log2fc}} for the log2 fold-change equivalent.
+#'
+#' @param data tibble shaped like \code{facs_read_wsp(...)$data}: must
+#'   contain \code{mouse_ID}, \code{tissue}, \code{population}, \code{metric},
+#'   \code{value}, and a \code{restim_col} column (e.g. joined via
+#'   \code{facs_read_wsp(keywords = c("mouse_ID", "tissue", "restimulation"))}).
+#' @param ref_pop character; leaf population name (matches \code{population})
+#'   used as the denominator for a proportion, e.g. \code{"CD3+"}.
+#' @param restim_col character; column in \code{data} holding the
+#'   stimulation condition label. Default \code{"restimulation"}.
+#' @param ref_level character; value in \code{restim_col} treated as the
+#'   baseline; every other distinct value is compared against it. Default
+#'   \code{"unstim"}.
+#' @param pseudocount numeric; added to every \code{value} before computing
+#'   the \code{ref_pop} proportion. Default \code{0} — unlike
+#'   \code{facs_calc_log2fc()}, subtraction has no divide-by-zero/log-of-zero
+#'   failure mode, so no pseudocount is needed unless comparable proportions
+#'   to a \code{facs_calc_log2fc()} call are desired.
+#'
+#' @returns A tibble with one row per \code{mouse_ID} x \code{tissue} x
+#'   \code{population} x non-reference \code{restim_col} level: columns
+#'   \code{mouse_ID}, \code{tissue}, \code{population}, any passthrough
+#'   columns constant within \code{mouse_ID} x \code{tissue} (e.g.
+#'   \code{group}), \code{restim_col} (name reused), and \code{diff}.
+#'   Errors if \code{restim_col} is not a column in \code{data}, or if
+#'   \code{ref_pop} matches more than one row per \code{mouse_ID}/
+#'   \code{tissue}/restim-level combo. Warns and fills \code{NA} if
+#'   \code{ref_pop} has no match for a combo, or if \code{ref_level} is
+#'   missing for a \code{mouse_ID}/\code{tissue} group.
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#'   dat <- facs_read_wsp(
+#'     "experiment.wsp",
+#'     keywords = c("mouse_ID", "tissue", "restimulation")
+#'   )$data
+#'   facs_calc_diff(dat, ref_pop = "CD3+")
+#' }
+facs_calc_diff <- function(
+    data,
+    ref_pop,
+    restim_col = "restimulation",
+    ref_level = "unstim",
+    pseudocount = 0
+) {
+  wide <- calc_restim_proportions_(data, ref_pop, restim_col, ref_level, pseudocount)
+  id_cols <- attr(wide, "id_cols")
+  stim_cols <- setdiff(names(wide), c(id_cols, ref_level))
+
+  wide |>
+    dplyr::mutate(dplyr::across(
+      dplyr::all_of(stim_cols),
+      function(x) x - .data[[ref_level]]
+    )) |>
+    dplyr::select(!dplyr::all_of(ref_level)) |>
+    tidyr::pivot_longer(
+      cols = dplyr::all_of(stim_cols),
+      names_to = restim_col,
+      values_to = "diff"
+    )
+}

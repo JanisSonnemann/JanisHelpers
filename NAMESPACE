@@ -3,6 +3,7 @@
 export(analysis_posthoc_tables)
 export(analysis_summary_table)
 export(facs_calc_count_per_g)
+export(facs_calc_diff)
 export(facs_calc_log2fc)
 export(facs_calc_pct_of)
 export(facs_import_wsp)
