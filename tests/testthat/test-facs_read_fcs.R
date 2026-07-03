@@ -83,3 +83,70 @@ test_that("facs_read_fcs_gated() warns and fills NA when a keyword is missing fo
   expect_true(all(is.na(result$not_a_real_keyword)))
   expect_false(any(is.na(result$mouse_ID)))
 })
+
+test_that("facs_read_fcs_gated() matches a marker by raw channel name when it has no stain label", {
+  skip_if_not(dir.exists(fcs_dir), skip_msg)
+
+  result <- facs_read_fcs_gated(
+    wsp_path  = wsp_path,
+    gate_path = cd45_gate,
+    markers   = c("CD4", "FSC-A")
+  )
+
+  expect_true("FSC-A" %in% names(result))
+  expect_type(result[["FSC-A"]], "double")
+})
+
+test_that("facs_read_fcs_gated() downsamples to max_events per sample, reproducibly with seed", {
+  skip_if_not(dir.exists(fcs_dir), skip_msg)
+
+  result_a <- facs_read_fcs_gated(
+    wsp_path   = wsp_path,
+    gate_path  = cd45_gate,
+    markers    = c("CD4", "CD45"),
+    max_events = 500,
+    seed       = 42
+  )
+  result_b <- facs_read_fcs_gated(
+    wsp_path   = wsp_path,
+    gate_path  = cd45_gate,
+    markers    = c("CD4", "CD45"),
+    max_events = 500,
+    seed       = 42
+  )
+
+  expect_equal(nrow(result_a), 6L * 500L)
+  expect_identical(result_a, result_b)
+})
+
+test_that("facs_read_fcs_gated() auto-derives fcs_dir from the wsp filename", {
+  skip_if_not(dir.exists(fcs_dir), skip_msg)
+
+  result_auto <- facs_read_fcs_gated(
+    wsp_path  = wsp_path,
+    gate_path = cd45_gate,
+    markers   = c("CD4")
+  )
+  result_explicit <- facs_read_fcs_gated(
+    wsp_path  = wsp_path,
+    gate_path = cd45_gate,
+    markers   = c("CD4"),
+    fcs_dir   = fcs_dir
+  )
+
+  expect_identical(result_auto, result_explicit)
+})
+
+test_that("facs_read_fcs_gated() loads only the samples in a non-default FlowJo group", {
+  skip_if_not(dir.exists(fcs_dir), skip_msg)
+
+  result <- facs_read_fcs_gated(
+    wsp_path  = wsp_path,
+    gate_path = cd45_gate,
+    markers   = c("CD4"),
+    group     = "kidney"
+  )
+
+  expect_equal(dplyr::n_distinct(result$file_name), 2L)
+  expect_true(all(grepl("kidney", result$file_name)))
+})
