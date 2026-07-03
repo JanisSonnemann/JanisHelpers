@@ -1,4 +1,4 @@
-# FlowWorkspace/CytoML behavior \u2014 verified against tests/fixtures/Treg.wsp
+# FlowWorkspace/CytoML behavior -- verified against tests/fixtures/Treg.wsp
 #
 # flowjo_to_gatingset(ws, name = <group>, path = <fcs dir>) builds a
 # GatingSet, recursively searching <fcs dir> for the .fcs files the
@@ -102,7 +102,7 @@ read_one_sample_ <- function(gh, gate_path, gate_path_norm, markers, keywords, m
 #'
 #' @param wsp_path path to the \code{.wsp} file.
 #' @param gate_path character; full gating path, e.g.
-#'   \code{"Singlets/Lymphocytes/live/CD45+"} \u2014 same format as
+#'   \code{"Singlets/Lymphocytes/live/CD45+"} -- same format as
 #'   \code{PopulationFullPath} from \code{facs_read_wsp()}. Applied to
 #'   every sample in \code{group}.
 #' @param markers character vector; matched per sample against stain

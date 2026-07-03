@@ -19,7 +19,7 @@ facs_read_fcs_gated(
 \item{wsp_path}{path to the \code{.wsp} file.}
 
 \item{gate_path}{character; full gating path, e.g.
-\code{"Singlets/Lymphocytes/live/CD45+"} \u2014 same format as
+\code{"Singlets/Lymphocytes/live/CD45+"} -- same format as
 \code{PopulationFullPath} from \code{facs_read_wsp()}. Applied to
 every sample in \code{group}.}
 
