@@ -369,3 +369,62 @@ test_that("facs_calc_log2fc() warns and fills NA when ref_pop has no match for a
   )
   expect_true(is.na(result$log2fc))
 })
+
+test_that("facs_calc_log2fc() warns and fills NA when ref_level is missing for a mouse_ID/tissue group", {
+  data_no_unstim <- dplyr::filter(log2fc_data, restimulation != "unstim")
+
+  expect_warning(
+    result <- facs_calc_log2fc(data_no_unstim, ref_pop = "CD3+"),
+    regexp = "m1",
+    fixed = TRUE
+  )
+  expect_true(is.na(result$log2fc))
+})
+
+test_that("facs_calc_log2fc() errors when restim_col is not a column in data", {
+  data_no_restim <- dplyr::select(log2fc_data, !restimulation)
+
+  expect_error(facs_calc_log2fc(data_no_restim, ref_pop = "CD3+"), regexp = "restim_col", fixed = TRUE)
+})
+
+test_that("facs_calc_log2fc() handles more than one non-reference restimulation level", {
+  data_multi_stim <- dplyr::bind_rows(
+    log2fc_data,
+    tibble::tibble(
+      file_name = "f3", population_full_path = c("CD3+", "CD3+/CD4+"), population = c("CD3+", "CD4+"),
+      metric = "count", value = c(1000, 250), mouse_ID = "m1", tissue = "spleen", restimulation = "PMA-Iono"
+    )
+  )
+
+  result <- facs_calc_log2fc(data_multi_stim, ref_pop = "CD3+")
+
+  expect_setequal(result$restimulation, c("MPO", "PMA-Iono"))
+  expect_equal(nrow(result), 2L)
+})
+
+test_that("facs_calc_log2fc() carries through a passthrough column constant within mouse_ID/tissue", {
+  data_group <- dplyr::mutate(log2fc_data, group = "WT")
+
+  result <- facs_calc_log2fc(data_group, ref_pop = "CD3+")
+  expect_true("group" %in% names(result))
+  expect_equal(unique(result$group), "WT")
+})
+
+test_that("facs_calc_log2fc() drops a passthrough-candidate column that varies within mouse_ID/tissue", {
+  data_varying <- dplyr::mutate(
+    log2fc_data,
+    batch = dplyr::if_else(restimulation == "unstim", "batch1", "batch2")
+  )
+
+  result <- facs_calc_log2fc(data_varying, ref_pop = "CD3+")
+  expect_false("batch" %in% names(result))
+})
+
+test_that("facs_calc_log2fc() works with non-default restim_col/ref_level names", {
+  data_custom <- log2fc_data |>
+    dplyr::rename(condition = restimulation) |>
+    dplyr::mutate(condition = dplyr::if_else(condition == "unstim", "baseline", "MPO"))
+
+  result <- facs_calc_log2fc(data_custom, ref_pop = "CD3+", restim_col = "condition", ref_level = "baseline")
+  expect_equal(result$condition, "MPO")
+})
