@@ -70,48 +70,65 @@ resolve_group_samples_ <- function(ws, group) {
   names
 }
 
-# Builds its own single-sample GatingSet (verified byte-identical to
-# carving the same sample out of a shared multi-sample GatingSet) so the
-# per-sample work this function does is independent and parallelizable.
-read_one_sample_solo_ <- function(ws, fcs_dir, group, sample_name, sample_index,
+read_one_sample_solo_ <- function(wsp_path, fcs_dir, group, sample_name, sample_index,
                                    gate_path, gate_path_norm, markers,
                                    max_events, seed) {
-  # CytoML::flowjo_to_gatingset()'s `subset` argument is resolved via
-  # eval(substitute(subset)) internally -- this only sees a bare variable
-  # name (not its value) when the argument is forwarded through a wrapper
-  # function like this one, so it must be called via do.call() to pass
-  # sample_name as an already-evaluated value rather than a promise.
-  gs <- do.call(
-    CytoML::flowjo_to_gatingset,
-    list(ws = ws, name = group, path = fcs_dir, subset = sample_name)
-  )
-  gh <- gs[[1]]
-  file_name <- flowWorkspace::pData(gh)$name
-
-  gated <- tryCatch(
-    flowWorkspace::gh_pop_get_data(gh, gate_path_norm),
-    error = function(e) NULL
-  )
-  if (is.null(gated)) {
-    warning(glue::glue(
-      "gate_path '{gate_path}' not found for '{file_name}'; sample skipped."
-    ))
-    return(tibble::tibble())
-  }
-  gated <- flowWorkspace::realize_view(gated)
-
-  resolved_cols <- resolve_markers_(markers, gh, gated, file_name)
-
-  mat <- flowCore::exprs(gated)[, resolved_cols, drop = FALSE]
-  colnames(mat) <- markers
-
-  if (!is.null(max_events) && nrow(mat) > max_events) {
-    if (!is.null(seed)) set.seed(seed + sample_index)
-    mat <- mat[sample.int(nrow(mat), max_events), , drop = FALSE]
+  warnings_ <- character()
+  add_warning_ <- function(w) {
+    warnings_ <<- c(warnings_, conditionMessage(w))
+    invokeRestart("muffleWarning")
   }
 
-  tibble::as_tibble(mat) |>
-    tibble::add_column(file_name = file_name, .before = 1L)
+  data <- withCallingHandlers(
+    {
+      # CytoML's workspace/GatingSet objects are C++ external pointers and
+      # cannot be passed across a process boundary (forked or socket-based)
+      # -- each call must open its own copy from the plain wsp_path string.
+      ws <- CytoML::open_flowjo_xml(wsp_path)
+
+      # CytoML::flowjo_to_gatingset()'s `subset` argument is resolved via
+      # eval(substitute(subset)) internally -- this only sees a bare variable
+      # name (not its value) when the argument is forwarded through a wrapper
+      # function like this one, so it must be called via do.call() to pass
+      # sample_name as an already-evaluated value rather than a promise.
+      gs <- do.call(
+        CytoML::flowjo_to_gatingset,
+        list(ws = ws, name = group, path = fcs_dir, subset = sample_name)
+      )
+      gh <- gs[[1]]
+      file_name <- flowWorkspace::pData(gh)$name
+
+      gated <- tryCatch(
+        flowWorkspace::gh_pop_get_data(gh, gate_path_norm),
+        error = function(e) NULL
+      )
+
+      if (is.null(gated)) {
+        warning(glue::glue(
+          "gate_path '{gate_path}' not found for '{file_name}'; sample skipped."
+        ))
+        tibble::tibble()
+      } else {
+        gated <- flowWorkspace::realize_view(gated)
+
+        resolved_cols <- resolve_markers_(markers, gh, gated, file_name)
+
+        mat <- flowCore::exprs(gated)[, resolved_cols, drop = FALSE]
+        colnames(mat) <- markers
+
+        if (!is.null(max_events) && nrow(mat) > max_events) {
+          if (!is.null(seed)) set.seed(seed + sample_index)
+          mat <- mat[sample.int(nrow(mat), max_events), , drop = FALSE]
+        }
+
+        tibble::as_tibble(mat) |>
+          tibble::add_column(file_name = file_name, .before = 1L)
+      }
+    },
+    warning = add_warning_
+  )
+
+  list(data = data, warnings = warnings_)
 }
 
 # ---------------------------------------------------------------------------
@@ -175,7 +192,8 @@ facs_read_fcs_gated <- function(wsp_path,
                                  fcs_dir = NULL,
                                  group = "All Samples",
                                  max_events = NULL,
-                                 seed = NULL) {
+                                 seed = NULL,
+                                 workers = 1L) {
   if (is.null(fcs_dir)) {
     fcs_dir <- file.path(
       dirname(wsp_path),
@@ -187,23 +205,59 @@ facs_read_fcs_gated <- function(wsp_path,
   ws <- CytoML::open_flowjo_xml(wsp_path)
   sample_names <- resolve_group_samples_(ws, group)
 
-  data <- purrr::map(
-    seq_along(sample_names),
-    function(i) {
-      read_one_sample_solo_(
-        ws             = ws,
-        fcs_dir        = fcs_dir,
-        group          = group,
-        sample_name    = sample_names[i],
-        sample_index   = i,
-        gate_path      = gate_path,
-        gate_path_norm = gate_path_norm,
-        markers        = markers,
-        max_events     = max_events,
-        seed           = seed
-      )
-    }
-  ) |>
+  worker_fn <- function(i) {
+    read_one_sample_solo_(
+      wsp_path       = wsp_path,
+      fcs_dir        = fcs_dir,
+      group          = group,
+      sample_name    = sample_names[i],
+      sample_index   = i,
+      gate_path      = gate_path,
+      gate_path_norm = gate_path_norm,
+      markers        = markers,
+      max_events     = max_events,
+      seed           = seed
+    )
+  }
+
+  results <- if (workers > 1L) {
+    # Force the in-memory versions into the local environment for export.
+    # This ensures we export the current (devtools::load_all()-updated) versions,
+    # not stale installed copies.
+    read_one_sample_solo_ <- read_one_sample_solo_
+    resolve_markers_ <- resolve_markers_
+
+    cl <- parallel::makeCluster(workers)
+    on.exit(parallel::stopCluster(cl), add = TRUE)
+    # read_one_sample_solo_()/resolve_markers_() must be shipped to each
+    # worker by value (not re-resolved by name on the worker), since a
+    # PSOCK worker is a fresh R process that may see a different
+    # installed copy of this package than the one currently running here
+    # (e.g. under devtools::load_all() during development).
+    parallel::clusterExport(
+      cl,
+      varlist = c("read_one_sample_solo_", "resolve_markers_"),
+      envir   = environment()
+    )
+    # Load the package so dependencies are available
+    parallel::clusterEvalQ(cl, library(JanisHelpers))
+    parallel::parLapply(cl, seq_along(sample_names), worker_fn)
+  } else {
+    purrr::map(seq_along(sample_names), worker_fn)
+  }
+
+  # parallel::parLapply() already raises a per-worker error immediately as
+  # a real error in this process (verified: the propagated message is
+  # prefixed "one node produced an error: <original message>", so existing
+  # regexp-based expect_error() checks still match on the original text) --
+  # no try-error detection/re-throw needed here, unlike the fork-based
+  # mclapply() approach this replaced.
+
+  for (res in results) {
+    for (w in res$warnings) warning(w, call. = FALSE)
+  }
+
+  data <- purrr::map(results, "data") |>
     dplyr::bind_rows()
 
   if (!is.null(keywords) && length(keywords) > 0L) {

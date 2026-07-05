@@ -189,3 +189,56 @@ test_that("facs_read_fcs_gated() reads keywords from the .wsp XML, including one
   expect_false(any(is.na(result$workspace_only_key)))
   expect_true(all(result$workspace_only_key == "hello"))
 })
+
+test_that("facs_read_fcs_gated() with workers = 2 matches workers = 1 output", {
+  skip_if_not(dir.exists(fcs_dir), skip_msg)
+
+  result_seq <- facs_read_fcs_gated(
+    wsp_path  = wsp_path,
+    gate_path = cd45_gate,
+    markers   = c("CD4", "CD45"),
+    keywords  = c("mouse_ID", "tissue"),
+    workers   = 1
+  )
+  result_par <- facs_read_fcs_gated(
+    wsp_path  = wsp_path,
+    gate_path = cd45_gate,
+    markers   = c("CD4", "CD45"),
+    keywords  = c("mouse_ID", "tissue"),
+    workers   = 2
+  )
+
+  result_seq <- dplyr::arrange(result_seq, file_name, CD4, CD45)
+  result_par <- dplyr::arrange(result_par, file_name, CD4, CD45)
+  expect_equal(result_seq, result_par)
+})
+
+test_that("facs_read_fcs_gated() still errors on an unmatched marker under workers = 2", {
+  skip_if_not(dir.exists(fcs_dir), skip_msg)
+
+  expect_error(
+    facs_read_fcs_gated(
+      wsp_path  = wsp_path,
+      gate_path = cd45_gate,
+      markers   = c("CD4", "NotARealMarker"),
+      workers   = 2
+    ),
+    "NotARealMarker"
+  )
+})
+
+test_that("facs_read_fcs_gated() still warns on a missing gate_path under workers = 2", {
+  skip_if_not(dir.exists(fcs_dir), skip_msg)
+
+  warns <- testthat::capture_warnings(
+    result <- facs_read_fcs_gated(
+      wsp_path  = wsp_path,
+      gate_path = "Nonexistent/Path",
+      markers   = c("CD4"),
+      workers   = 2
+    )
+  )
+  expect_true(all(grepl("not found", warns)))
+  expect_length(warns, 6L)
+  expect_equal(nrow(result), 0L)
+})
