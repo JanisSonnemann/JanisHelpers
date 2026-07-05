@@ -204,9 +204,22 @@ facs_read_fcs_gated <- function(wsp_path,
 
   ws <- CytoML::open_flowjo_xml(wsp_path)
   sample_names <- resolve_group_samples_(ws, group)
+  rm(ws)
+
+  # read_one_sample_solo_()'s own environment() attribute is the package
+  # namespace. Its internal (non-::-qualified) call to resolve_markers_()
+  # would otherwise resolve via that namespace when reconstructed on a PSOCK
+  # worker -- which loads whatever's actually *installed* there, not the
+  # code currently in memory here (e.g. under devtools::load_all()).
+  # Re-homing it onto a plain environment before use fixes this; verified
+  # via canary-function testing against the real fixture.
+  export_env <- new.env()
+  export_env$resolve_markers_ <- resolve_markers_
+  read_one_sample_solo_export_ <- read_one_sample_solo_
+  environment(read_one_sample_solo_export_) <- export_env
 
   worker_fn <- function(i) {
-    read_one_sample_solo_(
+    read_one_sample_solo_export_(
       wsp_path       = wsp_path,
       fcs_dir        = fcs_dir,
       group          = group,
@@ -221,26 +234,8 @@ facs_read_fcs_gated <- function(wsp_path,
   }
 
   results <- if (workers > 1L) {
-    # Force the in-memory versions into the local environment for export.
-    # This ensures we export the current (devtools::load_all()-updated) versions,
-    # not stale installed copies.
-    read_one_sample_solo_ <- read_one_sample_solo_
-    resolve_markers_ <- resolve_markers_
-
     cl <- parallel::makeCluster(workers)
     on.exit(parallel::stopCluster(cl), add = TRUE)
-    # read_one_sample_solo_()/resolve_markers_() must be shipped to each
-    # worker by value (not re-resolved by name on the worker), since a
-    # PSOCK worker is a fresh R process that may see a different
-    # installed copy of this package than the one currently running here
-    # (e.g. under devtools::load_all() during development).
-    parallel::clusterExport(
-      cl,
-      varlist = c("read_one_sample_solo_", "resolve_markers_"),
-      envir   = environment()
-    )
-    # Load the package so dependencies are available
-    parallel::clusterEvalQ(cl, library(JanisHelpers))
     parallel::parLapply(cl, seq_along(sample_names), worker_fn)
   } else {
     purrr::map(seq_along(sample_names), worker_fn)
