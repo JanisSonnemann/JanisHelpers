@@ -2,6 +2,7 @@
 
 export(analysis_posthoc_tables)
 export(analysis_summary_table)
+export(facs_calc_cluster_freq)
 export(facs_calc_count_per_g)
 export(facs_calc_diff)
 export(facs_calc_log2fc)

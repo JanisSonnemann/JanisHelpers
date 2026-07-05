@@ -130,3 +130,69 @@ facs_cluster_flowsom <- function(data,
 
   data
 }
+
+#' Compute per-sample cluster frequencies from FlowSOM assignments
+#'
+#' @description
+#' Aggregates \code{facs_cluster_flowsom()}'s per-event cluster/metacluster
+#' assignments to per-sample counts and fractions, one row per
+#' \code{file_name} x \code{cluster_col} value. Every \code{file_name} x
+#' \code{cluster_col} combination seen anywhere in \code{data} is
+#' represented (zero-filled where a sample had no events in that cluster),
+#' so the result is ready for count-based differential abundance testing
+#' without further completion.
+#'
+#' @param data tibble shaped like \code{facs_cluster_flowsom()}'s output:
+#'   must contain \code{file_name} and \code{cluster_col}.
+#' @param cluster_col character; column in \code{data} to aggregate on.
+#'   Default \code{"metacluster"}; pass \code{"cluster"} for
+#'   raw-SOM-node frequencies instead.
+#'
+#' @returns Long tibble: \code{file_name}, \code{cluster_col} (name
+#'   reused), \code{n} (event count), \code{fraction} (\code{n} divided by
+#'   that sample's total event count), and any column from \code{data}
+#'   that is constant within \code{file_name} (e.g. keyword columns),
+#'   carried through automatically. Errors if \code{cluster_col} is not a
+#'   column in \code{data}.
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#'   dat <- facs_cluster_flowsom(facs_read_fcs_gated(
+#'     wsp_path  = "experiment.wsp",
+#'     gate_path = "Singlets/Lymphocytes/live/CD45+",
+#'     markers   = c("CD4", "CD45")
+#'   ), seed = 1)
+#'   facs_calc_cluster_freq(dat)
+#' }
+facs_calc_cluster_freq <- function(data, cluster_col = "metacluster") {
+  if (!cluster_col %in% names(data)) {
+    stop(glue::glue("`cluster_col` ('{cluster_col}') not found in `data`."))
+  }
+
+  totals <- data |>
+    dplyr::count(file_name, name = "total")
+
+  passthrough_candidates <- setdiff(names(data), c("file_name", cluster_col))
+  is_constant_ <- function(col) {
+    n_distinct_per_file <- data |>
+      dplyr::group_by(file_name) |>
+      dplyr::summarise(n_distinct = dplyr::n_distinct(.data[[col]]), .groups = "drop") |>
+      dplyr::pull(n_distinct)
+    all(n_distinct_per_file == 1L)
+  }
+  passthrough_cols <- passthrough_candidates[purrr::map_lgl(passthrough_candidates, is_constant_)]
+
+  passthrough <- data |>
+    dplyr::distinct(dplyr::across(dplyr::all_of(c("file_name", passthrough_cols))))
+
+  data |>
+    dplyr::group_by(dplyr::across(dplyr::all_of(c("file_name", cluster_col)))) |>
+    dplyr::summarise(n = dplyr::n(), .groups = "drop") |>
+    tidyr::complete(file_name, .data[[cluster_col]], fill = list(n = 0L)) |>
+    dplyr::left_join(totals, by = "file_name") |>
+    dplyr::mutate(fraction = n / total) |>
+    dplyr::select(!total) |>
+    dplyr::left_join(passthrough, by = "file_name") |>
+    dplyr::arrange(file_name, .data[[cluster_col]])
+}

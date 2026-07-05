@@ -120,3 +120,78 @@ test_that("facs_cluster_flowsom() is reproducible with the same seed", {
   expect_identical(result_a$cluster, result_b$cluster)
   expect_identical(result_a$metacluster, result_b$metacluster)
 })
+
+# A third reproducible upstream bug, beyond the two documented in the
+# header comment above: whenever `n_metaclusters` equals the SOM grid's
+# total node count (grid_xdim * grid_ydim), FlowSOM::metaClustering_
+# consensus() always throws ("Elemente von 'k' muessen zwischen 1 und N-1
+# sein" / "elements of 'k' must be between 1 and N-1") from
+# ConsensusClusterPlus's internal cutree() -- reproduces directly with
+# facs_cluster_flowsom(dat, grid_xdim = 2, grid_ydim = 2, n_metaclusters = 4,
+# seed = 1) against this fixture, and independent of any data with e.g.
+# grid_xdim = 5, grid_ydim = 1, n_metaclusters = 5. ConsensusClusterPlus's
+# default pItem = 0.9 resamples 90% of items (here, SOM nodes) per
+# repetition, so a resampled subset never contains all N nodes when
+# maxK = N -- cutree() is then asked for k = N clusters from a hclust tree
+# with fewer than N leaves. `n_metaclusters` must be strictly less than
+# grid_xdim * grid_ydim (not just <=, as facs_cluster_flowsom()'s own
+# validation currently allows) until upstream fixes this. The tests below
+# use grid_xdim = 4, grid_ydim = 4, n_metaclusters = 6 (verified
+# reproducible across repeated seed = 1 runs: 6 distinct metaclusters, all
+# 16 raw SOM nodes used, exactly one zero-count file x metacluster cell)
+# instead of the smaller 2x2/4 grid, to avoid this bug while still
+# exercising the zero-fill behavior.
+test_that("facs_calc_cluster_freq() returns one row per file_name x metacluster, zero-filled", {
+  skip_if_not(dir.exists(fcs_dir), skip_msg)
+
+  dat <- cluster_input() |>
+    facs_cluster_flowsom(grid_xdim = 4, grid_ydim = 4, n_metaclusters = 6, seed = 1)
+  freq <- facs_calc_cluster_freq(dat)
+
+  expect_true(all(c("file_name", "metacluster", "n", "fraction") %in% names(freq)))
+  expect_equal(nrow(freq), dplyr::n_distinct(dat$file_name) * dplyr::n_distinct(dat$metacluster))
+  expect_true(any(freq$n == 0L))
+})
+
+test_that("facs_calc_cluster_freq() fractions sum to 1 per file_name", {
+  skip_if_not(dir.exists(fcs_dir), skip_msg)
+
+  dat <- cluster_input() |>
+    facs_cluster_flowsom(grid_xdim = 4, grid_ydim = 4, n_metaclusters = 6, seed = 1)
+  freq <- facs_calc_cluster_freq(dat)
+
+  totals <- freq |>
+    dplyr::group_by(file_name) |>
+    dplyr::summarise(total_fraction = sum(fraction), .groups = "drop")
+  expect_true(all(abs(totals$total_fraction - 1) < 1e-9))
+})
+
+test_that("facs_calc_cluster_freq() carries through keyword columns constant within file_name", {
+  skip_if_not(dir.exists(fcs_dir), skip_msg)
+
+  dat <- cluster_input() |>
+    facs_cluster_flowsom(grid_xdim = 4, grid_ydim = 4, n_metaclusters = 6, seed = 1)
+  freq <- facs_calc_cluster_freq(dat)
+
+  expect_true(all(c("mouse_ID", "tissue") %in% names(freq)))
+  expect_false(any(is.na(freq$mouse_ID)))
+})
+
+test_that("facs_calc_cluster_freq() supports cluster_col override", {
+  skip_if_not(dir.exists(fcs_dir), skip_msg)
+
+  dat <- cluster_input() |>
+    facs_cluster_flowsom(grid_xdim = 4, grid_ydim = 4, n_metaclusters = 6, seed = 1)
+  freq <- facs_calc_cluster_freq(dat, cluster_col = "cluster")
+
+  expect_true("cluster" %in% names(freq))
+  expect_true(all(freq$cluster %in% 1:16))
+})
+
+test_that("facs_calc_cluster_freq() errors when cluster_col is not found in data", {
+  dat <- tibble::tibble(file_name = "a.fcs", metacluster = factor(1))
+  expect_error(
+    facs_calc_cluster_freq(dat, cluster_col = "not_a_col"),
+    "not_a_col"
+  )
+})
