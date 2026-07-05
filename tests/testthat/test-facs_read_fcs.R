@@ -152,6 +152,20 @@ test_that("facs_read_fcs_gated() loads only the samples in a non-default FlowJo 
   expect_true(all(grepl("kidney", result$file_name)))
 })
 
+test_that("facs_read_fcs_gated() errors for a nonexistent FlowJo group", {
+  skip_if_not(dir.exists(fcs_dir), skip_msg)
+
+  expect_error(
+    facs_read_fcs_gated(
+      wsp_path  = wsp_path,
+      gate_path = cd45_gate,
+      markers   = c("CD4"),
+      group     = "NotARealGroup"
+    ),
+    "No samples found"
+  )
+})
+
 test_that("facs_read_fcs_gated() reads keywords from the .wsp XML, including ones absent from the raw .fcs file", {
   skip_if_not(dir.exists(fcs_dir), skip_msg)
 

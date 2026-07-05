@@ -63,7 +63,11 @@ resolve_group_samples_ <- function(ws, group) {
   groups  <- CytoML::fj_ws_get_sample_groups(ws)
   samples <- CytoML::fj_ws_get_samples(ws)
   ids <- groups$sampleID[groups$groupName == group]
-  samples$name[samples$sampleID %in% ids]
+  names <- samples$name[samples$sampleID %in% ids]
+  if (length(names) == 0L) {
+    stop(glue::glue("No samples found for FlowJo group '{group}'."))
+  }
+  names
 }
 
 # Builds its own single-sample GatingSet (verified byte-identical to
@@ -72,7 +76,15 @@ resolve_group_samples_ <- function(ws, group) {
 read_one_sample_solo_ <- function(ws, fcs_dir, group, sample_name, sample_index,
                                    gate_path, gate_path_norm, markers,
                                    max_events, seed) {
-  gs <- CytoML::flowjo_to_gatingset(ws, name = group, path = fcs_dir, subset = sample_name)
+  # CytoML::flowjo_to_gatingset()'s `subset` argument is resolved via
+  # eval(substitute(subset)) internally -- this only sees a bare variable
+  # name (not its value) when the argument is forwarded through a wrapper
+  # function like this one, so it must be called via do.call() to pass
+  # sample_name as an already-evaluated value rather than a promise.
+  gs <- do.call(
+    CytoML::flowjo_to_gatingset,
+    list(ws = ws, name = group, path = fcs_dir, subset = sample_name)
+  )
   gh <- gs[[1]]
   file_name <- flowWorkspace::pData(gh)$name
 
