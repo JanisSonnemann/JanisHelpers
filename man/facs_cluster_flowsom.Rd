@@ -20,13 +20,15 @@ one row per event, \code{dbl} marker columns, and optionally
 
 \item{markers}{character vector of column names in \code{data} to
 cluster on. \code{NULL} (default) uses every \code{dbl}-typed column
+in \code{data}. Must resolve to at least 2 columns, and, when
+explicitly supplied, every named column must be \code{double}-typed
 in \code{data}.}
 
 \item{grid_xdim, grid_ydim}{integer; SOM grid dimensions. Default
 \code{10}/\code{10} (100 nodes).}
 
 \item{n_metaclusters}{integer; target consensus metacluster count.
-Default \code{10}. Must be strictly less than
+Default \code{10}. Must be at least 3 and strictly less than
 \code{grid_xdim * grid_ydim}.}
 
 \item{seed}{integer; if set, seeds SOM training and consensus
@@ -36,9 +38,12 @@ metaclustering for reproducible assignments.}
 \code{data} with two columns appended: \code{cluster} (integer,
 raw SOM node, \code{1:(grid_xdim * grid_ydim)}) and \code{metacluster}
 (factor, consensus grouping, \code{1:n_metaclusters} levels). Errors if
-any \code{markers} name is absent from \code{data}, if a selected
-marker column contains \code{NA}, or if \code{n_metaclusters} is not
-strictly less than the grid's node count.
+any \code{markers} name is absent from \code{data}, if an explicitly
+supplied \code{markers} column is not \code{double}-typed in
+\code{data} (listing the offending column(s)), if the resolved
+\code{markers} has fewer than 2 columns, if a selected marker column
+contains \code{NA}, if \code{n_metaclusters} is less than 3, or if
+\code{n_metaclusters} is not strictly less than the grid's node count.
 }
 \description{
 Runs FlowSOM (self-organizing map + consensus metaclustering) on a

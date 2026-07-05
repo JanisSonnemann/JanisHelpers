@@ -41,13 +41,11 @@
 #    (not just `<=`, per the check below) until upstream
 #    fixes this.
 #
-# Bugs 1 and 2 are not guarded against here (matching the "don't silently
-# paper over a mismatch" instruction) -- both surface as FlowSOM/
-# ConsensusClusterPlus errors, not JanisHelpers ones, if triggered. Bug 3
-# IS guarded against, below: this function rejects
-# n_metaclusters >= grid_xdim * grid_ydim outright, so a caller who would
-# otherwise hit bug 3's opaque ConsensusClusterPlus crash instead gets a
-# clear error from this package's own validation.
+# All three bugs are now guarded against, below: this function rejects
+# n_metaclusters < 3 (bug 1), a resolved `markers` of length < 2 (bug 2),
+# and n_metaclusters >= grid_xdim * grid_ydim (bug 3) outright, so a caller
+# who would otherwise hit any of these opaque FlowSOM/ConsensusClusterPlus
+# crashes instead gets a clear error from this package's own validation.
 
 #' Cluster single-cell events with FlowSOM
 #'
@@ -65,11 +63,13 @@
 #'   \code{chr} keyword columns.
 #' @param markers character vector of column names in \code{data} to
 #'   cluster on. \code{NULL} (default) uses every \code{dbl}-typed column
+#'   in \code{data}. Must resolve to at least 2 columns, and, when
+#'   explicitly supplied, every named column must be \code{double}-typed
 #'   in \code{data}.
 #' @param grid_xdim,grid_ydim integer; SOM grid dimensions. Default
 #'   \code{10}/\code{10} (100 nodes).
 #' @param n_metaclusters integer; target consensus metacluster count.
-#'   Default \code{10}. Must be strictly less than
+#'   Default \code{10}. Must be at least 3 and strictly less than
 #'   \code{grid_xdim * grid_ydim}.
 #' @param seed integer; if set, seeds SOM training and consensus
 #'   metaclustering for reproducible assignments.
@@ -77,9 +77,12 @@
 #' @returns \code{data} with two columns appended: \code{cluster} (integer,
 #'   raw SOM node, \code{1:(grid_xdim * grid_ydim)}) and \code{metacluster}
 #'   (factor, consensus grouping, \code{1:n_metaclusters} levels). Errors if
-#'   any \code{markers} name is absent from \code{data}, if a selected
-#'   marker column contains \code{NA}, or if \code{n_metaclusters} is not
-#'   strictly less than the grid's node count.
+#'   any \code{markers} name is absent from \code{data}, if an explicitly
+#'   supplied \code{markers} column is not \code{double}-typed in
+#'   \code{data} (listing the offending column(s)), if the resolved
+#'   \code{markers} has fewer than 2 columns, if a selected marker column
+#'   contains \code{NA}, if \code{n_metaclusters} is less than 3, or if
+#'   \code{n_metaclusters} is not strictly less than the grid's node count.
 #' @export
 #'
 #' @examples
@@ -108,6 +111,22 @@ facs_cluster_flowsom <- function(data,
         "{paste(missing_markers, collapse = ', ')}"
       ))
     }
+
+    non_double_markers <- markers[!purrr::map_lgl(markers, function(m) is.double(data[[m]]))]
+    if (length(non_double_markers) > 0L) {
+      stop(glue::glue(
+        "The following `markers` are not double-typed columns in `data`: ",
+        "{paste(non_double_markers, collapse = ', ')}"
+      ))
+    }
+  }
+
+  if (length(markers) < 2L) {
+    stop(glue::glue(
+      "`markers` must resolve to at least 2 columns (found ",
+      "{length(markers)}) -- FlowSOM::BuildSOM() crashes opaquely when ",
+      "exactly one marker column is selected."
+    ))
   }
 
   na_cols <- markers[purrr::map_lgl(markers, function(m) anyNA(data[[m]]))]
@@ -115,6 +134,13 @@ facs_cluster_flowsom <- function(data,
     stop(glue::glue(
       "The following marker column(s) contain NA and cannot be clustered: ",
       "{paste(na_cols, collapse = ', ')}"
+    ))
+  }
+
+  if (n_metaclusters < 3L) {
+    stop(glue::glue(
+      "`n_metaclusters` ({n_metaclusters}) must be at least 3 -- ",
+      "ConsensusClusterPlus crashes opaquely whenever n_metaclusters < 3."
     ))
   }
 
@@ -129,8 +155,8 @@ facs_cluster_flowsom <- function(data,
   input <- flowCore::flowFrame(as.matrix(data[markers]))
 
   # See the "FlowSOM behavior" header comment at the top of this file for
-  # the `xdim`/`ydim`/return-shape notes and the two upstream bugs this
-  # call is subject to.
+  # the `xdim`/`ydim`/return-shape notes and the upstream bugs guarded
+  # against above.
   fsom <- FlowSOM::FlowSOM(
     input     = input,
     colsToUse = markers,

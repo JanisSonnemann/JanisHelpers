@@ -128,6 +128,66 @@ test_that("facs_cluster_flowsom() errors when n_metaclusters equals the grid's n
   )
 })
 
+test_that("facs_cluster_flowsom() errors when n_metaclusters is below the lower bound", {
+  # ConsensusClusterPlus crashes opaquely whenever n_metaclusters < 3 (bug 1
+  # in the header comment above) -- this guard surfaces it as a clear
+  # JanisHelpers error instead, the same rationale as the existing
+  # >= grid_xdim * grid_ydim upper-bound checks below.
+  dat <- tibble::tibble(
+    file_name = c("a.fcs", "b.fcs"),
+    CD4       = c(1.1, 2.2),
+    CD45      = c(3.3, 4.4)
+  )
+  expect_error(
+    facs_cluster_flowsom(dat, grid_xdim = 4, grid_ydim = 4, n_metaclusters = 2),
+    "n_metaclusters"
+  )
+})
+
+test_that("facs_cluster_flowsom() errors when explicit markers resolves to a single column", {
+  # FlowSOM::BuildSOM() crashes opaquely when exactly one marker column is
+  # selected (bug 2 in the header comment above).
+  dat <- tibble::tibble(
+    file_name = c("a.fcs", "b.fcs"),
+    CD4       = c(1.1, 2.2),
+    CD45      = c(3.3, 4.4)
+  )
+  expect_error(
+    facs_cluster_flowsom(dat, markers = "CD4", grid_xdim = 4, grid_ydim = 4, n_metaclusters = 3),
+    "markers"
+  )
+})
+
+test_that("facs_cluster_flowsom() errors when auto-selected markers resolves to a single column", {
+  # Same guard as above, exercised via the `markers = NULL` auto-selection
+  # path instead of an explicit override -- only one dbl-typed column
+  # (CD4) is present, so auto-selection alone would trip bug 2.
+  dat <- tibble::tibble(
+    file_name = c("a.fcs", "b.fcs"),
+    CD4       = c(1.1, 2.2)
+  )
+  expect_error(
+    facs_cluster_flowsom(dat, grid_xdim = 4, grid_ydim = 4, n_metaclusters = 3),
+    "markers"
+  )
+})
+
+test_that("facs_cluster_flowsom() errors when an explicit marker is not double-typed", {
+  # A chr keyword column name (e.g. mouse_ID) passes the "column exists"
+  # check but must also be rejected before reaching
+  # flowCore::flowFrame()/FlowSOM::FlowSOM(), which fail opaquely on it.
+  dat <- tibble::tibble(
+    file_name = c("a.fcs", "b.fcs"),
+    CD4       = c(1.1, 2.2),
+    CD45      = c(3.3, 4.4),
+    mouse_ID  = c("m1", "m2")
+  )
+  expect_error(
+    facs_cluster_flowsom(dat, markers = c("CD4", "mouse_ID"), grid_xdim = 4, grid_ydim = 4, n_metaclusters = 3),
+    "mouse_ID"
+  )
+})
+
 test_that("facs_cluster_flowsom() is reproducible with the same seed", {
   skip_if_not(dir.exists(fcs_dir), skip_msg)
 
