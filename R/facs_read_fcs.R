@@ -56,7 +56,24 @@ resolve_markers_ <- function(markers, gh, gated, file_name) {
   resolved
 }
 
-read_one_sample_ <- function(gh, gate_path, gate_path_norm, markers, max_events) {
+# Resolves the sample names belonging to a FlowJo group directly from the
+# workspace XML metadata -- no GatingSet build required, so this can run
+# once up front before any per-sample work is dispatched.
+resolve_group_samples_ <- function(ws, group) {
+  groups  <- CytoML::fj_ws_get_sample_groups(ws)
+  samples <- CytoML::fj_ws_get_samples(ws)
+  ids <- groups$sampleID[groups$groupName == group]
+  samples$name[samples$sampleID %in% ids]
+}
+
+# Builds its own single-sample GatingSet (verified byte-identical to
+# carving the same sample out of a shared multi-sample GatingSet) so the
+# per-sample work this function does is independent and parallelizable.
+read_one_sample_solo_ <- function(ws, fcs_dir, group, sample_name, sample_index,
+                                   gate_path, gate_path_norm, markers,
+                                   max_events, seed) {
+  gs <- CytoML::flowjo_to_gatingset(ws, name = group, path = fcs_dir, subset = sample_name)
+  gh <- gs[[1]]
   file_name <- flowWorkspace::pData(gh)$name
 
   gated <- tryCatch(
@@ -77,6 +94,7 @@ read_one_sample_ <- function(gh, gate_path, gate_path_norm, markers, max_events)
   colnames(mat) <- markers
 
   if (!is.null(max_events) && nrow(mat) > max_events) {
+    if (!is.null(seed)) set.seed(seed + sample_index)
     mat <- mat[sample.int(nrow(mat), max_events), , drop = FALSE]
   }
 
@@ -155,19 +173,22 @@ facs_read_fcs_gated <- function(wsp_path,
   gate_path_norm <- if (startsWith(gate_path, "/")) gate_path else paste0("/", gate_path)
 
   ws <- CytoML::open_flowjo_xml(wsp_path)
-  gs <- CytoML::flowjo_to_gatingset(ws, name = group, path = fcs_dir)
-
-  if (!is.null(seed)) set.seed(seed)
+  sample_names <- resolve_group_samples_(ws, group)
 
   data <- purrr::map(
-    flowWorkspace::sampleNames(gs),
-    function(sn) {
-      read_one_sample_(
-        gh             = gs[[sn]],
+    seq_along(sample_names),
+    function(i) {
+      read_one_sample_solo_(
+        ws             = ws,
+        fcs_dir        = fcs_dir,
+        group          = group,
+        sample_name    = sample_names[i],
+        sample_index   = i,
         gate_path      = gate_path,
         gate_path_norm = gate_path_norm,
         markers        = markers,
-        max_events     = max_events
+        max_events     = max_events,
+        seed           = seed
       )
     }
   ) |>
