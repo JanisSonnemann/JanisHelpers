@@ -70,6 +70,11 @@ resolve_group_samples_ <- function(ws, group) {
   names
 }
 
+# Builds its own single-sample GatingSet (verified byte-identical to
+# carving the same sample out of a shared multi-sample GatingSet) so the
+# per-sample work this function does is independent and parallelizable --
+# opening its own workspace from wsp_path (rather than receiving a
+# pre-opened one) is what lets it run in a separate PSOCK worker process.
 read_one_sample_solo_ <- function(wsp_path, fcs_dir, group, sample_name, sample_index,
                                    gate_path, gate_path_norm, markers,
                                    max_events, seed) {
@@ -212,8 +217,19 @@ facs_read_fcs_gated <- function(wsp_path,
   # worker -- which loads whatever's actually *installed* there, not the
   # code currently in memory here (e.g. under devtools::load_all()).
   # Re-homing it onto a plain environment before use fixes this; verified
-  # via canary-function testing against the real fixture.
-  export_env <- new.env()
+  # via canary-function testing against the real fixture. The new
+  # environment's parent is explicitly baseenv() (not the default, which
+  # would chain up through this frame to the package namespace) -- base R
+  # functions the function body needs (`{`, `character()`, `warning()`,
+  # `withCallingHandlers()`, etc.) still resolve via baseenv(), but a
+  # future edit that adds another bare (package-level) internal helper
+  # call to read_one_sample_solo_() without also adding it here will now
+  # fail fast with "object not found" rather than silently falling
+  # through to a possibly-stale value, reintroducing the exact bug class
+  # just fixed. (emptyenv() was tried first per an earlier review
+  # suggestion but breaks even base-function lookup inside the
+  # function body -- confirmed empirically, see task report.)
+  export_env <- new.env(parent = baseenv())
   export_env$resolve_markers_ <- resolve_markers_
   read_one_sample_solo_export_ <- read_one_sample_solo_
   environment(read_one_sample_solo_export_) <- export_env
