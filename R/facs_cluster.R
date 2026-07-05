@@ -38,7 +38,7 @@
 #    tree has fewer than N leaves. Asking cutree() for exactly N clusters
 #    then fails because that many clusters don't exist in the resampled
 #    tree. n_metaclusters must be strictly less than grid_xdim * grid_ydim
-#    (not merely not-exceeding it, per the check below) until upstream
+#    (not just `<=`, per the check below) until upstream
 #    fixes this.
 #
 # Bugs 1 and 2 are not guarded against here (matching the "don't silently
