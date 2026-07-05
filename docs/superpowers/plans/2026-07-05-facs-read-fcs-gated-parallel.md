@@ -301,7 +301,15 @@ read_one_sample_solo_ <- function(ws, fcs_dir, group, sample_name, sample_index,
 
   data <- withCallingHandlers(
     {
-      gs <- CytoML::flowjo_to_gatingset(ws, name = group, path = fcs_dir, subset = sample_name)
+      # CytoML::flowjo_to_gatingset()'s `subset` argument is resolved via
+      # eval(substitute(subset)) internally -- this only sees a bare variable
+      # name (not its value) when the argument is forwarded through a wrapper
+      # function like this one, so it must be called via do.call() to pass
+      # sample_name as an already-evaluated value rather than a promise.
+      gs <- do.call(
+        CytoML::flowjo_to_gatingset,
+        list(ws = ws, name = group, path = fcs_dir, subset = sample_name)
+      )
       gh <- gs[[1]]
       file_name <- flowWorkspace::pData(gh)$name
 
