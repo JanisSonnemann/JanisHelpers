@@ -110,6 +110,24 @@ test_that("facs_cluster_flowsom() errors when n_metaclusters exceeds the grid's 
   )
 })
 
+test_that("facs_cluster_flowsom() errors when n_metaclusters equals the grid's node count", {
+  # Exact equality is also rejected, not just exceeding it -- see the
+  # third upstream-bug comment further down (ConsensusClusterPlus's
+  # cutree() crashes when n_metaclusters == grid_xdim * grid_ydim). Before
+  # this validation was tightened, this call passed validation cleanly and
+  # then crashed inside FlowSOM/ConsensusClusterPlus instead of erroring
+  # here.
+  dat <- tibble::tibble(
+    file_name = c("a.fcs", "b.fcs"),
+    CD4       = c(1.1, 2.2),
+    CD45      = c(3.3, 4.4)
+  )
+  expect_error(
+    facs_cluster_flowsom(dat, grid_xdim = 2, grid_ydim = 2, n_metaclusters = 4),
+    "n_metaclusters"
+  )
+})
+
 test_that("facs_cluster_flowsom() is reproducible with the same seed", {
   skip_if_not(dir.exists(fcs_dir), skip_msg)
 
@@ -134,8 +152,12 @@ test_that("facs_cluster_flowsom() is reproducible with the same seed", {
 # repetition, so a resampled subset never contains all N nodes when
 # maxK = N -- cutree() is then asked for k = N clusters from a hclust tree
 # with fewer than N leaves. `n_metaclusters` must be strictly less than
-# grid_xdim * grid_ydim (not just <=, as facs_cluster_flowsom()'s own
-# validation currently allows) until upstream fixes this. The tests below
+# grid_xdim * grid_ydim until upstream fixes this; facs_cluster_flowsom()'s
+# own validation now rejects n_metaclusters >= grid_xdim * grid_ydim (see
+# the "errors when n_metaclusters equals the grid's node count" test
+# below), so this bug can no longer be reached from this function -- it is
+# recorded here for the historical record and because the underlying
+# ConsensusClusterPlus behavior is unchanged upstream. The tests below
 # use grid_xdim = 4, grid_ydim = 4, n_metaclusters = 6 (verified
 # reproducible across repeated seed = 1 runs: 6 distinct metaclusters, all
 # 16 raw SOM nodes used, exactly one zero-count file x metacluster cell)

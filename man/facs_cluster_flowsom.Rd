@@ -26,7 +26,8 @@ in \code{data}.}
 \code{10}/\code{10} (100 nodes).}
 
 \item{n_metaclusters}{integer; target consensus metacluster count.
-Default \code{10}. Must not exceed \code{grid_xdim * grid_ydim}.}
+Default \code{10}. Must be strictly less than
+\code{grid_xdim * grid_ydim}.}
 
 \item{seed}{integer; if set, seeds SOM training and consensus
 metaclustering for reproducible assignments.}
@@ -36,8 +37,8 @@ metaclustering for reproducible assignments.}
 raw SOM node, \code{1:(grid_xdim * grid_ydim)}) and \code{metacluster}
 (factor, consensus grouping, \code{1:n_metaclusters} levels). Errors if
 any \code{markers} name is absent from \code{data}, if a selected
-marker column contains \code{NA}, or if \code{n_metaclusters} exceeds
-the grid's node count.
+marker column contains \code{NA}, or if \code{n_metaclusters} is not
+strictly less than the grid's node count.
 }
 \description{
 Runs FlowSOM (self-organizing map + consensus metaclustering) on a

@@ -9,7 +9,7 @@
 # with fsom$metaclustering already attached -- GetClusters()/
 # GetMetaclusters() take that returned object as-is.
 #
-# Two reproducible upstream bugs constrain which grid/marker/metacluster
+# Three reproducible upstream bugs constrain which grid/marker/metacluster
 # combinations actually work, independent of anything in this file:
 #
 # 1. `n_metaclusters = 2` always throws ("argument of length 0" /
@@ -21,8 +21,8 @@
 #    consensus-color matrix only ever accumulates one row when maxK = 2,
 #    and R's default `[` silently drops that 1-row matrix to a bare
 #    vector, so nrow() on it is NULL. n_metaclusters must be >= 3 (and
-#    <= grid_xdim * grid_ydim, per the check below) until upstream fixes
-#    this.
+#    < grid_xdim * grid_ydim, per bug 3 below and the check below) until
+#    upstream fixes this.
 # 2. Selecting exactly one marker column always throws ("argument must be
 #    coercible to non-negative integer") from FlowSOM::BuildSOM()'s
 #    `fsom$data[, colsToUse]`, which has no `drop = FALSE` -- a
@@ -30,10 +30,24 @@
 #    subsequent seq_len(ncol(data)) inside SOM() fails on its NULL
 #    ncol(). `markers` (explicit or defaulted) must resolve to >= 2
 #    columns until upstream fixes this.
+# 3. `n_metaclusters == grid_xdim * grid_ydim` (exact equality with the
+#    SOM's node count) always throws from ConsensusClusterPlus's internal
+#    cutree() call, for *any* data. ConsensusClusterPlus's default
+#    `pItem = 0.9` means every resampling iteration works on a subset of
+#    the N SOM nodes, never all N of them, so its resampled hierarchical
+#    tree has fewer than N leaves. Asking cutree() for exactly N clusters
+#    then fails because that many clusters don't exist in the resampled
+#    tree. n_metaclusters must be strictly less than grid_xdim * grid_ydim
+#    (not merely not-exceeding it, per the check below) until upstream
+#    fixes this.
 #
-# Neither is guarded against here (matching the "don't silently paper
-# over a mismatch" instruction) -- both surface as FlowSOM/
-# ConsensusClusterPlus errors, not JanisHelpers ones, if triggered.
+# Bugs 1 and 2 are not guarded against here (matching the "don't silently
+# paper over a mismatch" instruction) -- both surface as FlowSOM/
+# ConsensusClusterPlus errors, not JanisHelpers ones, if triggered. Bug 3
+# IS guarded against, below: this function rejects
+# n_metaclusters >= grid_xdim * grid_ydim outright, so a caller who would
+# otherwise hit bug 3's opaque ConsensusClusterPlus crash instead gets a
+# clear error from this package's own validation.
 
 #' Cluster single-cell events with FlowSOM
 #'
@@ -55,7 +69,8 @@
 #' @param grid_xdim,grid_ydim integer; SOM grid dimensions. Default
 #'   \code{10}/\code{10} (100 nodes).
 #' @param n_metaclusters integer; target consensus metacluster count.
-#'   Default \code{10}. Must not exceed \code{grid_xdim * grid_ydim}.
+#'   Default \code{10}. Must be strictly less than
+#'   \code{grid_xdim * grid_ydim}.
 #' @param seed integer; if set, seeds SOM training and consensus
 #'   metaclustering for reproducible assignments.
 #'
@@ -63,8 +78,8 @@
 #'   raw SOM node, \code{1:(grid_xdim * grid_ydim)}) and \code{metacluster}
 #'   (factor, consensus grouping, \code{1:n_metaclusters} levels). Errors if
 #'   any \code{markers} name is absent from \code{data}, if a selected
-#'   marker column contains \code{NA}, or if \code{n_metaclusters} exceeds
-#'   the grid's node count.
+#'   marker column contains \code{NA}, or if \code{n_metaclusters} is not
+#'   strictly less than the grid's node count.
 #' @export
 #'
 #' @examples
@@ -103,10 +118,11 @@ facs_cluster_flowsom <- function(data,
     ))
   }
 
-  if (n_metaclusters > grid_xdim * grid_ydim) {
+  if (n_metaclusters >= grid_xdim * grid_ydim) {
     stop(glue::glue(
-      "`n_metaclusters` ({n_metaclusters}) cannot exceed the SOM grid's ",
-      "node count (grid_xdim * grid_ydim = {grid_xdim * grid_ydim})."
+      "`n_metaclusters` ({n_metaclusters}) must be strictly less than the ",
+      "SOM grid's node count (grid_xdim * grid_ydim = ",
+      "{grid_xdim * grid_ydim})."
     ))
   }
 
