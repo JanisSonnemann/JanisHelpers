@@ -27,8 +27,11 @@ every sample in \code{group}.}
 label or channel name (stain label preferred).}
 
 \item{keywords}{character vector of FlowJo keyword names to append as
-columns. A keyword missing for every sample is filled
-\code{NA_character_} with a warning.}
+columns. Read from the \code{.wsp} workspace XML (same source as
+\code{facs_read_wsp()}), not from the raw \code{.fcs} files -- this
+also picks up keywords typed into FlowJo's UI that were never written
+back into the \code{.fcs} file itself. A keyword missing for every
+sample is filled \code{NA_character_} with a warning.}
 
 \item{fcs_dir}{folder to search for this workspace's \code{.fcs}
 files. \code{NULL} (default) auto-derives it as the subfolder named

@@ -18,7 +18,14 @@
 # SSC-A, Time, ...) must be matched via parameters(gated)$name instead.
 #
 # keyword(gh, name) returns NULL (not an error) when the keyword is
-# absent for that sample.
+# absent for that sample. It only sees keywords physically embedded in
+# the raw .fcs file's own TEXT segment -- a keyword typed into FlowJo's
+# UI but never written back into the .fcs file (a "workspace-only"
+# keyword) is invisible to it, even though FlowJo's own "Inspect" view
+# shows it. Keywords are therefore read from the .wsp XML directly (via
+# parse_keywords_(), the same helper facs_read_wsp() uses), which is the
+# authoritative superset of both raw-.fcs-embedded and workspace-only
+# keywords.
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -49,7 +56,7 @@ resolve_markers_ <- function(markers, gh, gated, file_name) {
   resolved
 }
 
-read_one_sample_ <- function(gh, gate_path, gate_path_norm, markers, keywords, max_events) {
+read_one_sample_ <- function(gh, gate_path, gate_path_norm, markers, max_events) {
   file_name <- flowWorkspace::pData(gh)$name
 
   gated <- tryCatch(
@@ -73,17 +80,8 @@ read_one_sample_ <- function(gh, gate_path, gate_path_norm, markers, keywords, m
     mat <- mat[sample.int(nrow(mat), max_events), , drop = FALSE]
   }
 
-  tbl <- tibble::as_tibble(mat) |>
+  tibble::as_tibble(mat) |>
     tibble::add_column(file_name = file_name, .before = 1L)
-
-  if (!is.null(keywords) && length(keywords) > 0L) {
-    for (k in keywords) {
-      v <- flowWorkspace::keyword(gh, k)
-      tbl[[k]] <- if (is.null(v)) NA_character_ else as.character(v)
-    }
-  }
-
-  tbl
 }
 
 # ---------------------------------------------------------------------------
@@ -108,8 +106,11 @@ read_one_sample_ <- function(gh, gate_path, gate_path_norm, markers, keywords, m
 #' @param markers character vector; matched per sample against stain
 #'   label or channel name (stain label preferred).
 #' @param keywords character vector of FlowJo keyword names to append as
-#'   columns. A keyword missing for every sample is filled
-#'   \code{NA_character_} with a warning.
+#'   columns. Read from the \code{.wsp} workspace XML (same source as
+#'   \code{facs_read_wsp()}), not from the raw \code{.fcs} files -- this
+#'   also picks up keywords typed into FlowJo's UI that were never written
+#'   back into the \code{.fcs} file itself. A keyword missing for every
+#'   sample is filled \code{NA_character_} with a warning.
 #' @param fcs_dir folder to search for this workspace's \code{.fcs}
 #'   files. \code{NULL} (default) auto-derives it as the subfolder named
 #'   after the \code{.wsp} file (sans extension), sitting next to it.
@@ -166,7 +167,6 @@ facs_read_fcs_gated <- function(wsp_path,
         gate_path      = gate_path,
         gate_path_norm = gate_path_norm,
         markers        = markers,
-        keywords       = keywords,
         max_events     = max_events
       )
     }
@@ -174,13 +174,22 @@ facs_read_fcs_gated <- function(wsp_path,
     dplyr::bind_rows()
 
   if (!is.null(keywords) && length(keywords) > 0L) {
-    fully_missing <- keywords[purrr::map_lgl(keywords, function(k) all(is.na(data[[k]])))]
-    if (length(fully_missing) > 0L) {
-      warning(glue::glue(
+    doc <- xml2::read_xml(wsp_path)
+    user_kws <- parse_keywords_(doc) |>
+      dplyr::filter(key %in% keywords) |>
+      tidyr::pivot_wider(names_from = key, values_from = value)
+
+    missing_kws <- setdiff(keywords, names(user_kws))
+    if (length(missing_kws) > 0L) {
+      warning(
         "The following requested keywords were not found in the workspace ",
-        "and were filled with NA: {paste(fully_missing, collapse = ', ')}"
-      ))
+        "and were filled with NA: ",
+        paste(missing_kws, collapse = ", ")
+      )
+      user_kws[missing_kws] <- NA_character_
     }
+
+    data <- dplyr::left_join(data, user_kws, by = "file_name")
   }
 
   data

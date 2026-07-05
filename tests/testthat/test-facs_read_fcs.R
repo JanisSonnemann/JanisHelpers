@@ -151,3 +151,27 @@ test_that("facs_read_fcs_gated() loads only the samples in a non-default FlowJo 
   expect_equal(dplyr::n_distinct(result$file_name), 2L)
   expect_true(all(grepl("kidney", result$file_name)))
 })
+
+test_that("facs_read_fcs_gated() reads keywords from the .wsp XML, including ones absent from the raw .fcs file", {
+  skip_if_not(dir.exists(fcs_dir), skip_msg)
+
+  doc <- xml2::read_xml(wsp_path)
+  kw_nodes <- xml2::xml_find_all(doc, ".//SampleList/Sample//Keywords")
+  for (kn in kw_nodes) {
+    xml2::xml_add_child(kn, "Keyword", name = "workspace_only_key", value = "hello")
+  }
+  tmp_wsp <- tempfile(fileext = ".wsp")
+  xml2::write_xml(doc, tmp_wsp)
+  on.exit(unlink(tmp_wsp), add = TRUE)
+
+  result <- facs_read_fcs_gated(
+    wsp_path  = tmp_wsp,
+    gate_path = cd45_gate,
+    markers   = c("CD4"),
+    keywords  = c("workspace_only_key"),
+    fcs_dir   = fcs_dir
+  )
+
+  expect_false(any(is.na(result$workspace_only_key)))
+  expect_true(all(result$workspace_only_key == "hello"))
+})
