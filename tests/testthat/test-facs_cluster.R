@@ -277,3 +277,64 @@ test_that("facs_calc_cluster_freq() errors when cluster_col is not found in data
     "not_a_col"
   )
 })
+
+marker_medians_input <- function() {
+  tibble::tibble(
+    file_name   = rep("a.fcs", 6),
+    metacluster = factor(c(1, 1, 1, 2, 2, 2)),
+    CD44        = c(1, 2, 3, 10, 20, 30),
+    Foxp3       = c(5, 5, 5, 1, 1, 1),
+    mouse_ID    = "m1"
+  )
+}
+
+test_that("facs_calc_cluster_marker_medians() computes correct per-cluster medians", {
+  result <- facs_calc_cluster_marker_medians(marker_medians_input())
+
+  expect_setequal(names(result), c("metacluster", "marker", "median"))
+  expect_equal(nrow(result), 4L)
+  expect_equal(result$median[result$metacluster == 1 & result$marker == "CD44"], 2)
+  expect_equal(result$median[result$metacluster == 2 & result$marker == "CD44"], 20)
+  expect_equal(result$median[result$metacluster == 1 & result$marker == "Foxp3"], 5)
+  expect_equal(result$median[result$metacluster == 2 & result$marker == "Foxp3"], 1)
+  expect_s3_class(result$metacluster, "factor")
+})
+
+test_that("facs_calc_cluster_marker_medians() defaults to every double-typed column", {
+  result <- facs_calc_cluster_marker_medians(marker_medians_input())
+  expect_setequal(unique(result$marker), c("CD44", "Foxp3"))
+})
+
+test_that("facs_calc_cluster_marker_medians() restricts to an explicit markers subset", {
+  result <- facs_calc_cluster_marker_medians(marker_medians_input(), markers = "CD44")
+  expect_equal(nrow(result), 2L)
+  expect_equal(unique(result$marker), "CD44")
+})
+
+test_that("facs_calc_cluster_marker_medians() errors when cluster_col is not found in data", {
+  expect_error(
+    facs_calc_cluster_marker_medians(marker_medians_input(), cluster_col = "NotAColumn"),
+    "NotAColumn"
+  )
+})
+
+test_that("facs_calc_cluster_marker_medians() errors when an explicit marker is missing from data", {
+  expect_error(
+    facs_calc_cluster_marker_medians(marker_medians_input(), markers = c("CD44", "NotAColumn")),
+    "NotAColumn"
+  )
+})
+
+test_that("facs_calc_cluster_marker_medians() errors when an explicit marker is not double-typed", {
+  expect_error(
+    facs_calc_cluster_marker_medians(marker_medians_input(), markers = c("CD44", "mouse_ID")),
+    "mouse_ID"
+  )
+})
+
+test_that("facs_calc_cluster_marker_medians() errors when resolved markers is empty", {
+  expect_error(
+    facs_calc_cluster_marker_medians(marker_medians_input(), markers = character(0)),
+    "empty"
+  )
+})

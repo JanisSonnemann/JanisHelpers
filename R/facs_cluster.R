@@ -238,3 +238,78 @@ facs_calc_cluster_freq <- function(data, cluster_col = "metacluster") {
     dplyr::left_join(passthrough, by = "file_name") |>
     dplyr::arrange(file_name, .data[[cluster_col]])
 }
+
+#' Compute per-cluster median marker expression
+#'
+#' @description
+#' Summarizes \code{facs_cluster_flowsom()}'s per-event marker columns to a
+#' per-cluster median, one row per \code{cluster_col} x marker. Intended as
+#' a cluster-annotation step -- pairs with \code{facs_plot_cluster_heatmap()}
+#' to let a metacluster be named by its marker expression profile before
+#' interpreting a \code{facs_test_cluster_abundance()} hit.
+#'
+#' @param data tibble shaped like \code{facs_cluster_flowsom()}'s output:
+#'   one row per event, \code{dbl} marker columns, and a \code{cluster_col}
+#'   column.
+#' @param markers character vector of column names in \code{data} to
+#'   summarize. \code{NULL} (default) uses every \code{dbl}-typed column in
+#'   \code{data}, identical convention to \code{facs_cluster_flowsom()}'s
+#'   own \code{markers} argument. When explicitly supplied, every named
+#'   column must be \code{double}-typed in \code{data}.
+#' @param cluster_col character; column in \code{data} to group by. Default
+#'   \code{"metacluster"}, matching \code{facs_cluster_flowsom()}'s and
+#'   \code{facs_calc_cluster_freq()}'s own default.
+#'
+#' @returns Long tibble: \code{{cluster_col name}} (type unchanged from
+#'   \code{data}), \code{marker} (chr), \code{median} (dbl). One row per
+#'   cluster x marker. Errors if \code{cluster_col} is not a column in
+#'   \code{data}, if an explicitly supplied \code{markers} name is absent
+#'   from \code{data}, if an explicitly supplied \code{markers} column is
+#'   not \code{double}-typed in \code{data} (listing the offending
+#'   column(s)), or if the resolved \code{markers} is empty.
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#'   dat <- facs_cluster_flowsom(facs_read_fcs_gated(
+#'     wsp_path  = "experiment.wsp",
+#'     gate_path = "Singlets/Lymphocytes/live/CD45+",
+#'     markers   = c("CD4", "CD45")
+#'   ), seed = 1)
+#'   facs_calc_cluster_marker_medians(dat)
+#' }
+facs_calc_cluster_marker_medians <- function(data, markers = NULL, cluster_col = "metacluster") {
+  if (!cluster_col %in% names(data)) {
+    stop(glue::glue("`cluster_col` ('{cluster_col}') not found in `data`."))
+  }
+
+  if (is.null(markers)) {
+    is_dbl  <- purrr::map_lgl(data, is.double)
+    markers <- names(data)[is_dbl]
+  } else {
+    missing_markers <- setdiff(markers, names(data))
+    if (length(missing_markers) > 0L) {
+      stop(glue::glue(
+        "The following `markers` were not found in `data`: ",
+        "{paste(missing_markers, collapse = ', ')}"
+      ))
+    }
+
+    non_double_markers <- markers[!purrr::map_lgl(markers, function(m) is.double(data[[m]]))]
+    if (length(non_double_markers) > 0L) {
+      stop(glue::glue(
+        "The following `markers` are not double-typed columns in `data`: ",
+        "{paste(non_double_markers, collapse = ', ')}"
+      ))
+    }
+  }
+
+  if (length(markers) == 0L) {
+    stop("Resolved `markers` is empty -- no double-typed columns found in `data`.")
+  }
+
+  data |>
+    dplyr::group_by(dplyr::across(dplyr::all_of(cluster_col))) |>
+    dplyr::summarise(dplyr::across(dplyr::all_of(markers), stats::median), .groups = "drop") |>
+    tidyr::pivot_longer(cols = dplyr::all_of(markers), names_to = "marker", values_to = "median")
+}
