@@ -67,9 +67,50 @@ facs_test_cluster_abundance <- function(freq_data,
                                          method = c("glmm", "edgeR", "voom")) {
   method <- match.arg(method)
 
+  if (!is.null(meta)) {
+    freq_data <- meta_annotate(freq_data, meta, by = by)
+  }
+
+  required_cols <- c("file_name", cluster_col, "n", fixed, random)
+  missing_cols <- setdiff(required_cols, names(freq_data))
+  if (length(missing_cols) > 0L) {
+    stop(glue::glue(
+      "The following column(s) were not found in `freq_data`: ",
+      "{paste(missing_cols, collapse = ', ')}."
+    ))
+  }
+
+  if (method != "glmm" && !is.null(random)) {
+    stop(glue::glue(
+      "random effects are only supported with method = 'glmm'; pass ",
+      "random = NULL, or fold this column into `fixed`, for edgeR/voom."
+    ))
+  }
+
   fixed_vec <- freq_data[[fixed]]
   if (!is.factor(fixed_vec)) fixed_vec <- factor(fixed_vec)
+  if (nlevels(fixed_vec) < 2L) {
+    stop(glue::glue(
+      "`fixed` column '{fixed}' must have at least 2 levels ",
+      "(found {nlevels(fixed_vec)})."
+    ))
+  }
   if (is.null(ref_level)) ref_level <- levels(fixed_vec)[1]
+  if (!ref_level %in% levels(fixed_vec)) {
+    stop(glue::glue(
+      "`ref_level` ('{ref_level}') is not among `fixed`'s levels: ",
+      "{paste(levels(fixed_vec), collapse = ', ')}."
+    ))
+  }
+
+  na_check_cols <- c(fixed, random)
+  na_present <- na_check_cols[purrr::map_lgl(na_check_cols, function(col) anyNA(freq_data[[col]]))]
+  if (length(na_present) > 0L) {
+    stop(glue::glue(
+      "The following column(s) contain NA (e.g. from an unmatched `meta` ",
+      "join key): {paste(na_present, collapse = ', ')}."
+    ))
+  }
 
   experiment_info <- freq_data |>
     dplyr::distinct(dplyr::across(dplyr::all_of(c("file_name", fixed, random)))) |>
