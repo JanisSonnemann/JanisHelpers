@@ -17,6 +17,7 @@ Imports:
     flowCore,
     FlowSOM,
     flowWorkspace,
+    ggplot2,
     glue,
     gt,
     gtsummary,
@@ -26,10 +27,12 @@ Imports:
     readxl,
     rmarkdown,
     rstatix,
+    stats,
     stringr,
     tibble,
     tidyr,
     tools,
+    uwot,
     xml2,
     xfun
 Suggests: 
