@@ -12,6 +12,7 @@ Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 Imports:
     CytoML,
+    diffcyt,
     dplyr,
     fcexpr,
     flowCore,
@@ -29,6 +30,7 @@ Imports:
     rstatix,
     stats,
     stringr,
+    SummarizedExperiment,
     tibble,
     tidyr,
     tools,
