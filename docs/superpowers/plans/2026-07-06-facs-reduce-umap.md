@@ -16,7 +16,7 @@
 - After any roxygen change, run `devtools::document()` before committing.
 - Target `devtools::check()`: 0 errors, 0 warnings. New NOTEs are expected and acceptable — bare-column tidy-eval false positives (`UMAP1`, `UMAP2`, `file_name` in `R/facs_reduce.R`; `.data`, `UMAP1`, `UMAP2` in `R/facs_plot.R`), matching the pattern already documented in CLAUDE.md's "Known check output" section. Task 3 adds a bullet there for these two files.
 - No mocking `uwot`/`ggplot2` — tests run the real packages, same no-mock rule as every other `facs_` domain function. `facs_reduce_umap()`'s primary tests chain off the real `tests/fixtures/Treg.wsp` + `tests/fixtures/Treg/*.fcs` fixture via `facs_read_fcs_gated()` (Stage 1, already merged to `master`); validation-only edge cases use small synthetic tibbles (same pattern several `facs_cluster_flowsom()` tests already use).
-- **Stage 2 branch dependency:** `facs_cluster_flowsom()`/`facs_calc_cluster_freq()` (Stage 2) live on an unmerged branch (`worktree-facs-stage2-flowsom-design`, PR #1) and are **not** present on `master`, which this worktree branches from. `facs_reduce_umap()` never actually needs Stage 2's output: it selects marker columns via `is.double()`, and Stage 2's `cluster` (integer) / `metacluster` (factor) columns are not `double`, so they're automatically excluded from the default marker set with no special-casing required. `facs_plot_umap()`'s default `color_by = "metacluster"` is just a column-name convention — its tests build a small synthetic tibble containing a `metacluster` column directly (`tibble::tibble(..., metacluster = factor(...))`) rather than calling `facs_cluster_flowsom()`. This plan does not require Stage 2 to be merged first.
+- **Stage 2 status:** `facs_cluster_flowsom()`/`facs_calc_cluster_freq()` (Stage 2, PR #1) merged to `master` on 2026-07-06, so this worktree (rebased onto the post-merge `master`) already has `R/facs_cluster.R`, `FlowSOM`, and `parallel` in `DESCRIPTION`. This plan still keeps its tests decoupled from Stage 2 rather than reworking them to depend on it: `facs_reduce_umap()` selects marker columns via `is.double()`, and Stage 2's `cluster` (integer) / `metacluster` (factor) columns are not `double`, so they're automatically excluded from the default marker set with no special-casing required. `facs_plot_umap()`'s default `color_by = "metacluster"` is just a column-name convention — its tests build a small synthetic tibble containing a `metacluster` column directly (`tibble::tibble(..., metacluster = factor(...))`) rather than calling `facs_cluster_flowsom()`, keeping those tests fast and independent of FlowSOM's runtime.
 - **Implementation risk to verify against the real fixture** (same "don't assume, verify" treatment Stage 1 gave `flowjo_to_gatingset()` and Stage 2 gave `FlowSOM`/`ConsensusClusterPlus`): `uwot::umap()` requires enough rows relative to `n_neighbors` (roughly `n_neighbors < nrow(data)`) — this plan's tests deliberately pass small `n_neighbors` values on small/downsampled inputs. Also, per `uwot`'s own documentation, exact run-to-run reproducibility under a fixed `set.seed()` is only guaranteed with single-threaded execution — `facs_reduce_umap()` therefore forces `n_threads = 1` whenever `seed` is supplied. If the installed `uwot` version's behavior differs from either assumption, adjust the implementation/tests and note the deviation in a code comment (same treatment as the header comments in `R/facs_read_fcs.R` and `R/facs_cluster.R`).
 - If `uwot`/`ggplot2` aren't already installed locally, install them (`install.packages(c("uwot", "ggplot2"))`) before running tests.
 
@@ -43,11 +43,13 @@ Imports:
     dplyr,
     fcexpr,
     flowCore,
+    FlowSOM,
     flowWorkspace,
     glue,
     gt,
     gtsummary,
     janitor,
+    parallel,
     purrr,
     readxl,
     rmarkdown,
@@ -448,12 +450,14 @@ Imports:
     dplyr,
     fcexpr,
     flowCore,
+    FlowSOM,
     flowWorkspace,
     ggplot2,
     glue,
     gt,
     gtsummary,
     janitor,
+    parallel,
     purrr,
     readxl,
     rmarkdown,
@@ -636,7 +640,7 @@ Expected: 0 errors, 0 warnings. Compare the NOTEs against CLAUDE.md's existing "
 
 - [ ] **Step 3: Update CLAUDE.md**
 
-Add a new bullet to the "Known check output" section (after the `facs_read_fcs_gated` bullet), matching the existing bullet-list style:
+Add a new bullet to the "Known check output" section (after the `facs_calc_cluster_freq` bullet, the current last entry — Stage 2's merge already added it after `facs_read_fcs_gated`'s), matching the existing bullet-list style:
 
 ```markdown
   - `facs_reduce_umap`/`downsample_stratified_` variable-binding notes (`UMAP1`, `UMAP2`, `file_name`) — bare column names inside base-R subsetting and `dplyr::bind_rows()`, same false-positive pattern as the rest of the `facs_` domain.
