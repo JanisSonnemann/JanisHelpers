@@ -30,6 +30,7 @@ Imports:
     tibble,
     tidyr,
     tools,
+    uwot,
     xml2,
     xfun
 Suggests: 
