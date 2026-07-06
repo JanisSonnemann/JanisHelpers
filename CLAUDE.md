@@ -120,7 +120,7 @@ New functions must follow the `domain_verb` pattern. Never add a function that d
 - **`Suggests`**: packages only needed in examples or vignettes. Currently none.
 - **Non-CRAN packages** (`fcexpr`): list in `Imports` as normal; document the install requirement in README. Do not add `remotes::` calls inside function bodies.
 
-Current `Imports`: `CytoML`, `dplyr`, `fcexpr`, `flowCore`, `FlowSOM`, `flowWorkspace`, `glue`, `gt`, `gtsummary`, `janitor`, `purrr`, `readxl`, `rmarkdown`, `rstatix`, `stringr`, `tibble`, `tidyr`, `tools`, `xml2`, `xfun` (order matches `DESCRIPTION`'s `Imports:` block).
+Current `Imports`: `CytoML`, `diffcyt`, `dplyr`, `fcexpr`, `flowCore`, `FlowSOM`, `flowWorkspace`, `ggplot2`, `glue`, `gt`, `gtsummary`, `janitor`, `parallel`, `purrr`, `readxl`, `rmarkdown`, `rstatix`, `stats`, `stringr`, `SummarizedExperiment`, `tibble`, `tidyr`, `tools`, `uwot`, `xml2`, `xfun` (order matches `DESCRIPTION`'s `Imports:` block).
 
 ---
 

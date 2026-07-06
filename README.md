@@ -16,13 +16,14 @@ Einzelne kleine Funktionen für alltägliche Probleme
 - Import FowJO workspace
 - Automatically import and save FlowJo workspace to Excel
 
-`facs_read_fcs_gated()` reads raw single-cell events from `.fcs` files and
-needs `CytoML`/`flowWorkspace`/`flowCore`, which are Bioconductor packages
-not available on CRAN. Install them first:
+The unsupervised FACS pipeline (`facs_read_fcs_gated()`, `facs_cluster_flowsom()`,
+`facs_test_cluster_abundance()`) needs `CytoML`/`flowWorkspace`/`flowCore`,
+`FlowSOM`, and `diffcyt`/`SummarizedExperiment`, which are Bioconductor
+packages not available on CRAN. Install them first:
 
 ``` r
 if (!requireNamespace("BiocManager", quietly = TRUE)) install.packages("BiocManager")
-BiocManager::install(c("CytoML", "flowWorkspace", "flowCore"))
+BiocManager::install(c("CytoML", "flowWorkspace", "flowCore", "FlowSOM", "diffcyt", "SummarizedExperiment"))
 ```
 
 Updaten des privaten Pakets:
