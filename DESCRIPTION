@@ -15,6 +15,7 @@ Imports:
     dplyr,
     fcexpr,
     flowCore,
+    FlowSOM,
     flowWorkspace,
     glue,
     gt,
