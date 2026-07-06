@@ -154,3 +154,17 @@ test_that("facs_reduce_umap() is reproducible with the same seed", {
   expect_equal(r1$UMAP1, r2$UMAP1)
   expect_equal(r1$UMAP2, r2$UMAP2)
 })
+
+test_that("facs_reduce_umap() is reproducible with the same seed (synthetic data)", {
+  dat <- tibble::tibble(
+    file_name = rep(c("a.fcs", "b.fcs", "c.fcs"), each = 8),
+    CD4       = rnorm(24),
+    CD45      = rnorm(24),
+    TCRb      = rnorm(24)
+  )
+  r1 <- facs_reduce_umap(dat, n_neighbors = 5, seed = 42)
+  r2 <- facs_reduce_umap(dat, n_neighbors = 5, seed = 42)
+
+  expect_equal(r1$UMAP1, r2$UMAP1)
+  expect_equal(r1$UMAP2, r2$UMAP2)
+})
