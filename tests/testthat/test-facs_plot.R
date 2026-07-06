@@ -45,3 +45,56 @@ test_that("facs_plot_umap() facets by facet_by", {
   built <- ggplot2::ggplot_build(p)
   expect_equal(nrow(built$layout$layout), 2L)
 })
+
+abundance_input <- function() {
+  tibble::tibble(
+    file_name   = rep(c("a.fcs", "b.fcs", "c.fcs", "d.fcs"), each = 3),
+    metacluster = factor(rep(1:3, 4)),
+    fraction    = runif(12),
+    group       = rep(c("control", "treated"), each = 6)
+  )
+}
+
+test_that("facs_plot_cluster_abundance() returns a ggplot object", {
+  p <- facs_plot_cluster_abundance(abundance_input(), group_col = "group")
+  expect_s3_class(p, "ggplot")
+})
+
+test_that("facs_plot_cluster_abundance() errors when group_col is not a column", {
+  expect_error(
+    facs_plot_cluster_abundance(abundance_input(), group_col = "NotAColumn"),
+    "NotAColumn"
+  )
+})
+
+test_that("facs_plot_cluster_abundance() errors when cluster_col is not a column", {
+  expect_error(
+    facs_plot_cluster_abundance(abundance_input(), group_col = "group", cluster_col = "NotAColumn"),
+    "NotAColumn"
+  )
+})
+
+test_that("facs_plot_cluster_abundance() facets by cluster_col", {
+  p <- facs_plot_cluster_abundance(abundance_input(), group_col = "group")
+  built <- ggplot2::ggplot_build(p)
+  expect_equal(nrow(built$layout$layout), 3L)
+})
+
+test_that("facs_plot_cluster_abundance() filters to significant clusters when significant_only = TRUE", {
+  test_result <- tibble::tibble(
+    metacluster = factor(1:3),
+    contrast    = "treated_vs_control",
+    p_val       = c(0.001, 0.2, 0.5),
+    p_adj       = c(0.003, 0.3, 0.5)
+  )
+
+  p <- facs_plot_cluster_abundance(
+    abundance_input(),
+    test_result      = test_result,
+    group_col        = "group",
+    significant_only = TRUE,
+    p_adj_threshold  = 0.05
+  )
+  built <- ggplot2::ggplot_build(p)
+  expect_equal(nrow(built$layout$layout), 1L)
+})
