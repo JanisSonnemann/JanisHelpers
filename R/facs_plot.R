@@ -130,3 +130,75 @@ facs_plot_cluster_abundance <- function(freq_data,
     ggplot2::labs(x = group_col, y = "fraction") +
     ggplot2::theme_minimal()
 }
+
+#' Plot a cluster marker-expression heatmap
+#'
+#' @description
+#' Renders a \code{ggplot2} tile heatmap of \code{facs_calc_cluster_marker_
+#' medians()}'s per-cluster median marker expression -- the standard
+#' cluster-annotation view for naming a metacluster (e.g. "Treg-like") by
+#' its marker profile before interpreting a
+#' \code{facs_test_cluster_abundance()} hit. Uses a diverging red/blue fill
+#' scale (not the viridis scales used elsewhere in this package) since a
+#' scale centered at a meaningful midpoint -- 0, whether that's a z-score's
+#' mean or the transformed marker scale's own background/negative boundary
+#' -- is the field-standard way to read this kind of heatmap.
+#'
+#' @param marker_medians tibble shaped like \code{facs_calc_cluster_marker_
+#'   medians()}'s output: must contain \code{cluster_col}, \code{marker},
+#'   and \code{median}.
+#' @param cluster_col character; column in \code{marker_medians} to plot on
+#'   the y-axis. Default \code{"metacluster"}.
+#' @param scale character; one of \code{"zscore"} (default, z-scores
+#'   \code{median} per \code{marker} across clusters before plotting) or
+#'   \code{"raw"} (plots \code{median} unscaled).
+#'
+#' @returns A \code{ggplot} object (not printed or saved). Errors if
+#'   \code{cluster_col}, \code{"marker"}, or \code{"median"} are not columns
+#'   in \code{marker_medians}.
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#'   dat <- facs_cluster_flowsom(facs_read_fcs_gated(
+#'     wsp_path  = "experiment.wsp",
+#'     gate_path = "Singlets/Lymphocytes/live/CD45+",
+#'     markers   = c("CD4", "CD45")
+#'   ), seed = 1)
+#'   medians <- facs_calc_cluster_marker_medians(dat)
+#'   facs_plot_cluster_heatmap(medians)
+#' }
+facs_plot_cluster_heatmap <- function(marker_medians,
+                                      cluster_col = "metacluster",
+                                      scale = c("zscore", "raw")) {
+  scale <- match.arg(scale)
+
+  if (!cluster_col %in% names(marker_medians)) {
+    stop(glue::glue("`cluster_col` ('{cluster_col}') not found in `marker_medians`."))
+  }
+  if (!"marker" %in% names(marker_medians)) {
+    stop("`marker` column not found in `marker_medians`.")
+  }
+  if (!"median" %in% names(marker_medians)) {
+    stop("`median` column not found in `marker_medians`.")
+  }
+
+  # `scale` (the argument) is a character string, not a function -- R's
+  # call-position lookup still resolves `base::scale()` correctly here (see
+  # the plan's "Verified mechanics" section), but it's spelled out
+  # explicitly below for a human reader given the name collision.
+  plot_data <- marker_medians |>
+    dplyr::group_by(marker) |>
+    dplyr::mutate(fill_value = if (scale == "zscore") {
+      as.numeric(base::scale(median))
+    } else {
+      median
+    }) |>
+    dplyr::ungroup()
+
+  ggplot2::ggplot(plot_data, ggplot2::aes(x = marker, y = .data[[cluster_col]], fill = fill_value)) +
+    ggplot2::geom_tile() +
+    ggplot2::scale_fill_gradient2(low = "blue", mid = "white", high = "red", midpoint = 0) +
+    ggplot2::labs(x = "marker", y = cluster_col, fill = if (scale == "zscore") "z-score" else "median") +
+    ggplot2::theme_minimal()
+}
