@@ -120,6 +120,31 @@ test_that("facs_read_fcs_gated() downsamples to max_events per sample, reproduci
   expect_identical(result_a, result_b)
 })
 
+test_that("facs_read_fcs_gated() with workers = 2 matches workers = 1 output when max_events and seed are set", {
+  skip_if_not(dir.exists(fcs_dir), skip_msg)
+
+  result_seq <- facs_read_fcs_gated(
+    wsp_path   = wsp_path,
+    gate_path  = cd45_gate,
+    markers    = c("CD4", "CD45"),
+    max_events = 500,
+    seed       = 42,
+    workers    = 1
+  )
+  result_par <- facs_read_fcs_gated(
+    wsp_path   = wsp_path,
+    gate_path  = cd45_gate,
+    markers    = c("CD4", "CD45"),
+    max_events = 500,
+    seed       = 42,
+    workers    = 2
+  )
+
+  result_seq <- dplyr::arrange(result_seq, file_name, CD4, CD45)
+  result_par <- dplyr::arrange(result_par, file_name, CD4, CD45)
+  expect_equal(result_seq, result_par)
+})
+
 test_that("facs_read_fcs_gated() auto-derives fcs_dir from the wsp filename", {
   skip_if_not(dir.exists(fcs_dir), skip_msg)
 
@@ -152,6 +177,20 @@ test_that("facs_read_fcs_gated() loads only the samples in a non-default FlowJo 
   expect_true(all(grepl("kidney", result$file_name)))
 })
 
+test_that("facs_read_fcs_gated() errors for a nonexistent FlowJo group", {
+  skip_if_not(dir.exists(fcs_dir), skip_msg)
+
+  expect_error(
+    facs_read_fcs_gated(
+      wsp_path  = wsp_path,
+      gate_path = cd45_gate,
+      markers   = c("CD4"),
+      group     = "NotARealGroup"
+    ),
+    "No samples found"
+  )
+})
+
 test_that("facs_read_fcs_gated() reads keywords from the .wsp XML, including ones absent from the raw .fcs file", {
   skip_if_not(dir.exists(fcs_dir), skip_msg)
 
@@ -174,4 +213,57 @@ test_that("facs_read_fcs_gated() reads keywords from the .wsp XML, including one
 
   expect_false(any(is.na(result$workspace_only_key)))
   expect_true(all(result$workspace_only_key == "hello"))
+})
+
+test_that("facs_read_fcs_gated() with workers = 2 matches workers = 1 output", {
+  skip_if_not(dir.exists(fcs_dir), skip_msg)
+
+  result_seq <- facs_read_fcs_gated(
+    wsp_path  = wsp_path,
+    gate_path = cd45_gate,
+    markers   = c("CD4", "CD45"),
+    keywords  = c("mouse_ID", "tissue"),
+    workers   = 1
+  )
+  result_par <- facs_read_fcs_gated(
+    wsp_path  = wsp_path,
+    gate_path = cd45_gate,
+    markers   = c("CD4", "CD45"),
+    keywords  = c("mouse_ID", "tissue"),
+    workers   = 2
+  )
+
+  result_seq <- dplyr::arrange(result_seq, file_name, CD4, CD45)
+  result_par <- dplyr::arrange(result_par, file_name, CD4, CD45)
+  expect_equal(result_seq, result_par)
+})
+
+test_that("facs_read_fcs_gated() still errors on an unmatched marker under workers = 2", {
+  skip_if_not(dir.exists(fcs_dir), skip_msg)
+
+  expect_error(
+    facs_read_fcs_gated(
+      wsp_path  = wsp_path,
+      gate_path = cd45_gate,
+      markers   = c("CD4", "NotARealMarker"),
+      workers   = 2
+    ),
+    "NotARealMarker"
+  )
+})
+
+test_that("facs_read_fcs_gated() still warns on a missing gate_path under workers = 2", {
+  skip_if_not(dir.exists(fcs_dir), skip_msg)
+
+  warns <- testthat::capture_warnings(
+    result <- facs_read_fcs_gated(
+      wsp_path  = wsp_path,
+      gate_path = "Nonexistent/Path",
+      markers   = c("CD4"),
+      workers   = 2
+    )
+  )
+  expect_true(all(grepl("not found", warns)))
+  expect_length(warns, 6L)
+  expect_equal(nrow(result), 0L)
 })

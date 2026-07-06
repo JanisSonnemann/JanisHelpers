@@ -12,7 +12,8 @@ facs_read_fcs_gated(
   fcs_dir = NULL,
   group = "All Samples",
   max_events = NULL,
-  seed = NULL
+  seed = NULL,
+  workers = 1L
 )
 }
 \arguments{
@@ -44,7 +45,19 @@ after the \code{.wsp} file (sans extension), sitting next to it.}
 at most this many events.}
 
 \item{seed}{integer; if set, seeds the random draw used by
-\code{max_events} for reproducibility.}
+\code{max_events} for reproducibility. Each sample's draw is seeded
+from \code{seed} offset by that sample's position in its FlowJo
+group, so results are reproducible across repeated calls with the
+same inputs regardless of \code{workers} -- but the exact per-sample
+offset is an internal implementation detail, not a public contract.}
+
+\item{workers}{integer; number of samples to process in parallel via a
+\code{parallel::makeCluster()} PSOCK cluster. Default \code{1}
+processes samples sequentially. Works cross-platform (including
+Windows) since each worker is a separate process, not a fork --
+necessary because \code{CytoML}'s workspace/GatingSet objects are
+C++ external pointers that cannot be shared across a process
+boundary; each worker re-opens the workspace independently.}
 }
 \value{
 Wide tibble, one row per event: \code{file_name}, one column
