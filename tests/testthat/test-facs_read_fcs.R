@@ -120,6 +120,31 @@ test_that("facs_read_fcs_gated() downsamples to max_events per sample, reproduci
   expect_identical(result_a, result_b)
 })
 
+test_that("facs_read_fcs_gated() with workers = 2 matches workers = 1 output when max_events and seed are set", {
+  skip_if_not(dir.exists(fcs_dir), skip_msg)
+
+  result_seq <- facs_read_fcs_gated(
+    wsp_path   = wsp_path,
+    gate_path  = cd45_gate,
+    markers    = c("CD4", "CD45"),
+    max_events = 500,
+    seed       = 42,
+    workers    = 1
+  )
+  result_par <- facs_read_fcs_gated(
+    wsp_path   = wsp_path,
+    gate_path  = cd45_gate,
+    markers    = c("CD4", "CD45"),
+    max_events = 500,
+    seed       = 42,
+    workers    = 2
+  )
+
+  result_seq <- dplyr::arrange(result_seq, file_name, CD4, CD45)
+  result_par <- dplyr::arrange(result_par, file_name, CD4, CD45)
+  expect_equal(result_seq, result_par)
+})
+
 test_that("facs_read_fcs_gated() auto-derives fcs_dir from the wsp filename", {
   skip_if_not(dir.exists(fcs_dir), skip_msg)
 

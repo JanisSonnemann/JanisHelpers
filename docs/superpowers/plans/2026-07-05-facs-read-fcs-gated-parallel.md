@@ -363,6 +363,8 @@ Two things to note:
 
 - [ ] **Step 4: Add `workers` argument and dispatch branching to `facs_read_fcs_gated()`**
 
+**Revision note (discovered during implementation):** The initial approach documented below using `parallel::clusterExport()` silently allowed PSOCK workers to resolve and execute a stale, separately-installed copy of `resolve_markers_()` instead of the current in-memory version from `devtools::load_all()` — a real bug that would cause test failures and incorrect results when the package under development differs from the installed copy. This was confirmed via canary-function testing (monkey-patching `resolve_markers_()` in the dev namespace to throw a distinctive error; the old approach silently ignored it on the worker, whereas the corrected approach reliably triggered it). The fix documented here uses environment re-homing instead: `read_one_sample_solo_()`'s internal environment is re-homed from the package namespace onto a plain environment containing only the current `resolve_markers_()`, and `parLapply()` ships the entire (now safe) worker closure by value, with no explicit `clusterExport()`/`clusterEvalQ()` needed. This was verified against the real fixture to produce identical results while fixing the bug.
+
 Replace this block (the one written in Task 1 Step 2):
 
 ```r
@@ -394,9 +396,33 @@ with:
 ```r
   ws <- CytoML::open_flowjo_xml(wsp_path)
   sample_names <- resolve_group_samples_(ws, group)
+  rm(ws)
+
+  # read_one_sample_solo_()'s own environment() attribute is the package
+  # namespace. Its internal (non-::-qualified) call to resolve_markers_()
+  # would otherwise resolve via that namespace when reconstructed on a PSOCK
+  # worker -- which loads whatever's actually *installed* there, not the
+  # code currently in memory here (e.g. under devtools::load_all()).
+  # Re-homing it onto a plain environment before use fixes this; verified
+  # via canary-function testing against the real fixture. The new
+  # environment's parent is explicitly baseenv() (not the default, which
+  # would chain up through this frame to the package namespace) -- base R
+  # functions the function body needs (`{`, `character()`, `warning()`,
+  # `withCallingHandlers()`, etc.) still resolve via baseenv(), but a
+  # future edit that adds another bare (package-level) internal helper
+  # call to read_one_sample_solo_() without also adding it here will now
+  # fail fast with "object not found" rather than silently falling
+  # through to a possibly-stale value, reintroducing the exact bug class
+  # just fixed. (emptyenv() was tried first per an earlier review
+  # suggestion but breaks even base-function lookup inside the
+  # function body -- confirmed empirically, see task report.)
+  export_env <- new.env(parent = baseenv())
+  export_env$resolve_markers_ <- resolve_markers_
+  read_one_sample_solo_export_ <- read_one_sample_solo_
+  environment(read_one_sample_solo_export_) <- export_env
 
   worker_fn <- function(i) {
-    read_one_sample_solo_(
+    read_one_sample_solo_export_(
       wsp_path       = wsp_path,
       fcs_dir        = fcs_dir,
       group          = group,
@@ -413,16 +439,6 @@ with:
   results <- if (workers > 1L) {
     cl <- parallel::makeCluster(workers)
     on.exit(parallel::stopCluster(cl), add = TRUE)
-    # read_one_sample_solo_()/resolve_markers_() must be shipped to each
-    # worker by value (not re-resolved by name on the worker), since a
-    # PSOCK worker is a fresh R process that may see a different
-    # installed copy of this package than the one currently running here
-    # (e.g. under devtools::load_all() during development).
-    parallel::clusterExport(
-      cl,
-      varlist = c("read_one_sample_solo_", "resolve_markers_"),
-      envir   = environment(read_one_sample_solo_)
-    )
     parallel::parLapply(cl, seq_along(sample_names), worker_fn)
   } else {
     purrr::map(seq_along(sample_names), worker_fn)
