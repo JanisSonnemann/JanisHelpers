@@ -98,3 +98,54 @@ test_that("facs_plot_cluster_abundance() filters to significant clusters when si
   built <- ggplot2::ggplot_build(p)
   expect_equal(nrow(built$layout$layout), 1L)
 })
+
+heatmap_input <- function() {
+  tibble::tibble(
+    metacluster = factor(c(1, 1, 2, 2)),
+    marker      = c("CD44", "Foxp3", "CD44", "Foxp3"),
+    median      = c(2, 5, 20, 1)
+  )
+}
+
+test_that("facs_plot_cluster_heatmap() returns a ggplot object for scale = 'zscore'", {
+  p <- facs_plot_cluster_heatmap(heatmap_input())
+  expect_s3_class(p, "ggplot")
+})
+
+test_that("facs_plot_cluster_heatmap() returns a ggplot object for scale = 'raw'", {
+  p <- facs_plot_cluster_heatmap(heatmap_input(), scale = "raw")
+  expect_s3_class(p, "ggplot")
+})
+
+test_that("facs_plot_cluster_heatmap() z-scores per marker, reaching pure blue/red at the extremes", {
+  # heatmap_input()'s per-marker values are symmetric around each marker's
+  # own mean by construction (CD44: 2/20, mean 11; Foxp3: 5/1, mean 3), so
+  # the z-scored fill data is exactly symmetric around 0 -- scale_fill_
+  # gradient2()'s default midpoint = 0 rescaling then reaches pure "low"/
+  # "high" colors at the min/max, confirmed directly (see the plan's
+  # "Verified mechanics" section).
+  p <- facs_plot_cluster_heatmap(heatmap_input(), scale = "zscore")
+  built <- ggplot2::ggplot_build(p)
+  expect_setequal(built$data[[1]]$fill, c("#0000FF", "#FF0000"))
+})
+
+test_that("facs_plot_cluster_heatmap() errors when cluster_col is not found", {
+  expect_error(
+    facs_plot_cluster_heatmap(heatmap_input(), cluster_col = "NotAColumn"),
+    "NotAColumn"
+  )
+})
+
+test_that("facs_plot_cluster_heatmap() errors when marker column is missing", {
+  dat <- dplyr::select(heatmap_input(), !marker)
+  expect_error(facs_plot_cluster_heatmap(dat), "marker")
+})
+
+test_that("facs_plot_cluster_heatmap() errors when median column is missing", {
+  dat <- dplyr::select(heatmap_input(), !median)
+  expect_error(facs_plot_cluster_heatmap(dat), "median")
+})
+
+test_that("facs_plot_cluster_heatmap() rejects an invalid scale value", {
+  expect_error(facs_plot_cluster_heatmap(heatmap_input(), scale = "NotAScale"))
+})
