@@ -259,3 +259,41 @@ test_that("calc_bubble_fc_() forces pairwise wilcox even with >2 groups when tes
   )$p.value
   expect_equal(result$p_value[result$comparison == "low"], expected_low_p, tolerance = 1e-8)
 })
+
+test_that("plot_bubble_fc() returns a ggplot object", {
+  data <- make_data_(
+    control.CD4 = c(9.7, 9.9, 10.1, 10.3),
+    treated.CD4 = c(19.6, 19.9, 20.1, 20.4)
+  )
+  p <- plot_bubble_fc(data, control = "control")
+  expect_s3_class(p, "ggplot")
+})
+
+test_that("plot_bubble_fc() captions the control group", {
+  data <- make_data_(
+    control.CD4 = c(9.7, 9.9, 10.1, 10.3),
+    treated.CD4 = c(19.6, 19.9, 20.1, 20.4)
+  )
+  p <- plot_bubble_fc(data, control = "control")
+  expect_match(p$labels$caption, "control")
+})
+
+test_that("plot_bubble_fc() builds for a 3-group (kruskal) comparison without error", {
+  data <- make_data_(
+    control.CD4 = c(9.7, 9.9, 10.1, 10.3),
+    low.CD4 = c(14.6, 14.9, 15.1, 15.4),
+    high.CD4 = c(19.6, 19.9, 20.1, 20.4)
+  )
+  p <- plot_bubble_fc(data, control = "control")
+  expect_no_error(ggplot2::ggplot_build(p))
+})
+
+test_that("plot_bubble_fc() builds when some cells are untestable (NA p-value)", {
+  data <- tibble::tibble(
+    group = c("control", "treated", "treated", "treated"),
+    population = c("CD3", "CD3", "CD3", "CD3"),
+    value = c(10, 19.6, 19.9, 20.1)
+  )
+  p <- suppressWarnings(plot_bubble_fc(data, control = "control"))
+  expect_no_error(ggplot2::ggplot_build(p))
+})

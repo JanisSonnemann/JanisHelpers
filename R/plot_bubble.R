@@ -1,3 +1,86 @@
+#' Bubble plot of group-vs-control fold-change across FACS populations
+#'
+#' @description
+#' Compares one or more groups against an explicitly named control group,
+#' one column per group-vs-control comparison and one row per population.
+#' Each point is colored and sized by the log2 fold-change of the group's
+#' mean value versus the control's, and annotated with a significance-star
+#' summary from `test`. `data` must already be filtered to a single
+#' `metric` and a single `tissue` (if those columns are present).
+#'
+#' @param data tibble already filtered to one metric and one tissue; must
+#'   contain `group_col`, `population_col`, `value_col`.
+#' @param control character; value in `group_col` treated as the
+#'   baseline. Every other distinct value is compared against it.
+#' @param group_col character; column in `data` holding group labels.
+#'   Default `"group"`.
+#' @param population_col character; column in `data` holding
+#'   population names. Default `"population"`.
+#' @param value_col character; column in `data` holding the numeric
+#'   measurement. Default `"value"`.
+#' @param test character; one of `"auto"` (default), `"wilcox"`,
+#'   `"t.test"`, `"kruskal"`. `"auto"` uses pairwise
+#'   `stats::wilcox.test()` when there are 2 groups (incl. control) and
+#'   `stats::kruskal.test()` + `rstatix::dunn_test()` post-hoc when there
+#'   are more than 2.
+#' @param p_adjust_method character; passed to `stats::p.adjust()`
+#'   (wilcox/t.test) or `rstatix::dunn_test()`'s own
+#'   `p.adjust.method` (kruskal). Default `"BH"`.
+#' @param summary_fun function; aggregator applied to each group's values
+#'   when computing fold-change. Default `mean`.
+#' @param pseudocount numeric; added to both summary values before
+#'   dividing, avoiding `log2(0)`/`Inf`. Default `0.5`.
+#'
+#' @returns A `ggplot` object.
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#'   dat <- facs_read_wsp("experiment.wsp", keywords = c("group"))$data |>
+#'     dplyr::filter(metric == "FractionOfParent", tissue == "Spleen")
+#'   plot_bubble_fc(dat, control = "control")
+#' }
+plot_bubble_fc <- function(data,
+                            control,
+                            group_col = "group",
+                            population_col = "population",
+                            value_col = "value",
+                            test = "auto",
+                            p_adjust_method = "BH",
+                            summary_fun = mean,
+                            pseudocount = 0.5) {
+
+  fc_data <- calc_bubble_fc_(
+    data, control, group_col, population_col, value_col,
+    test, p_adjust_method, summary_fun, pseudocount
+  )
+
+  ggplot2::ggplot(fc_data, ggplot2::aes(x = comparison, y = population)) +
+    ggplot2::geom_point(ggplot2::aes(
+      color = log2fc, size = abs(log2fc), shape = is.na(p_value)
+    )) +
+    ggplot2::geom_text(ggplot2::aes(label = stars), vjust = -1.2, size = 3.5) +
+    ggplot2::scale_color_gradient2(
+      low = "#2a78d6", mid = "#f0efec", high = "#e34948", midpoint = 0,
+      name = "log2FC"
+    ) +
+    ggplot2::scale_size_continuous(range = c(2, 10), name = "|log2FC|") +
+    ggplot2::scale_shape_manual(values = c(`FALSE` = 16, `TRUE` = 1), guide = "none") +
+    ggplot2::labs(
+      x = "Comparison",
+      y = "Population",
+      caption = glue::glue("Compared to control: {control}")
+    ) +
+    ggplot2::theme_minimal() +
+    ggplot2::theme(
+      panel.grid.major = ggplot2::element_line(color = "#e1e0d9", linewidth = 0.3),
+      panel.grid.minor = ggplot2::element_blank(),
+      axis.text = ggplot2::element_text(color = "#898781"),
+      axis.title = ggplot2::element_text(color = "#0b0b0b"),
+      plot.caption = ggplot2::element_text(color = "#52514e")
+    )
+}
+
 # Stats engine behind plot_bubble_fc(): computes per-population,
 # per-comparison log2 fold-change and test statistics.
 calc_bubble_fc_ <- function(data, control, group_col, population_col,
