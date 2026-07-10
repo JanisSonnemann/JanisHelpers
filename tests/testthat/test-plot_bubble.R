@@ -125,3 +125,90 @@ test_that("calc_bubble_fc_() warns and computes a finite log2fc for <2 observati
   )
   expect_true(is.finite(result$log2fc))
 })
+
+test_that("calc_bubble_fc_() computes a wilcox p-value for a 2-group comparison", {
+  data <- make_data_(
+    control.CD4 = c(9.7, 9.9, 10.1, 10.3),
+    treated.CD4 = c(19.6, 19.9, 20.1, 20.4)
+  )
+  result <- calc_bubble_fc_(
+    data, control = "control", group_col = "group",
+    population_col = "population", value_col = "value",
+    test = "wilcox", p_adjust_method = "none", summary_fun = mean, pseudocount = 0
+  )
+  expected_p <- stats::wilcox.test(
+    data$value[data$group == "control"], data$value[data$group == "treated"]
+  )$p.value
+  expect_equal(result$p_value, expected_p, tolerance = 1e-8)
+})
+
+test_that("calc_bubble_fc_() uses stats::t.test when test = \"t.test\"", {
+  data <- make_data_(
+    control.CD4 = c(9.7, 9.9, 10.1, 10.3),
+    treated.CD4 = c(19.6, 19.9, 20.1, 20.4)
+  )
+  result <- calc_bubble_fc_(
+    data, control = "control", group_col = "group",
+    population_col = "population", value_col = "value",
+    test = "t.test", p_adjust_method = "none", summary_fun = mean, pseudocount = 0
+  )
+  expected_p <- stats::t.test(
+    data$value[data$group == "control"], data$value[data$group == "treated"]
+  )$p.value
+  expect_equal(result$p_value, expected_p, tolerance = 1e-8)
+})
+
+test_that("calc_bubble_fc_() adjusts p-values per comparison column", {
+  data <- make_data_(
+    control.CD4 = c(9.7, 9.9, 10.1, 10.3),
+    treated.CD4 = c(19.6, 19.9, 20.1, 20.4),
+    control.CD8 = c(4.8, 4.9, 5.1, 5.2),
+    treated.CD8 = c(4.85, 4.95, 5.05, 5.15)
+  )
+  raw <- calc_bubble_fc_(
+    data, control = "control", group_col = "group",
+    population_col = "population", value_col = "value",
+    test = "wilcox", p_adjust_method = "none", summary_fun = mean, pseudocount = 0
+  )
+  adjusted <- calc_bubble_fc_(
+    data, control = "control", group_col = "group",
+    population_col = "population", value_col = "value",
+    test = "wilcox", p_adjust_method = "bonferroni", summary_fun = mean, pseudocount = 0
+  )
+  expect_equal(
+    sort(adjusted$p_value),
+    sort(stats::p.adjust(raw$p_value, method = "bonferroni")),
+    tolerance = 1e-8
+  )
+})
+
+test_that("calc_bubble_fc_() assigns stars based on p-value thresholds", {
+  data <- make_data_(
+    control.CD4 = c(9.7, 9.9, 10.1, 10.3),
+    treated.CD4 = c(119.6, 119.9, 120.1, 120.4),
+    control.CD8 = c(10, 10, 10, 10.001),
+    treated.CD8 = c(10, 10.001, 10, 10)
+  )
+  result <- calc_bubble_fc_(
+    data, control = "control", group_col = "group",
+    population_col = "population", value_col = "value",
+    test = "t.test", p_adjust_method = "none", summary_fun = mean, pseudocount = 0
+  )
+  expect_equal(result$stars[result$population == "CD4"], "***")
+  expect_equal(result$stars[result$population == "CD8"], "")
+})
+
+test_that("calc_bubble_fc_() leaves p_value/stars NA/blank for <2-observation cells", {
+  data <- tibble::tibble(
+    group = c("control", "treated", "treated", "treated"),
+    population = c("CD3", "CD3", "CD3", "CD3"),
+    value = c(10, 19.6, 19.9, 20.1)
+  )
+  result <- suppressWarnings(calc_bubble_fc_(
+    data, control = "control", group_col = "group",
+    population_col = "population", value_col = "value",
+    test = "wilcox", p_adjust_method = "none", summary_fun = mean, pseudocount = 0.5
+  ))
+  expect_true(is.na(result$p_value))
+  expect_equal(result$stars, "")
+})

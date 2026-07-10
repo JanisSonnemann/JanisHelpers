@@ -25,6 +25,11 @@ calc_bubble_fc_ <- function(data, control, group_col, population_col,
   group_levels <- unique(data[[group_col]])
   comparison_levels <- setdiff(group_levels, control)
 
+  resolved_test <- test
+  if (test == "auto") {
+    resolved_test <- if (length(group_levels) > 2L) "kruskal" else "wilcox"
+  }
+
   fc_table <- tidyr::expand_grid(
     population = population_levels,
     comparison = comparison_levels
@@ -52,11 +57,60 @@ calc_bubble_fc_ <- function(data, control, group_col, population_col,
       )
     })
 
+  p_values <- calc_bubble_p_values_(
+    data, control, group_col, population_col, value_col,
+    resolved_test, p_adjust_method, fc_table
+  )
+
   fc_table |>
-    dplyr::mutate(p_value = NA_real_, stars = "") |>
     dplyr::select(!testable) |>
+    dplyr::left_join(p_values, by = c("population", "comparison")) |>
     dplyr::mutate(
+      stars = dplyr::case_when(
+        is.na(p_value) ~ "",
+        p_value < 0.001 ~ "***",
+        p_value < 0.01  ~ "**",
+        p_value < 0.05  ~ "*",
+        TRUE ~ ""
+      ),
       population = factor(population, levels = population_levels),
       comparison = factor(comparison, levels = comparison_levels)
     )
+}
+
+adjust_p_ <- function(p, method) {
+  out <- rep(NA_real_, length(p))
+  non_na <- !is.na(p)
+  out[non_na] <- stats::p.adjust(p[non_na], method = method)
+  out
+}
+
+calc_bubble_p_values_ <- function(data, control, group_col, population_col,
+                                   value_col, resolved_test, p_adjust_method,
+                                   fc_table) {
+  if (resolved_test %in% c("wilcox", "t.test")) {
+    raw <- fc_table |>
+      purrr::pmap_dfr(function(population, comparison, log2fc, testable) {
+        p_value <- NA_real_
+        if (testable) {
+          control_values <- data[[value_col]][
+            data[[population_col]] == population & data[[group_col]] == control
+          ]
+          group_values <- data[[value_col]][
+            data[[population_col]] == population & data[[group_col]] == comparison
+          ]
+          p_value <- if (resolved_test == "wilcox") {
+            stats::wilcox.test(control_values, group_values)$p.value
+          } else {
+            stats::t.test(control_values, group_values)$p.value
+          }
+        }
+        tibble::tibble(population = population, comparison = comparison, p_value = p_value)
+      })
+
+    raw |>
+      dplyr::group_by(comparison) |>
+      dplyr::mutate(p_value = adjust_p_(p_value, p_adjust_method)) |>
+      dplyr::ungroup()
+  }
 }
