@@ -35,6 +35,7 @@ devtools::install()    # full install
 **Domains** (use exactly these prefixes):
 - `facs_` — FlowJo / flow cytometry
 - `analysis_` — statistical summaries and tests
+- `plot_` — ggplot2 visualization of FACS/analysis data
 - `report_` — RMarkdown rendering
 - `meta_` — experiment/subject metadata import and annotation
 - `wrangle_` — general data wrangling [stub — no functions yet]
