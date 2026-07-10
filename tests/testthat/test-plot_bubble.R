@@ -212,3 +212,50 @@ test_that("calc_bubble_fc_() leaves p_value/stars NA/blank for <2-observation ce
   expect_true(is.na(result$p_value))
   expect_equal(result$stars, "")
 })
+
+test_that("calc_bubble_fc_() dispatches to kruskal+dunn when test = \"auto\" and there are >2 groups", {
+  data <- make_data_(
+    control.CD4 = c(9.7, 9.9, 10.1, 10.3),
+    low.CD4 = c(14.6, 14.9, 15.1, 15.4),
+    high.CD4 = c(19.6, 19.9, 20.1, 20.4)
+  )
+  result <- calc_bubble_fc_(
+    data, control = "control", group_col = "group",
+    population_col = "population", value_col = "value",
+    test = "auto", p_adjust_method = "BH", summary_fun = mean, pseudocount = 0
+  )
+  expect_equal(sort(as.character(result$comparison)), c("high", "low"))
+  expect_true(all(!is.na(result$p_value)))
+  expect_equal(result$log2fc[result$comparison == "low"], log2(1.5), tolerance = 1e-8)
+  expect_equal(result$log2fc[result$comparison == "high"], log2(2), tolerance = 1e-8)
+})
+
+test_that("calc_bubble_fc_() forces kruskal+dunn even with only 2 groups when test = \"kruskal\"", {
+  data <- make_data_(
+    control.CD4 = c(9.7, 9.9, 10.1, 10.3),
+    treated.CD4 = c(19.6, 19.9, 20.1, 20.4)
+  )
+  result <- calc_bubble_fc_(
+    data, control = "control", group_col = "group",
+    population_col = "population", value_col = "value",
+    test = "kruskal", p_adjust_method = "BH", summary_fun = mean, pseudocount = 0
+  )
+  expect_false(is.na(result$p_value))
+})
+
+test_that("calc_bubble_fc_() forces pairwise wilcox even with >2 groups when test = \"wilcox\"", {
+  data <- make_data_(
+    control.CD4 = c(9.7, 9.9, 10.1, 10.3),
+    low.CD4 = c(14.6, 14.9, 15.1, 15.4),
+    high.CD4 = c(19.6, 19.9, 20.1, 20.4)
+  )
+  result <- calc_bubble_fc_(
+    data, control = "control", group_col = "group",
+    population_col = "population", value_col = "value",
+    test = "wilcox", p_adjust_method = "none", summary_fun = mean, pseudocount = 0
+  )
+  expected_low_p <- stats::wilcox.test(
+    data$value[data$group == "control"], data$value[data$group == "low"]
+  )$p.value
+  expect_equal(result$p_value[result$comparison == "low"], expected_low_p, tolerance = 1e-8)
+})
