@@ -228,6 +228,19 @@ test_that("calc_bubble_fc_() dispatches to kruskal+dunn when test = \"auto\" and
   expect_true(all(!is.na(result$p_value)))
   expect_equal(result$log2fc[result$comparison == "low"], log2(1.5), tolerance = 1e-8)
   expect_equal(result$log2fc[result$comparison == "high"], log2(2), tolerance = 1e-8)
+
+  expected_dunn <- rstatix::dunn_test(
+    data, value ~ group, p.adjust.method = "BH"
+  ) |>
+    dplyr::filter(group1 == "control" | group2 == "control")
+  expected_low_p <- expected_dunn$p.adj[
+    expected_dunn$group1 == "low" | expected_dunn$group2 == "low"
+  ]
+  expected_high_p <- expected_dunn$p.adj[
+    expected_dunn$group1 == "high" | expected_dunn$group2 == "high"
+  ]
+  expect_equal(result$p_value[result$comparison == "low"], expected_low_p, tolerance = 1e-8)
+  expect_equal(result$p_value[result$comparison == "high"], expected_high_p, tolerance = 1e-8)
 })
 
 test_that("calc_bubble_fc_() forces kruskal+dunn even with only 2 groups when test = \"kruskal\"", {
