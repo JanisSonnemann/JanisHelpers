@@ -35,6 +35,7 @@ devtools::install()    # full install
 **Domains** (use exactly these prefixes):
 - `facs_` — FlowJo / flow cytometry
 - `analysis_` — statistical summaries and tests
+- `plot_` — ggplot2 visualization of FACS/analysis data
 - `report_` — RMarkdown rendering
 - `meta_` — experiment/subject metadata import and annotation
 - `wrangle_` — general data wrangling [stub — no functions yet]
@@ -112,6 +113,19 @@ New functions must follow the `domain_verb` pattern. Never add a function that d
   from either side or if non-`by` column names collide. Warns (rows kept,
   `NA` filled) if a `by` combination in `data` has no match in `meta`.
 
+### `plot_bubble_fc()` — group-vs-control fold-change bubble plot
+- **Input**: long tibble already filtered to one `metric` and one `tissue`
+  (if those columns are present); must contain a group column (default
+  `group`), a population column (default `population`), and a numeric
+  value column (default `value`).
+- **Output**: a `ggplot` object (not a tibble) — a bubble plot with one
+  column per non-control group and one row per population. Point color =
+  signed log2 fold-change (group mean vs `control` mean, diverging
+  blue/red), point size = `abs(log2fc)`, overlaid with significance stars
+  (`*`/`**`/`***`) from `test` (`"auto"`: `wilcox.test` for 2 groups,
+  `kruskal.test` + `rstatix::dunn_test()` post-hoc for >2). Caption names
+  the `control` group.
+
 ---
 
 ## Dependency philosophy
@@ -177,6 +191,7 @@ Current `Imports`: `CytoML`, `diffcyt`, `dplyr`, `fcexpr`, `flowCore`, `FlowSOM`
   - All `calc_restim_proportions_` variable-binding notes (`population`, `metric`, `value`, `n`, `ref_count`, `proportion`, `.data`) — bare column names inside dplyr verbs, same false-positive pattern as `facs_calc_pct_of`/`facs_calc_count_per_g` above. `calc_restim_proportions_` is unexported (an internal helper shared by both `facs_calc_log2fc()` and `facs_calc_diff()`), so its notes are attributed to `R/facs_calc.R` as a whole rather than one function. Its nested `is_constant_` closure (used to detect passthrough columns constant within each `mouse_ID` x `tissue` group) adds its own notes (`mouse_ID`, `tissue`, `.data`, `n_distinct`) for the same bare-column-reference reason. `facs_calc_log2fc`'s and `facs_calc_diff`'s own top-level notes are limited to `.data`, from the anonymous `function(x) ...` closure each passes to `dplyr::mutate(dplyr::across(...))` to compute the log2-fold-change/difference column.
   - `facs_read_fcs_gated` variable-binding notes (`key`, `value`) — bare column names inside `dplyr::filter()`/`tidyr::pivot_wider()`, same false-positive pattern as `facs_read_wsp`/`parse_keywords_` above. `facs_read_fcs_gated()` reads its `keywords` argument from the `.wsp` XML via the shared `parse_keywords_()` helper (not from `flowWorkspace::keyword()`, which only sees keywords physically embedded in the raw `.fcs` file's TEXT segment and misses keywords typed into FlowJo's UI but never written back to the `.fcs` file) — this is the same long-tibble (`file_name`, `key`, `value`) shape `facs_read_wsp()` already pivots, hence the identical notes.
   - `facs_calc_cluster_freq` variable-binding notes (`file_name`, `.data`, `n`, `total`) — bare column names inside `dplyr`/`tidyr` verbs, same false-positive pattern as `facs_calc_pct_of`/`facs_calc_count_per_g` above. Its nested `is_constant_` closure (used to detect passthrough columns constant within each `file_name` group -- the single-tissue-per-file analog of `calc_restim_proportions_`'s own `is_constant_` helper) adds its own notes (`file_name`, `.data`, `n_distinct`) for the same bare-column-reference reason. `facs_cluster_flowsom()`, the FlowSOM clustering function whose output this helper summarizes, produces no `R CMD check` notes of its own.
+  - All `plot_bubble_fc`/`calc_bubble_fc_`/`calc_bubble_p_values_` variable-binding notes (`testable`, `population`, `comparison`, `log2fc`, `p_value`, `group1`, `group2`, `p.adj`, `stars`) — bare column names inside `dplyr`/`ggplot2`/`purrr` verbs, same false-positive pattern as every other domain above. `stars` (the significance-star label column plotted via `ggplot2::aes(label = stars)`) additionally triggers `R CMD check`'s `Consider adding importFrom("graphics", "stars")` suggestion, since `graphics::stars()` happens to share the name -- also a false positive, as it's a bare column reference, not a call to `graphics::stars()`. `adjust_p_()`, the internal `stats::p.adjust()` wrapper shared by both group-vs-control test paths, produces no notes of its own (it only operates on a plain numeric vector, no data-frame columns).
   - `facs_plot_umap` variable-binding notes (`UMAP1`, `UMAP2`, `.data`) — bare column names and the rlang tidy-eval pronoun inside `ggplot2::aes()`, same false-positive pattern as `.data` usage elsewhere in the package (see the `analysis_stats.R` bullet above). `facs_reduce_umap()` (Stage 3's other new function, which computes the `UMAP1`/`UMAP2` columns `facs_plot_umap()` consumes) produces no `R CMD check` notes of its own -- it accesses columns via `$`/`[[` subsetting rather than bare tidy-eval names.
   - `facs_test_cluster_abundance` variable-binding notes (`file_name`, `:=`, `cluster_id`) — `file_name` is a bare column name inside `dplyr::rename(sample_id = file_name)`/`dplyr::select(dplyr::all_of(...))`/`tidyr::pivot_wider()`, same false-positive pattern as elsewhere. `:=` is the rlang walrus operator used in the closing `dplyr::rename(results, !!cluster_col := cluster_id)` call (renames the `diffcyt` result column back to the user-supplied `cluster_col` name) -- a standard dplyr/rlang non-standard-evaluation idiom, not an actually-undefined function. `cluster_id` is the bare right-hand-side reference in that same `rename()` call, matching the `cluster_id` column name `diffcyt::testDA_*()` returns in its `rowData`.
   - `facs_plot_cluster_abundance` variable-binding notes (`p_adj`, `.data`, `fraction`) — `p_adj` is a bare column name inside `dplyr::filter(p_adj <= p_adj_threshold)`; `.data` is the rlang tidy-eval pronoun used in `.data[[cluster_col]]`/`.data[[group_col]]` to subset by the user-supplied cluster/grouping column names; `fraction` is a bare column name inside `ggplot2::aes(y = fraction)` -- same false-positive pattern as `facs_plot_umap` above.
