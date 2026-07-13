@@ -8,3 +8,6 @@
 # FACS test fixtures containing real research metadata (see tests/fixtures/README.md)
 tests/fixtures/Treg.wsp
 tests/fixtures/Treg/
+
+# Local git worktrees (scratch, not tracked)
+.worktrees/
