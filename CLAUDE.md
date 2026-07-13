@@ -38,6 +38,7 @@ devtools::install()    # full install
 - `plot_` — ggplot2 visualization of FACS/analysis data
 - `report_` — RMarkdown rendering
 - `meta_` — experiment/subject metadata import and annotation
+- `elisa_` — multiplex bead ELISA (Luminex/Bio-Plex) import
 - `wrangle_` — general data wrangling [stub — no functions yet]
 - `db_` — database access [stub — no functions yet]
 
