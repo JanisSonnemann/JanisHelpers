@@ -42,9 +42,12 @@ before implementation, per the package's naming-convention rule.
    literal header string, since the real headers embed `\r\n`
    (`"Backcalc\r\n(pg/ml)"`, `"Result\r\nStatus"`) and matching on that
    literal text would be fragile.
-3. **Drop padding rows.** Rows where `Sample` is `NA` are dropped — the sheet
-   is padded with blank rows past the real data (observed: 1001 rows in
-   `Curve`, 56 real vs many blank in `Unknowns`).
+3. **Drop padding rows.** Rows where `Sample` is `NA` are dropped, as a
+   defensive safeguard against blank padding rows (the `Curve` sheet, e.g.,
+   has 1001 rows for ~20 real data points — a pattern seen elsewhere in
+   these workbooks even though the `Unknowns` sheet in both current
+   fixtures happens to contain no padding, 56 rows of real data with no
+   `NA` `Sample` values).
 4. **Parse the unit.** Extract the parenthesized unit from the Backcalc
    column's header text via `stringr::str_extract()` (e.g. `"(pg/ml)"` ->
    `"pg/ml"`). Warn and set `NA` if no match is found.
