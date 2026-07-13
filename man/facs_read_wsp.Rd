@@ -21,9 +21,14 @@ A named list with three elements:
 \describe{
 \item{\code{data}}{Long-format tibble, one row per
 \code{file_name x population_full_path x metric}.
-Columns: \code{file_name}, \code{population_full_path},
-\code{population}, \code{metric}, \code{value}, plus any
-requested \code{keywords}.}
+Columns: \code{file_name}, \code{population_full_path} (chr),
+\code{population} (factor; leaf gate name, levels ordered by
+first-encountered depth-first traversal of the gating hierarchy,
+matching \code{population_full_path} order -- if the same leaf
+name occurs under more than one parent it collapses to a single
+level positioned at its first occurrence; use
+\code{population_full_path} to disambiguate), \code{metric},
+\code{value}, plus any requested \code{keywords}.}
 \item{\code{meta}}{Wide-format tibble, one row per file.
 Columns: \code{file_name}, \code{DATE}, \code{BTIM},
 \code{ETIM}, \code{CYT}, \code{INST}, \code{OP}, \code{TOT}.

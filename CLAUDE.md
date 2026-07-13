@@ -74,7 +74,7 @@ New functions must follow the `domain_verb` pattern. Never add a function that d
 |---|---|---|
 | `FileName` | chr | FCS filename as stored in workspace |
 | `PopulationFullPath` | chr | Full gating hierarchy path |
-| `Population` | chr | Leaf gate name (`basename(PopulationFullPath)`) |
+| `Population` | factor | Leaf gate name (`basename(PopulationFullPath)`); levels ordered by first-encountered depth-first gating-hierarchy traversal (matching `PopulationFullPath` order), not alphabetically |
 | `metric` | chr | `"Count"`, `"FractionOfParent"`, or `"<Stat>_<Label>"` e.g. `"Median_CD4"` |
 | `value` | dbl | Numeric measurement |
 | `<keyword>` | chr | One column per requested keyword (e.g. `mouse_ID`, `group`) |
