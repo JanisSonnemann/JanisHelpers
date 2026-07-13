@@ -80,6 +80,7 @@ elisa_read_results <- function(path, cytokine = NULL) {
     ) |>
     dplyr::filter(!is.na(sample_id)) |>
     dplyr::mutate(
+      sample_id     = as.character(sample_id),
       cytokine      = cytokine,
       replicate     = as.integer(replicate),
       value         = suppressWarnings(as.numeric(value)),
