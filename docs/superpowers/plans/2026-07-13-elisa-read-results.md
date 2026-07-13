@@ -80,7 +80,7 @@ git commit -m "docs: declare elisa_ domain for multiplex ELISA import"
 
 Verified against the real fixtures during design (both files have an `Unknowns`-suffixed sheet with 56 real data rows, no `NA`-`Sample` padding rows):
 - `tests/fixtures/Results_IL-17A.xlsx`: sheet literally named `"Unknowns"`; `Backcalc` column is `chr` (contains `"OOR<"` text for 20 of 56 rows, across 10 distinct `sample_id`s: `25-7-5`, `25-7-11`, `25-7-12`, `25-7-13`, `25-7-14`, `25-7-20`, `25-7-21`, `25-7-24`, `25-7-25`, `25-7-28`); `result_status` for those rows is `"OOR<"`. Unit parses to `"pg/ml"`.
-- `tests/fixtures/Results_TNFa.xlsx`: sheet named `"TNFa_Unknowns"`; `Backcalc` column is fully numeric (no `"OOR<"`/`"OOR>"` text); 6 rows have `result_status == "<LLOQ"` but still carry a non-`NA` numeric `value` (e.g. `sample_id == "25-7-3"`, `replicate == 1`, `value == 1.303633`) — `<LLOQ` is a below-quantification-limit flag, distinct from out-of-range (`OOR`). Unit parses to `"pg/ml"`.
+- `tests/fixtures/Results_TNFa.xlsx`: sheet named `"TNFa_Unknowns"`; `Backcalc` column is fully numeric (no `"OOR<"`/`"OOR>"` text); 11 rows have `result_status == "<LLOQ"` but still carry a non-`NA` numeric `value` (e.g. `sample_id == "25-7-3"`, `replicate == 1`, `value == 1.303633`) — `<LLOQ` is a below-quantification-limit flag, distinct from out-of-range (`OOR`). Unit parses to `"pg/ml"`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -148,7 +148,7 @@ test_that("elisa_read_results() keeps a non-NA value for <LLOQ rows (below quant
   skip_if_not(file.exists(tnfa_path), tnfa_skip_msg)
   dat <- elisa_read_results(tnfa_path)
   lloq <- dplyr::filter(dat, result_status == "<LLOQ")
-  expect_equal(nrow(lloq), 6L)
+  expect_equal(nrow(lloq), 11L)
   expect_true(all(!is.na(lloq$value)))
   row <- dplyr::filter(lloq, sample_id == "25-7-3", replicate == 1L)
   expect_equal(row$value, 1.303633, tolerance = 1e-6)
