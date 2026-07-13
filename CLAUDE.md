@@ -127,6 +127,28 @@ New functions must follow the `domain_verb` pattern. Never add a function that d
   `kruskal.test` + `rstatix::dunn_test()` post-hoc for >2). Caption names
   the `control` group.
 
+### `elisa_read_results()` — multiplex ELISA back-calculated concentrations
+- **Input**: `path` = path to a `Results_<cytokine>.xlsx` multiplex bead
+  ELISA (Luminex/Bio-Plex) export. `cytokine` = optional label override,
+  default `NULL` derives it from the filename (`Results_<cytokine>.xlsx`).
+- **Output**: long tibble, one row per `sample_id x replicate`, read from
+  the sheet whose name ends in `"Unknowns"` (naming varies: plain
+  `"Unknowns"` or `"<cytokine>_Unknowns"`).
+
+| Column | Type | Notes |
+|---|---|---|
+| `cytokine` | chr | from filename or `cytokine` argument |
+| `sample_id` | chr | raw `Sample` value, e.g. `"25-7-1"` -- not assumed to equal `mouse_ID` |
+| `replicate` | int | from `Rep` |
+| `value` | dbl | back-calculated concentration; `NA` if out of standard-curve range (`"OOR<"`/`"OOR>"`) |
+| `unit` | chr | parsed from the Backcalc column header, e.g. `"pg/ml"` |
+| `result_status` | chr | `"OK"` / `"OOR<"` / `"OOR>"` / `"<LLOQ"` etc. |
+
+- Only the `Unknowns` sheet's per-replicate table is read; the `Curve` and
+  `Standards` sheets, and the sheet's own per-sample summary columns
+  (`Mean`/`SD`/`SEM`/`CV %`/`Final Result`), are out of scope -- use the
+  package's `analysis_` functions to summarize across replicates instead.
+
 ---
 
 ## Dependency philosophy
@@ -197,3 +219,4 @@ Current `Imports`: `CytoML`, `diffcyt`, `dplyr`, `fcexpr`, `flowCore`, `FlowSOM`
   - `facs_test_cluster_abundance` variable-binding notes (`file_name`, `:=`, `cluster_id`) — `file_name` is a bare column name inside `dplyr::rename(sample_id = file_name)`/`dplyr::select(dplyr::all_of(...))`/`tidyr::pivot_wider()`, same false-positive pattern as elsewhere. `:=` is the rlang walrus operator used in the closing `dplyr::rename(results, !!cluster_col := cluster_id)` call (renames the `diffcyt` result column back to the user-supplied `cluster_col` name) -- a standard dplyr/rlang non-standard-evaluation idiom, not an actually-undefined function. `cluster_id` is the bare right-hand-side reference in that same `rename()` call, matching the `cluster_id` column name `diffcyt::testDA_*()` returns in its `rowData`.
   - `facs_plot_cluster_abundance` variable-binding notes (`p_adj`, `.data`, `fraction`) — `p_adj` is a bare column name inside `dplyr::filter(p_adj <= p_adj_threshold)`; `.data` is the rlang tidy-eval pronoun used in `.data[[cluster_col]]`/`.data[[group_col]]` to subset by the user-supplied cluster/grouping column names; `fraction` is a bare column name inside `ggplot2::aes(y = fraction)` -- same false-positive pattern as `facs_plot_umap` above.
   - `facs_plot_cluster_heatmap` variable-binding notes (`marker`, `median`, `.data`, `fill_value`) — `marker` is a bare column name inside `dplyr::group_by(marker)` (and again inside `ggplot2::aes(x = marker, ...)`); `median` is a bare column name read inside the `dplyr::mutate(fill_value = ...)` z-score/raw branch (the per-marker, per-cluster median values `facs_calc_cluster_marker_medians()` already computed via namespaced `stats::median()`); `.data` is the rlang tidy-eval pronoun used in `.data[[cluster_col]]` to subset by the user-supplied cluster column name; `fill_value` is the column `dplyr::mutate()` defines and that is then referenced bare inside `ggplot2::aes(fill = fill_value)` -- same false-positive pattern as `facs_plot_cluster_abundance`/`facs_plot_umap` above. Because `median` also happens to name a base-R generic, this NOTE additionally prints a "Consider adding `importFrom("stats", "median")`" suggestion; no import is needed since `facs_plot_cluster_heatmap()` never calls `median()` as a function here -- it only reads the pre-computed `median` column -- so this is the same bare-column false positive, just with an extra suggestion line triggered by the name collision. `facs_calc_cluster_marker_medians()` (the function that produces the `marker`/`median` columns this consumes) produces no notes of its own: it resolves its columns entirely through `dplyr::across(dplyr::all_of(cluster_col))`/`dplyr::across(dplyr::all_of(markers), stats::median)` and `tidyr::pivot_longer(names_to =, values_to =)`, never referencing a column by a bare literal name.
+  - `elisa_read_results` variable-binding notes (`Rep`, `sample_id`, `value`, `result_status`) — bare column names inside `dplyr::select()`/`dplyr::filter()`/`dplyr::mutate()`, same false-positive pattern as every other domain above. `cytokine` and `unit`, referenced inside the same `dplyr::mutate()` call, are not flagged because both are ordinary local variables assigned earlier in the function body (`cytokine <- ...`/`unit <- stringr::str_extract(...)`), which codetools resolves without a note, the same reason `facs_calc_count_per_g`'s own formal arguments go unflagged above. `replicate` is also unflagged, but for a different reason: it collides with the base-R function `replicate()`, and codetools treats base-package names as always resolved -- unlike the `stats::median`/`graphics::stars` collisions elsewhere in this section, which still get flagged (plus an `importFrom` suggestion) because `stats` and `graphics` are non-base default-attached packages rather than base itself.
