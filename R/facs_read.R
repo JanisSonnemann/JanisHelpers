@@ -188,6 +188,11 @@ parse_populations_ <- function(doc, sample_ids = NULL) {
     dplyr::bind_rows()
 }
 
+population_gating_order_ <- function(pops) {
+  full_path_order <- unique(pops$population_full_path)
+  unique(basename(full_path_order))
+}
+
 # ---------------------------------------------------------------------------
 # Exported function
 # ---------------------------------------------------------------------------
@@ -293,6 +298,7 @@ facs_read_wsp <- function(path, group = NULL, keywords = NULL) {
 
   # Build data: population rows + optional keyword join
   data <- pops
+  data$population <- factor(data$population, levels = population_gating_order_(pops))
 
   if (!is.null(keywords) && length(keywords) > 0L) {
     user_kws <- kws |>

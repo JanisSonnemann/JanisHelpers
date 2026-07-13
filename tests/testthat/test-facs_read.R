@@ -146,3 +146,31 @@ test_that("populations gated downstream of a boolean gate are exported", {
     984
   )
 })
+
+test_that("population is a factor ordered by depth-first gating hierarchy traversal", {
+  skip_if_not(file.exists(wsp_path), skip_msg)
+  result <- suppressMessages(facs_read_wsp(wsp_path))
+
+  expect_true(is.factor(result$data$population))
+  expect_false(is.ordered(result$data$population))
+
+  expected_levels <- unique(basename(unique(result$data$population_full_path)))
+  expect_equal(levels(result$data$population), expected_levels)
+})
+
+test_that("ancestor populations sort before their descendants in the population factor", {
+  skip_if_not(file.exists(wsp_path), skip_msg)
+  result <- suppressMessages(facs_read_wsp(wsp_path))
+
+  paths <- unique(result$data$population_full_path)
+  level_index <- function(full_path) {
+    match(basename(full_path), levels(result$data$population))
+  }
+
+  for (child_path in paths) {
+    parent_path <- dirname(child_path)
+    if (parent_path %in% paths && parent_path != child_path) {
+      expect_lt(level_index(parent_path), level_index(child_path))
+    }
+  }
+})
