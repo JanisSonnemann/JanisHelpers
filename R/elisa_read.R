@@ -45,7 +45,7 @@ elisa_read_results <- function(path, cytokine = NULL) {
     ))
   }
 
-  raw <- readxl::read_excel(path, sheet = unknowns_sheet)
+  raw <- readxl::read_excel(path, sheet = unknowns_sheet, .name_repair = "unique_quiet")
 
   backcalc_col <- names(raw)[grepl("^Backcalc", names(raw))]
   status_col   <- names(raw)[grepl("^Result.*Status", names(raw))]
