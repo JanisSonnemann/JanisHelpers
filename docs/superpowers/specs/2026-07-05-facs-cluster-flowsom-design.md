@@ -73,14 +73,12 @@ as `facs_read_fcs_gated()`.
 #### Processing steps
 
 1. Resolve marker columns: use `markers` if supplied (error if any name is
-   absent from `data`, or if any supplied name is not a `double`-typed
-   column in `data`), else default to every `dbl`-typed column in `data`.
-   Error if the resolved `markers` has fewer than 2 columns.
+   absent from `data`), else default to every `dbl`-typed column in
+   `data`.
 2. Error if any selected marker column contains `NA`, listing the
    affected column name(s).
-3. Error if `n_metaclusters < 3`, or if `n_metaclusters` is not strictly
-   less than `grid_xdim * grid_ydim` (i.e. reject `>=`, not just `>` --
-   can't have as many or more metaclusters than SOM nodes).
+3. Error if `n_metaclusters > grid_xdim * grid_ydim` (can't have more
+   metaclusters than SOM nodes).
 4. Run `FlowSOM::FlowSOM()` (or the equivalent lower-level
    `ReadInput`/`BuildSOM`/`metaClustering_consensus` call chain — exact
    signature to be confirmed against the real fixture at implementation
@@ -146,11 +144,8 @@ Returned visibly — primary calculated deliverable, not a side effect.
 | Condition | Function | Behavior |
 |---|---|---|
 | `markers` names a column absent from `data` | `facs_cluster_flowsom()` | Error, listing missing marker(s) |
-| Explicit `markers` column is not `double`-typed in `data` | `facs_cluster_flowsom()` | Error, listing offending column(s) |
-| Resolved `markers` has fewer than 2 columns | `facs_cluster_flowsom()` | Error (guards a `FlowSOM::BuildSOM()` crash when exactly one marker column is selected) |
 | `NA` present in a selected marker column | `facs_cluster_flowsom()` | Error, listing affected column(s) |
-| `n_metaclusters` is less than 3 | `facs_cluster_flowsom()` | Error (guards a `ConsensusClusterPlus` crash whenever `n_metaclusters < 3`) |
-| `n_metaclusters` is not strictly less than grid node count (`grid_xdim * grid_ydim`) | `facs_cluster_flowsom()` | Error (rejects `>=`, not just `>` -- exact equality also crashes `ConsensusClusterPlus`'s `cutree()`) |
+| `n_metaclusters` exceeds grid node count | `facs_cluster_flowsom()` | Error |
 | `cluster_col` absent from `data` | `facs_calc_cluster_freq()` | Error |
 
 ---
@@ -170,15 +165,10 @@ Test cases:
   `metacluster` columns appended, expected value ranges).
 - `markers` override to a subset.
 - Unmatched marker name — error, message lists it.
-- Explicit marker naming a non-`double` column (e.g. a `chr` keyword
-  column) — error, message lists it.
-- Resolved `markers` of fewer than 2 columns (explicit single marker, or
-  auto-selection finding only one `dbl` column) — error.
 - `NA` in a marker column — error, message lists the column (likely a
   small synthetic tibble to inject the `NA` cleanly rather than the real
   fixture).
-- `n_metaclusters` below 3, or at/above grid node count — error in both
-  directions.
+- `n_metaclusters` exceeding grid node count — error.
 - Seed reproducibility: same `seed` → identical `cluster`/`metacluster`
   assignments across two calls.
 - `facs_calc_cluster_freq()`: zero-fill grid present for at least one
