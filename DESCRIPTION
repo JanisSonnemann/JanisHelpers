@@ -13,6 +13,7 @@ Roxygen: list(markdown = TRUE)
 Imports:
     CytoML,
     DBI,
+    dbplyr,
     diffcyt,
     dplyr,
     duckdb,
