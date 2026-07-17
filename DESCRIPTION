@@ -12,8 +12,10 @@ Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 Imports:
     CytoML,
+    DBI,
     diffcyt,
     dplyr,
+    duckdb,
     fcexpr,
     flowCore,
     FlowSOM,
