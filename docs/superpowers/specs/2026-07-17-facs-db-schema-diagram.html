@@ -1,0 +1,618 @@
+<title>Lab Database &mdash; Structure &amp; Workflow</title>
+<style>
+  :root {
+    --bg: #eef3fa;
+    --bg-paper: #f6f9fd;
+    --panel: #ffffff;
+    --ink: #16233a;
+    --ink-soft: #4a5b76;
+    --ink-faint: #7c8ba5;
+    --accent: #1e4c8a;
+    --accent-soft: #dbe7f6;
+    --accent-line: rgba(30, 76, 138, 0.22);
+    --grid-line: rgba(30, 76, 138, 0.10);
+    --warm: #a8611c;
+    --warm-soft: #f3e2cd;
+    --rule: rgba(22, 35, 58, 0.14);
+    --shadow: rgba(22, 35, 58, 0.08);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1626;
+      --bg-paper: #101b2e;
+      --panel: #142238;
+      --ink: #e6edf9;
+      --ink-soft: #a9b8d2;
+      --ink-faint: #74849f;
+      --accent: #7aa8ec;
+      --accent-soft: rgba(122, 168, 236, 0.14);
+      --accent-line: rgba(122, 168, 236, 0.30);
+      --grid-line: rgba(122, 168, 236, 0.10);
+      --warm: #e0a25c;
+      --warm-soft: rgba(224, 162, 92, 0.16);
+      --rule: rgba(230, 237, 249, 0.16);
+      --shadow: rgba(0, 0, 0, 0.35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0d1626;
+    --bg-paper: #101b2e;
+    --panel: #142238;
+    --ink: #e6edf9;
+    --ink-soft: #a9b8d2;
+    --ink-faint: #74849f;
+    --accent: #7aa8ec;
+    --accent-soft: rgba(122, 168, 236, 0.14);
+    --accent-line: rgba(122, 168, 236, 0.30);
+    --grid-line: rgba(122, 168, 236, 0.10);
+    --warm: #e0a25c;
+    --warm-soft: rgba(224, 162, 92, 0.16);
+    --rule: rgba(230, 237, 249, 0.16);
+    --shadow: rgba(0, 0, 0, 0.35);
+  }
+  :root[data-theme="light"] {
+    --bg: #eef3fa;
+    --bg-paper: #f6f9fd;
+    --panel: #ffffff;
+    --ink: #16233a;
+    --ink-soft: #4a5b76;
+    --ink-faint: #7c8ba5;
+    --accent: #1e4c8a;
+    --accent-soft: #dbe7f6;
+    --accent-line: rgba(30, 76, 138, 0.22);
+    --grid-line: rgba(30, 76, 138, 0.10);
+    --warm: #a8611c;
+    --warm-soft: #f3e2cd;
+    --rule: rgba(22, 35, 58, 0.14);
+    --shadow: rgba(22, 35, 58, 0.08);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background:
+      repeating-linear-gradient(0deg, var(--grid-line) 0 1px, transparent 1px 32px),
+      repeating-linear-gradient(90deg, var(--grid-line) 0 1px, transparent 1px 32px),
+      var(--bg);
+    color: var(--ink);
+    font-family: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+    font-size: 17px;
+    line-height: 1.68;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 4rem 1.5rem 6rem;
+  }
+
+  .mono {
+    font-family: ui-monospace, "SF Mono", "JetBrains Mono", "IBM Plex Mono", Menlo, Consolas, monospace;
+  }
+
+  .eyebrow {
+    font-family: ui-monospace, "SF Mono", "JetBrains Mono", "IBM Plex Mono", Menlo, Consolas, monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 0.9rem;
+  }
+
+  h1 {
+    font-family: ui-monospace, "SF Mono", "JetBrains Mono", "IBM Plex Mono", Menlo, Consolas, monospace;
+    font-size: clamp(1.7rem, 3.6vw, 2.5rem);
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    line-height: 1.15;
+    text-wrap: balance;
+    margin: 0 0 0.8rem;
+    color: var(--ink);
+  }
+
+  .dek {
+    font-size: 1.08rem;
+    color: var(--ink-soft);
+    max-width: 42em;
+    margin: 0 0 2.6rem;
+  }
+
+  h2 {
+    font-family: ui-monospace, "SF Mono", "JetBrains Mono", "IBM Plex Mono", Menlo, Consolas, monospace;
+    font-size: 1.02rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: var(--ink);
+    margin: 0 0 1.1rem;
+    padding-bottom: 0.6rem;
+    border-bottom: 1px solid var(--rule);
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+  }
+
+  h2 .tag {
+    font-size: 0.68rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: var(--accent-soft);
+    border: 1px solid var(--accent-line);
+    padding: 0.15rem 0.5rem;
+    border-radius: 3px;
+  }
+
+  section {
+    margin-bottom: 3.4rem;
+  }
+
+  p { max-width: 42em; margin: 0 0 1rem; }
+  p:last-child { margin-bottom: 0; }
+
+  .lede {
+    max-width: 46em;
+  }
+
+  strong { color: var(--ink); font-weight: 700; }
+
+  code {
+    font-family: ui-monospace, "SF Mono", "JetBrains Mono", "IBM Plex Mono", Menlo, Consolas, monospace;
+    font-size: 0.88em;
+    background: var(--accent-soft);
+    border: 1px solid var(--accent-line);
+    padding: 0.05em 0.4em;
+    border-radius: 3px;
+    color: var(--ink);
+  }
+
+  /* blueprint sheet: bordered panel with corner ticks */
+  .sheet {
+    position: relative;
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    box-shadow: 0 1px 3px var(--shadow);
+    padding: 2rem 1.6rem 1.6rem;
+    margin: 0 0 1.4rem;
+    max-width: 100%;
+  }
+
+  .sheet::before, .sheet::after,
+  .sheet .tick-br, .sheet .tick-bl {
+    content: "";
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    border-color: var(--accent);
+    opacity: 0.55;
+  }
+  .sheet::before { top: -1px; left: -1px; border-top: 2px solid var(--accent); border-left: 2px solid var(--accent); }
+  .sheet::after { top: -1px; right: -1px; border-top: 2px solid var(--accent); border-right: 2px solid var(--accent); }
+  .sheet .tick-bl { bottom: -1px; left: -1px; border-bottom: 2px solid var(--accent); border-left: 2px solid var(--accent); }
+  .sheet .tick-br { bottom: -1px; right: -1px; border-bottom: 2px solid var(--accent); border-right: 2px solid var(--accent); }
+
+  .sheet-label {
+    font-family: ui-monospace, "SF Mono", "JetBrains Mono", "IBM Plex Mono", Menlo, Consolas, monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin: 0 0 1rem;
+  }
+
+  .diagram-scroll {
+    overflow-x: auto;
+    padding-bottom: 0.4rem;
+  }
+
+  pre.mermaid {
+    margin: 0;
+    min-width: 640px;
+  }
+
+  .legend {
+    display: flex;
+    gap: 1.6rem;
+    flex-wrap: wrap;
+    font-family: ui-monospace, "SF Mono", "JetBrains Mono", "IBM Plex Mono", Menlo, Consolas, monospace;
+    font-size: 0.78rem;
+    color: var(--ink-soft);
+    margin-top: 1.2rem;
+    padding-top: 1rem;
+    border-top: 1px dashed var(--rule);
+  }
+  .legend span.dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 1px;
+    margin-right: 0.45rem;
+    position: relative;
+    top: -1px;
+  }
+  .legend .dim .dot { background: var(--accent); }
+  .legend .fact .dot { background: var(--warm); }
+
+  .grid-two {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.2rem;
+  }
+  @media (min-width: 720px) {
+    .grid-two { grid-template-columns: 1fr 1fr; }
+  }
+
+  .schema-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.4rem;
+  }
+  .entity-card {
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    padding: 0.9rem 1rem;
+  }
+  .entity-card.fact { border-left-color: var(--warm); }
+  .entity-card h4 {
+    font-family: ui-monospace, "SF Mono", "JetBrains Mono", "IBM Plex Mono", Menlo, Consolas, monospace;
+    font-size: 0.84rem;
+    margin: 0 0 0.6rem;
+    color: var(--ink);
+    letter-spacing: 0.01em;
+  }
+  .entity-card ul { list-style: none; margin: 0; padding: 0; }
+  .entity-card li {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.6rem;
+    font-family: ui-monospace, "SF Mono", "JetBrains Mono", "IBM Plex Mono", Menlo, Consolas, monospace;
+    font-size: 0.72rem;
+    color: var(--ink-soft);
+    padding: 0.22rem 0;
+    border-bottom: 1px dotted var(--rule);
+  }
+  .entity-card li:last-child { border-bottom: none; }
+  .entity-card li .flag {
+    color: var(--accent);
+    font-size: 0.64rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+  .entity-card.fact li .flag { color: var(--warm); }
+
+  .rel-list {
+    font-family: ui-monospace, "SF Mono", "JetBrains Mono", "IBM Plex Mono", Menlo, Consolas, monospace;
+    font-size: 0.82rem;
+    color: var(--ink-soft);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .rel-list li {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  .rel-list li:last-child { border-bottom: none; }
+  .rel-list li .arrow { color: var(--accent); }
+  .rel-list li .lbl { color: var(--ink-faint); font-size: 0.74rem; margin-left: auto; }
+
+  .stage-flow { display: flex; flex-direction: column; }
+  .stage {
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    padding: 1rem 1.2rem;
+  }
+  .stage h4 {
+    font-family: ui-monospace, "SF Mono", "JetBrains Mono", "IBM Plex Mono", Menlo, Consolas, monospace;
+    font-size: 0.82rem;
+    color: var(--accent);
+    margin: 0 0 0.5rem;
+    letter-spacing: 0.02em;
+  }
+  .stage p.items {
+    font-family: ui-monospace, "SF Mono", "JetBrains Mono", "IBM Plex Mono", Menlo, Consolas, monospace;
+    font-size: 0.82rem;
+    color: var(--ink-soft);
+    margin: 0;
+    line-height: 1.7;
+    max-width: none;
+  }
+  .stage-arrow {
+    text-align: center;
+    color: var(--ink-faint);
+    font-size: 1.15rem;
+    padding: 0.25rem 0;
+  }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    padding: 1.2rem 1.3rem;
+  }
+  .card h3 {
+    font-family: ui-monospace, "SF Mono", "JetBrains Mono", "IBM Plex Mono", Menlo, Consolas, monospace;
+    font-size: 0.85rem;
+    letter-spacing: 0.02em;
+    color: var(--accent);
+    margin: 0 0 0.5rem;
+  }
+  .card p { font-size: 0.94rem; color: var(--ink-soft); margin: 0; max-width: none; }
+
+  ul.reasons {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  ul.reasons li {
+    display: grid;
+    grid-template-columns: 9.5rem 1fr;
+    gap: 1rem;
+    padding: 0.7rem 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  ul.reasons li:last-child { border-bottom: none; }
+  ul.reasons .k {
+    font-family: ui-monospace, "SF Mono", "JetBrains Mono", "IBM Plex Mono", Menlo, Consolas, monospace;
+    font-size: 0.78rem;
+    letter-spacing: 0.03em;
+    color: var(--ink);
+    padding-top: 0.15rem;
+  }
+  ul.reasons .v {
+    color: var(--ink-soft);
+    font-size: 0.95rem;
+  }
+
+  .margin-note {
+    border-left: 3px solid var(--warm);
+    background: var(--warm-soft);
+    padding: 1rem 1.2rem;
+    font-size: 0.94rem;
+    color: var(--ink-soft);
+    max-width: 46em;
+  }
+  .margin-note strong { color: var(--warm); }
+
+  footer {
+    margin-top: 3.6rem;
+    padding-top: 1.4rem;
+    border-top: 1px solid var(--rule);
+    font-family: ui-monospace, "SF Mono", "JetBrains Mono", "IBM Plex Mono", Menlo, Consolas, monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    color: var(--ink-faint);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .fade-in { animation: fadeIn 0.5s ease-out both; }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  }
+</style>
+
+<div class="page">
+
+  <p class="eyebrow">JanisHelpers &middot; data layer &middot; DuckDB</p>
+  <h1 class="fade-in">Lab Database &mdash; Structure &amp; Workflow</h1>
+  <p class="dek fade-in">
+    Big-picture map of the redesigned schema for FACS, ELISA, and histology data:
+    what each table is for, how they connect, and how a measurement travels from
+    a raw <code>.wsp</code>/<code>.xlsx</code> export to a queryable row.
+  </p>
+
+  <section>
+    <h2>The big picture</h2>
+    <p class="lede">
+      The schema splits cleanly into two layers. <strong>Dimensions</strong> describe
+      the who/what/where of an experiment &mdash; they change rarely and are shared by
+      everything downstream. <strong>Facts</strong> are the actual measurements &mdash;
+      one table per assay domain, each shaped to match what that domain's import
+      function already produces as a tidy long tibble.
+    </p>
+    <div class="grid-two">
+      <div class="card">
+        <h3>DIMENSIONS</h3>
+        <p><code>domains</code> &middot; <code>experiments</code> &middot; <code>subjects</code> &middot; <code>samples</code> &middot; <code>sample_digestions</code> &middot; <code>assays</code></p>
+      </div>
+      <div class="card">
+        <h3>FACTS</h3>
+        <p><code>facs_stains</code> &middot; <code>facs_measurements</code> &middot; <code>elisa_measurements</code> &middot; <code>histo_measurements</code></p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Entity map <span class="tag">schema</span></h2>
+    <p class="lede">
+      Ten tables: six dimensions (blue accent) that rarely change, four fact
+      tables (amber accent) that grow with every import.
+    </p>
+    <div class="schema-grid">
+      <div class="entity-card">
+        <h4>domains</h4>
+        <ul>
+          <li><span>domain_id</span><span class="flag">PK</span></li>
+          <li><span>domain_name</span><span class="flag">UNIQUE</span></li>
+        </ul>
+      </div>
+      <div class="entity-card">
+        <h4>experiments</h4>
+        <ul>
+          <li><span>experiment_id</span><span class="flag">PK</span></li>
+          <li><span>experiment_code</span><span class="flag">UNIQUE</span></li>
+          <li><span>experiment_name, project</span><span class="flag"></span></li>
+          <li><span>description</span><span class="flag"></span></li>
+        </ul>
+      </div>
+      <div class="entity-card">
+        <h4>subjects</h4>
+        <ul>
+          <li><span>subject_id</span><span class="flag">PK</span></li>
+          <li><span>mouse_id</span><span class="flag">UNIQUE</span></li>
+          <li><span>experiment_id</span><span class="flag">FK</span></li>
+          <li><span>cage, strain, generation</span><span class="flag"></span></li>
+          <li><span>sex, treatment_group</span><span class="flag"></span></li>
+          <li><span>dob&hellip;end_date</span><span class="flag">DATE</span></li>
+        </ul>
+      </div>
+      <div class="entity-card">
+        <h4>samples</h4>
+        <ul>
+          <li><span>sample_id</span><span class="flag">PK</span></li>
+          <li><span>subject_id</span><span class="flag">FK</span></li>
+          <li><span>tissue</span><span class="flag">NOT NULL</span></li>
+          <li><span>collected_at</span><span class="flag">DATE</span></li>
+          <li><span>subject_id, tissue</span><span class="flag">UNIQUE</span></li>
+        </ul>
+      </div>
+      <div class="entity-card">
+        <h4>sample_digestions</h4>
+        <ul>
+          <li><span>sample_id</span><span class="flag">PK/FK</span></li>
+          <li><span>total_weight, facs_weight</span><span class="flag"></span></li>
+          <li><span>vol_total</span><span class="flag"></span></li>
+        </ul>
+      </div>
+      <div class="entity-card">
+        <h4>assays</h4>
+        <ul>
+          <li><span>assay_id</span><span class="flag">PK</span></li>
+          <li><span>assay_name</span><span class="flag"></span></li>
+          <li><span>domain_id</span><span class="flag">FK</span></li>
+          <li><span>assay_name, domain_id</span><span class="flag">UNIQUE</span></li>
+        </ul>
+      </div>
+      <div class="entity-card fact">
+        <h4>facs_stains</h4>
+        <ul>
+          <li><span>facs_stain_id</span><span class="flag">PK</span></li>
+          <li><span>sample_id, assay_id</span><span class="flag">FK</span></li>
+          <li><span>vol_stained, count_method</span><span class="flag"></span></li>
+          <li><span>vol_resuspended, vol_measured</span><span class="flag">volumetric</span></li>
+          <li><span>bead_vol, bead_conc, bead_path</span><span class="flag">bead</span></li>
+          <li><span>sample_id, assay_id</span><span class="flag">UNIQUE</span></li>
+        </ul>
+      </div>
+      <div class="entity-card fact">
+        <h4>facs_measurements</h4>
+        <ul>
+          <li><span>facs_measurement_id</span><span class="flag">PK</span></li>
+          <li><span>facs_stain_id</span><span class="flag">FK</span></li>
+          <li><span>population_full_path, population</span><span class="flag"></span></li>
+          <li><span>metric, value</span><span class="flag"></span></li>
+          <li><span>source_file, imported_at</span><span class="flag"></span></li>
+          <li><span>stain_id, path, metric</span><span class="flag">UNIQUE</span></li>
+        </ul>
+      </div>
+      <div class="entity-card fact">
+        <h4>elisa_measurements</h4>
+        <ul>
+          <li><span>elisa_measurement_id</span><span class="flag">PK</span></li>
+          <li><span>sample_id, assay_id</span><span class="flag">FK</span></li>
+          <li><span>cytokine, sample_id_raw, replicate</span><span class="flag"></span></li>
+          <li><span>value, unit, result_status</span><span class="flag"></span></li>
+          <li><span>source_file, imported_at</span><span class="flag"></span></li>
+        </ul>
+      </div>
+      <div class="entity-card fact">
+        <h4>histo_measurements</h4>
+        <ul>
+          <li><span>histo_measurement_id</span><span class="flag">PK</span></li>
+          <li><span>sample_id</span><span class="flag">FK</span></li>
+          <li><span>assay_id</span><span class="flag">FK, null</span></li>
+          <li><span>metric, value</span><span class="flag"></span></li>
+          <li><span>source_file, imported_at</span><span class="flag"></span></li>
+        </ul>
+      </div>
+    </div>
+    <div class="sheet">
+      <span class="tick-bl"></span><span class="tick-br"></span>
+      <p class="sheet-label">fig. 1 &mdash; relationships</p>
+      <ul class="rel-list">
+        <li>domains <span class="arrow">&rarr;</span> assays <span class="lbl">classifies</span></li>
+        <li>experiments <span class="arrow">&rarr;</span> subjects <span class="lbl">enrolls</span></li>
+        <li>subjects <span class="arrow">&rarr;</span> samples <span class="lbl">yields</span></li>
+        <li>samples <span class="arrow">&rarr;</span> sample_digestions <span class="lbl">1:1, FACS only</span></li>
+        <li>samples <span class="arrow">&rarr;</span> facs_stains <span class="lbl">stained per panel</span></li>
+        <li>assays <span class="arrow">&rarr;</span> facs_stains <span class="lbl">protocol</span></li>
+        <li>facs_stains <span class="arrow">&rarr;</span> facs_measurements <span class="lbl">yields</span></li>
+        <li>samples <span class="arrow">&rarr;</span> elisa_measurements <span class="lbl">measured</span></li>
+        <li>assays <span class="arrow">&rarr;</span> elisa_measurements <span class="lbl">protocol</span></li>
+        <li>samples <span class="arrow">&rarr;</span> histo_measurements <span class="lbl">scored</span></li>
+        <li>assays <span class="arrow">&rarr;</span> histo_measurements <span class="lbl">protocol</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2>From raw file to analysis <span class="tag">workflow</span></h2>
+    <p class="lede">
+      Every domain follows the same pipeline: a raw export is parsed by an existing
+      package function into a tidy long tibble, written into the matching fact
+      table behind a <code>UNIQUE</code> constraint (so re-running an import is
+      idempotent, not additive), then queried back out across experiments through
+      the same <code>dplyr::tbl()</code> interface already in use today.
+    </p>
+    <div class="sheet">
+      <span class="tick-bl"></span><span class="tick-br"></span>
+      <p class="sheet-label">fig. 2 &mdash; pipeline</p>
+      <div class="stage-flow">
+        <div class="stage">
+          <h4>1. Raw exports</h4>
+          <p class="items">.wsp FlowJo workspace &middot; ELISA results workbook (per cytokine) &middot; meta workbook</p>
+        </div>
+        <div class="stage-arrow">&darr;</div>
+        <div class="stage">
+          <h4>2. Package import functions</h4>
+          <p class="items">facs_import_wsp() &middot; elisa_read_results() &middot; meta_read() / meta_clean()</p>
+        </div>
+        <div class="stage-arrow">&darr;</div>
+        <div class="stage">
+          <h4>3. Tidy long tibbles, in-session</h4>
+          <p class="items">FileName x Population x metric &middot; sample_id x cytokine x replicate &middot; mouse_ID x tissue meta + volumes</p>
+        </div>
+        <div class="stage-arrow">&darr;</div>
+        <div class="stage">
+          <h4>4. DuckDB, this schema</h4>
+          <p class="items">dimensions: experiments / subjects / samples / assays &middot; facts: facs_measurements / elisa_measurements / histo_measurements</p>
+        </div>
+        <div class="stage-arrow">&darr;</div>
+        <div class="stage">
+          <h4>5. Cross-experiment analysis</h4>
+          <p class="items">dplyr::tbl(con, ...) |&gt; filter() |&gt; collect() &middot; analysis_*() / plot_*() / report_knit_*()</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Why this shape</h2>
+    <ul class="reasons">
+      <li><span class="k">idempotent imports</span><span class="v">Every fact table's <code>UNIQUE</code> constraint means re-running an import script can't silently duplicate rows &mdash; DuckDB rejects the collision instead of the script relying on a manual check-then-append.</span></li>
+      <li><span class="k">facs_stains split</span><span class="v">Volumes that vary per stained panel (<code>vol_stained</code>, <code>vol_resuspended</code>/<code>vol_measured</code> or the bead-counting equivalents) live one level below the sample, since one digested tissue sample is routinely split into several differently-stained tubes.</span></li>
+      <li><span class="k">count_method branch</span><span class="v"><code>facs_stains</code> carries both volumetric (HTS) and bead-based counting fields, with a <code>CHECK</code> constraint enforcing only the fields matching the chosen method are filled in.</span></li>
+      <li><span class="k">domains lookup</span><span class="v">Assay domains are rows in a table, not a hard-coded list &mdash; adding scRNA-seq or any future modality later is an <code>INSERT</code>, not a schema migration.</span></li>
+      <li><span class="k">provenance</span><span class="v">Every measurement row carries <code>source_file</code> back to the raw export it came from &mdash; the database never loses the thread to the original data.</span></li>
+    </ul>
+  </section>
+
+  <div class="margin-note">
+    <strong>Out of scope here:</strong> the R-facing <code>db_</code> functions that will
+    read/write this schema, and migrating the existing <code>MPOmRNA.db</code> data into it,
+    are separate design work that follows once this structure is locked in.
+  </div>
+
+  <footer>SCHEMA V1 &middot; DUCKDB &middot; JANISHELPERS/R</footer>
+
+</div>
