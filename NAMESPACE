@@ -3,6 +3,8 @@
 export(analysis_posthoc_tables)
 export(analysis_summary_table)
 export(db_connect)
+export(db_write_experiment)
+export(db_write_subjects)
 export(elisa_read_results)
 export(facs_calc_cluster_freq)
 export(facs_calc_cluster_marker_medians)

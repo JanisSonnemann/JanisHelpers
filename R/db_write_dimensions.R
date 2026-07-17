@@ -22,3 +22,49 @@ db_write_experiment <- function(con, experiment_code, experiment_name = NA_chara
   )
   invisible(n)
 }
+
+fill_missing_cols_ <- function(data, cols) {
+  missing <- setdiff(cols, names(data))
+  data[missing] <- NA
+  data
+}
+
+#' Register subjects (mice)
+#'
+#' Bulk-inserts subject rows. `data` must already be shaped to match the
+#' `subjects` table: one row per mouse, with `mouse_id` and an
+#' `experiment_code` identifying an experiment already registered via
+#' [db_write_experiment()]. Rows whose `mouse_id` already exists are skipped.
+#'
+#' @param con A `DBI` connection from [db_connect()].
+#' @param data A tibble with columns `mouse_id`, `experiment_code`, and
+#'   optionally `mdc_id`, `cage`, `mouse_strain`, `generation`, `sex`,
+#'   `mouse_treatment`, `treatment_group`, `dob`, `start_date`, `bmt_date`,
+#'   `end_date`. Missing optional columns are filled with `NA`.
+#' @returns Invisibly, the number of rows inserted.
+#' @export
+db_write_subjects <- function(con, data) {
+  data <- fill_missing_cols_(data, c(
+    "mouse_id", "experiment_code", "mdc_id", "cage", "mouse_strain",
+    "generation", "sex", "mouse_treatment", "treatment_group",
+    "dob", "start_date", "bmt_date", "end_date"
+  ))
+  duckdb::duckdb_register(con, "tmp_subjects", data)
+  on.exit(duckdb::duckdb_unregister(con, "tmp_subjects"), add = TRUE)
+
+  n <- DBI::dbExecute(con, "
+    INSERT INTO subjects (
+      mouse_id, experiment_id, mdc_id, cage, mouse_strain, generation,
+      sex, mouse_treatment, treatment_group, dob, start_date, bmt_date, end_date
+    )
+    SELECT
+      s.mouse_id, e.experiment_id, s.mdc_id, s.cage, s.mouse_strain, s.generation,
+      s.sex, s.mouse_treatment, s.treatment_group,
+      CAST(s.dob AS DATE), CAST(s.start_date AS DATE),
+      CAST(s.bmt_date AS DATE), CAST(s.end_date AS DATE)
+    FROM tmp_subjects s
+    JOIN experiments e ON e.experiment_code = s.experiment_code
+    ON CONFLICT (mouse_id) DO NOTHING
+  ")
+  invisible(n)
+}
