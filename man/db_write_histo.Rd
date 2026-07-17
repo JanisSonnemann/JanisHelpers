@@ -22,7 +22,7 @@ db_write_histo(
 
 \item{tissue}{Character scalar identifying the sample.}
 
-\item{assay_name}{Character scalar, optional \u2013 identifies the
+\item{assay_name}{Character scalar, optional -- identifies the
 stain/scoring protocol.}
 
 \item{source_file}{Character scalar, optional.}
@@ -36,7 +36,7 @@ Writes a tidy tibble of histology measurements into \code{histo_measurements}.
 \details{
 Note: \code{assay_name} is optional (histology has traditionally used a single
 un-named stain/scoring protocol). Rows written with \code{assay_name = NA} are
-not deduplicated against each other \u2013 SQL's \verb{NULL <> NULL} means the
+not deduplicated against each other -- SQL's \verb{NULL <> NULL} means the
 \code{UNIQUE(sample_id, assay_id, metric)} constraint doesn't catch a repeated
 import when \code{assay_id} is \code{NULL}. Pass an \code{assay_name} (registered via
 \code{\link[=db_write_assay]{db_write_assay()}} with \code{domain = "histo"}) to get full dedup protection.

@@ -15,6 +15,6 @@ A \code{DBI} connection (class \code{duckdb_connection}).
 \description{
 Opens (creating if necessary) a DuckDB database file and ensures the full
 dimension/fact schema exists, creating any missing tables, sequences, and
-seed rows. Safe to call repeatedly \u2014 existing tables and data are left
+seed rows. Safe to call repeatedly -- existing tables and data are left
 untouched.
 }

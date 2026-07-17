@@ -1,3 +1,6 @@
+#' @importFrom dbplyr sql
+NULL
+
 #' Query FACS measurements
 #'
 #' Returns a lazy `dbplyr` `tbl` joining `facs_measurements` back through

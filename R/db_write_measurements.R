@@ -183,7 +183,7 @@ db_write_elisa <- function(con, data, mouse_id, tissue, assay_name, source_file 
 #'
 #' Note: `assay_name` is optional (histology has traditionally used a single
 #' un-named stain/scoring protocol). Rows written with `assay_name = NA` are
-#' not deduplicated against each other \u2013 SQL's `NULL <> NULL` means the
+#' not deduplicated against each other -- SQL's `NULL <> NULL` means the
 #' `UNIQUE(sample_id, assay_id, metric)` constraint doesn't catch a repeated
 #' import when `assay_id` is `NULL`. Pass an `assay_name` (registered via
 #' [db_write_assay()] with `domain = "histo"`) to get full dedup protection.
@@ -192,7 +192,7 @@ db_write_elisa <- function(con, data, mouse_id, tissue, assay_name, source_file 
 #' @param data A tibble with columns `metric`, `value`.
 #' @param mouse_id Character scalar identifying the subject.
 #' @param tissue Character scalar identifying the sample.
-#' @param assay_name Character scalar, optional \u2013 identifies the
+#' @param assay_name Character scalar, optional -- identifies the
 #'   stain/scoring protocol.
 #' @param source_file Character scalar, optional.
 #' @returns Invisibly, the number of rows inserted.

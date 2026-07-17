@@ -61,7 +61,7 @@ New functions must follow the `domain_verb` pattern. Never add a function that d
 - **Column references in tidy eval**: bare column names inside `dplyr` verbs are fine. For `.data$col` pronoun use, prefix with `.data` only when the column name is stored in a variable.
 - **Deselection**: `dplyr::select(!col)`, not `-col`.
 - **`invisible()`**: functions that return data frames/tibbles primarily for side-effects (e.g., import + message) should return `invisible(result)`.
-- **Non-ASCII**: escape all non-ASCII characters in R source with `\uXXXX` (e.g., em-dash = `—`).
+- **Non-ASCII**: escape all non-ASCII characters in R source with `\uXXXX` (e.g., em-dash = `—`). Caveat: this only works inside actual R string literals (inside quotes, in real code), where R's parser unescapes `\uXXXX` at parse time. It does NOT work inside `#'` roxygen comment text -- roxygen comments are never parsed as R string literals, so a literal `\uXXXX` sequence passes through unconverted into the generated `.Rd` file, where Rd's macro processor doesn't recognize `\u` and emits a `prepare_Rd: unknown macro '\u'` warning. Inside roxygen prose, just write plain ASCII (`--` for a dash, etc.) instead.
 
 ---
 
@@ -189,10 +189,10 @@ New functions must follow the `domain_verb` pattern. Never add a function that d
 ## Dependency philosophy
 
 - **`Imports`**: every package called inside an exported function body must be listed here. All calls must be namespaced `pkg::fn()`.
-- **`Suggests`**: packages only needed in examples or vignettes. Currently none.
+- **`Suggests`**: packages only needed in examples, vignettes, or tests. Currently `testthat` and `withr` (the latter used for `withr::defer()` cleanup in `db_` domain tests).
 - **Non-CRAN packages** (`fcexpr`): list in `Imports` as normal; document the install requirement in README. Do not add `remotes::` calls inside function bodies.
 
-Current `Imports`: `CytoML`, `DBI`, `dbplyr`, `diffcyt`, `dplyr`, `duckdb`, `fcexpr`, `flowCore`, `FlowSOM`, `flowWorkspace`, `ggplot2`, `glue`, `gt`, `gtsummary`, `janitor`, `parallel`, `purrr`, `readxl`, `rmarkdown`, `rstatix`, `stats`, `stringr`, `SummarizedExperiment`, `tibble`, `tidyr`, `tools`, `uwot`, `xml2`, `xfun` (order matches `DESCRIPTION`'s `Imports:` block). Note: `dbplyr` is currently flagged by `R CMD check` as an unused declared Import -- see "Known check output" below.
+Current `Imports`: `CytoML`, `DBI`, `dbplyr`, `diffcyt`, `dplyr`, `duckdb`, `fcexpr`, `flowCore`, `FlowSOM`, `flowWorkspace`, `ggplot2`, `glue`, `gt`, `gtsummary`, `janitor`, `parallel`, `purrr`, `readxl`, `rmarkdown`, `rstatix`, `stats`, `stringr`, `SummarizedExperiment`, `tibble`, `tidyr`, `tools`, `uwot`, `xml2`, `xfun` (order matches `DESCRIPTION`'s `Imports:` block).
 
 ---
 
@@ -231,48 +231,18 @@ Current `Imports`: `CytoML`, `DBI`, `dbplyr`, `diffcyt`, `dplyr`, `duckdb`, `fce
 
 ## Known check output
 
-`devtools::check()` on this branch (after the `db_` domain, Tasks 1-9) currently
-produces **0 errors, 2 warnings, 4 notes**. Three of those notes are the same
-pre-existing/expected false positives documented below (plus one new,
-expected tidy-eval note from `R/db_query.R`); the two warnings, and one of the
-four notes, are new and are genuine bugs introduced by the `db_` domain's own
-code -- NOT false positives, and still unresolved as of this task, whose scope
-was verify-and-document only (`CLAUDE.md`), not touching `R/`/`DESCRIPTION`:
-
-- **`checking Rd files` (WARNING, real, unresolved)**: `prepare_Rd: unknown macro '\u'`
-  at `man/db_connect.Rd:18`, `man/db_write_histo.Rd:25`, and
-  `man/db_write_histo.Rd:39`. Cause: `R/db_connect.R` line 5 and
-  `R/db_write_measurements.R` lines 186 and 195 write the six-character
-  escape-code sequence for U+2014 (em dash) / U+2013 (en dash) as literal
-  text inside `#'` roxygen comment text, following this file's own "escape
-  non-ASCII in R source with the Unicode escape form" rule (see
-  Code style above) -- but that rule is written for actual R string literals,
-  where R's parser unescapes `\uXXXX` at parse time. Roxygen `#'` comments
-  are plain text, never parsed as string literals, so the escape sequence
-  passes through unconverted into the generated `.Rd` file, where Rd's macro
-  processor doesn't recognize `\u` and warns. No other file in the package
-  hits this, because every other domain writes plain ASCII `--` in roxygen
-  prose instead of an em/en dash -- confirmed by grepping every `R/*.R` file
-  for a `\uXXXX` pattern inside a `#'` line: only these two files match. Fix:
-  replace those three occurrences with plain ASCII `--`, then re-run
-  `devtools::document()`.
-- **`checking for unstated dependencies in 'tests'` (WARNING, real, unresolved)**:
-  `withr::defer()` is called in `tests/testthat/helper-db.R` and
-  `tests/testthat/test-db_connect.R`, but `withr` is not declared anywhere in
-  `DESCRIPTION` (not `Imports`, not `Suggests`). Fix: add `withr` to
-  `Suggests`.
-- **`checking dependencies in R code` (NOTE, real, unresolved)**: `dbplyr` is
-  listed in `Imports` (added for the `db_` domain) but no `R/` file calls
-  `dbplyr::` anything -- `db_query_facs()`/`db_query_elisa()`/`db_query_histo()`
-  only ever call `dplyr::tbl()`/`dplyr::left_join()`/`dplyr::select()` against
-  a `DBI` connection; `dbplyr` supplies the SQL-translation backend those
-  `dplyr` verbs dispatch to implicitly, never through an explicit `dbplyr::`
-  call. `R CMD check` can't see that indirect need and flags it as an unused
-  declared Import. Needs a resolution (e.g. an explicit `dbplyr::` reference
-  somewhere, or documenting/justifying why it must stay in `Imports` despite
-  never being called directly) -- left unresolved by this task since fixing
-  it means editing `R/db_query.R` or `DESCRIPTION`, outside this task's
-  `CLAUDE.md`-only scope.
+`devtools::check()` currently produces **0 errors, 0 warnings**, plus a small
+set of pre-existing notes. Task 10 originally surfaced three real bugs from
+the `db_` domain work (Tasks 1-9) here -- a `prepare_Rd: unknown macro '\u'`
+warning from literal `\uXXXX` escape text inside roxygen `#'` comments in
+`R/db_connect.R`/`R/db_write_measurements.R`, an "unstated dependencies in
+'tests'" warning from `withr::defer()` being called in tests without `withr`
+declared in `DESCRIPTION`, and a "dependencies in R code" note from `dbplyr`
+being declared in `Imports` but never referenced via explicit `dbplyr::`
+syntax -- all three have since been fixed (roxygen prose now uses plain ASCII
+`--`; `withr` added to `Suggests`; `R/db_query.R` gained an
+`#' @importFrom dbplyr sql` / `NULL` roxygen block to create a real
+`NAMESPACE` entry for the implicit `dplyr`-verb-dispatch dependency).
 
 Pre-existing/expected notes (false positives or environment-only):
 
