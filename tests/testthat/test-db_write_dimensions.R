@@ -110,3 +110,32 @@ test_that("db_write_samples errors clearly on an unknown mouse_id", {
   row <- DBI::dbGetQuery(con, "SELECT * FROM samples")
   expect_equal(nrow(row), 0)
 })
+
+test_that("db_write_assay inserts an assay scoped to a domain", {
+  con <- local_test_db()
+
+  n <- db_write_assay(con, assay_name = "overview", domain = "facs")
+  expect_equal(n, 1)
+
+  row <- DBI::dbGetQuery(con, "
+    SELECT a.assay_name, d.domain_name
+    FROM assays a JOIN domains d ON d.domain_id = a.domain_id
+    WHERE a.assay_name = 'overview'
+  ")
+  expect_equal(row$domain_name, "facs")
+})
+
+test_that("db_write_assay is idempotent", {
+  con <- local_test_db()
+  db_write_assay(con, assay_name = "overview", domain = "facs")
+  n <- db_write_assay(con, assay_name = "overview", domain = "facs")
+  expect_equal(n, 0)
+})
+
+test_that("db_write_assay errors clearly on an unknown domain", {
+  con <- local_test_db()
+  expect_error(
+    db_write_assay(con, assay_name = "overview", domain = "not-a-domain"),
+    "Unknown domain"
+  )
+})

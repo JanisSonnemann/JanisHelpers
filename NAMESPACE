@@ -3,6 +3,7 @@
 export(analysis_posthoc_tables)
 export(analysis_summary_table)
 export(db_connect)
+export(db_write_assay)
 export(db_write_experiment)
 export(db_write_samples)
 export(db_write_subjects)

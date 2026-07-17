@@ -142,3 +142,37 @@ db_write_samples <- function(con, data) {
 
   invisible(n)
 }
+
+#' Register an assay/panel
+#'
+#' Inserts a new assay identified by `assay_name` within `domain`. If an
+#' assay with that name already exists in that domain, the call is a no-op.
+#'
+#' @param con A `DBI` connection from [db_connect()].
+#' @param assay_name Character scalar, e.g. `"overview"` or `"anti-MPO"`.
+#' @param domain Character scalar, one of `"facs"`, `"histo"`, `"elisa"` (or
+#'   any additional domain later added to the `domains` table).
+#' @param description Character scalar, optional.
+#' @returns Invisibly, the number of rows inserted (`0` or `1`).
+#' @export
+db_write_assay <- function(con, assay_name, domain, description = NA_character_) {
+  domain_row <- DBI::dbGetQuery(
+    con, "SELECT domain_id FROM domains WHERE domain_name = ?",
+    params = list(domain)
+  )
+  if (nrow(domain_row) == 0) {
+    stop(
+      "Unknown domain '", domain, "' -- expected one already present in the domains table.",
+      call. = FALSE
+    )
+  }
+
+  n <- DBI::dbExecute(
+    con,
+    "INSERT INTO assays (assay_name, domain_id, description)
+     VALUES (?, ?, ?)
+     ON CONFLICT (assay_name, domain_id) DO NOTHING",
+    params = list(assay_name, domain_row$domain_id[[1]], description)
+  )
+  invisible(n)
+}
