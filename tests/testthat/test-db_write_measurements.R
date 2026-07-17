@@ -100,6 +100,40 @@ test_that("db_write_facs is idempotent", {
   expect_equal(n, 0)
 })
 
+test_that("db_write_facs rolls back the facs_stains row when the measurements insert fails", {
+  con <- local_test_db()
+  seed_minimal_fixture(con)
+
+  bad_facs_data <- tibble::tibble(
+    PopulationFullPath = c("root/Lymphocytes/CD4+", NA_character_),
+    Population = c("CD4+", "CD8+"),
+    metric = c("Count", NA_character_),
+    value = c(1000, 800)
+  )
+
+  expect_error(
+    db_write_facs(
+      con, bad_facs_data,
+      mouse_id = "25-7-1", tissue = "spleen", assay_name = "overview",
+      count_method = "volumetric", vol_stained = 0.1,
+      vol_resuspended = 0.5, vol_measured = 0.05
+    )
+  )
+
+  stains <- DBI::dbGetQuery(
+    con,
+    "SELECT fs.* FROM facs_stains fs
+     JOIN samples sm ON sm.sample_id = fs.sample_id
+     JOIN subjects sub ON sub.subject_id = sm.subject_id
+     JOIN assays a ON a.assay_id = fs.assay_id
+     WHERE sub.mouse_id = '25-7-1' AND sm.tissue = 'spleen' AND a.assay_name = 'overview'"
+  )
+  expect_equal(nrow(stains), 0)
+
+  measurements <- DBI::dbGetQuery(con, "SELECT * FROM facs_measurements")
+  expect_equal(nrow(measurements), 0)
+})
+
 test_that("db_write_elisa inserts measurements", {
   con <- local_test_db()
   seed_minimal_fixture(con)
@@ -133,6 +167,32 @@ test_that("db_write_elisa is idempotent", {
   do.call(db_write_elisa, args)
   n <- do.call(db_write_elisa, args)
   expect_equal(n, 0)
+})
+
+test_that("db_write_elisa errors on NA sample_id or replicate and inserts nothing", {
+  con <- local_test_db()
+  seed_minimal_fixture(con)
+
+  elisa_data_na_sample <- tibble::tibble(
+    cytokine = "MPO", sample_id = NA_character_, replicate = 1L,
+    value = 12.3, unit = "pg/ml", result_status = "OK"
+  )
+  expect_error(
+    db_write_elisa(con, elisa_data_na_sample, mouse_id = "25-7-1", tissue = "spleen", assay_name = "anti-MPO"),
+    "requires non-NA sample_id and replicate"
+  )
+
+  elisa_data_na_replicate <- tibble::tibble(
+    cytokine = "MPO", sample_id = "25-7-1", replicate = NA_integer_,
+    value = 12.3, unit = "pg/ml", result_status = "OK"
+  )
+  expect_error(
+    db_write_elisa(con, elisa_data_na_replicate, mouse_id = "25-7-1", tissue = "spleen", assay_name = "anti-MPO"),
+    "requires non-NA sample_id and replicate"
+  )
+
+  rows <- DBI::dbGetQuery(con, "SELECT * FROM elisa_measurements")
+  expect_equal(nrow(rows), 0)
 })
 
 test_that("db_write_histo inserts measurements without an assay", {

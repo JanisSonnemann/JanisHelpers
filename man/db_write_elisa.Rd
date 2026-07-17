@@ -18,7 +18,8 @@ db_write_elisa(
 
 \item{data}{A tibble with columns \code{cytokine}, \code{sample_id} (raw plate
 label), \code{replicate}, \code{value}, \code{unit}, \code{result_status} -- the shape
-\code{elisa_read_results()} produces.}
+\code{elisa_read_results()} produces. \code{sample_id} and \code{replicate} must not
+contain \code{NA}.}
 
 \item{mouse_id}{Character scalar identifying the subject.}
 
@@ -35,4 +36,11 @@ Invisibly, the number of rows inserted.
 \description{
 Writes a tidy tibble of ELISA measurements (as produced by
 \code{elisa_read_results()}) into \code{elisa_measurements}.
+}
+\details{
+\code{elisa_measurements}'s uniqueness constraint (which backs duplicate-import
+detection) is \code{UNIQUE(sample_id, assay_id, cytokine, sample_id_raw, replicate)}; because SQL treats \verb{NULL <> NULL}, an \code{NA} in \code{data$sample_id}
+(written as \code{sample_id_raw}) or \code{data$replicate} would let a repeat import
+insert duplicate rows undetected, so this function errors before writing
+anything if either column contains \code{NA}.
 }

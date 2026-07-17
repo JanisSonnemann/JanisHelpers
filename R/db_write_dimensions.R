@@ -122,23 +122,27 @@ db_write_samples <- function(con, data) {
     )
   }
 
-  n <- DBI::dbExecute(con, "
-    INSERT INTO samples (subject_id, tissue, collected_at)
-    SELECT sub.subject_id, t.tissue, CAST(t.collected_at AS DATE)
-    FROM tmp_samples t
-    JOIN subjects sub ON sub.mouse_id = t.mouse_id
-    ON CONFLICT (subject_id, tissue) DO NOTHING
-  ")
+  n <- DBI::dbWithTransaction(con, {
+    n_samples <- DBI::dbExecute(con, "
+      INSERT INTO samples (subject_id, tissue, collected_at)
+      SELECT sub.subject_id, t.tissue, CAST(t.collected_at AS DATE)
+      FROM tmp_samples t
+      JOIN subjects sub ON sub.mouse_id = t.mouse_id
+      ON CONFLICT (subject_id, tissue) DO NOTHING
+    ")
 
-  DBI::dbExecute(con, "
-    INSERT INTO sample_digestions (sample_id, total_weight, facs_weight, vol_total)
-    SELECT sm.sample_id, t.total_weight, t.facs_weight, t.vol_total
-    FROM tmp_samples t
-    JOIN subjects sub ON sub.mouse_id = t.mouse_id
-    JOIN samples sm ON sm.subject_id = sub.subject_id AND sm.tissue = t.tissue
-    WHERE t.total_weight IS NOT NULL OR t.facs_weight IS NOT NULL OR t.vol_total IS NOT NULL
-    ON CONFLICT (sample_id) DO NOTHING
-  ")
+    DBI::dbExecute(con, "
+      INSERT INTO sample_digestions (sample_id, total_weight, facs_weight, vol_total)
+      SELECT sm.sample_id, t.total_weight, t.facs_weight, t.vol_total
+      FROM tmp_samples t
+      JOIN subjects sub ON sub.mouse_id = t.mouse_id
+      JOIN samples sm ON sm.subject_id = sub.subject_id AND sm.tissue = t.tissue
+      WHERE t.total_weight IS NOT NULL OR t.facs_weight IS NOT NULL OR t.vol_total IS NOT NULL
+      ON CONFLICT (sample_id) DO NOTHING
+    ")
+
+    n_samples
+  })
 
   invisible(n)
 }

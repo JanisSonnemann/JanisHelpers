@@ -84,33 +84,11 @@ db_write_facs <- function(con, data, mouse_id, tissue, assay_name, count_method,
   sample_id <- lookup_sample_id_(con, mouse_id, tissue)
   assay_id <- lookup_assay_id_(con, assay_name, domain = "facs")
 
-  DBI::dbExecute(
-    con,
-    "INSERT INTO facs_stains (
-       sample_id, assay_id, vol_stained, count_method,
-       vol_resuspended, vol_measured,
-       bead_volume_added, bead_concentration, bead_population_path, stain_date
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT (sample_id, assay_id) DO NOTHING",
-    params = list(
-      sample_id, assay_id, vol_stained, count_method,
-      vol_resuspended, vol_measured,
-      bead_volume_added, bead_concentration, bead_population_path, stain_date
-    )
-  )
-
-  facs_stain_id <- DBI::dbGetQuery(
-    con,
-    "SELECT facs_stain_id FROM facs_stains WHERE sample_id = ? AND assay_id = ?",
-    params = list(sample_id, assay_id)
-  )$facs_stain_id[[1]]
-
   if (is.null(source_file)) {
     source_file <- if ("FileName" %in% names(data)) as.character(data$FileName[[1]]) else NA_character_
   }
 
   to_write <- tibble::tibble(
-    facs_stain_id = facs_stain_id,
     population_full_path = as.character(data$PopulationFullPath),
     population = as.character(data$Population),
     metric = as.character(data$metric),
@@ -120,14 +98,37 @@ db_write_facs <- function(con, data, mouse_id, tissue, assay_name, count_method,
   duckdb::duckdb_register(con, "tmp_facs_measurements", to_write)
   on.exit(duckdb::duckdb_unregister(con, "tmp_facs_measurements"), add = TRUE)
 
-  n <- DBI::dbExecute(con, "
-    INSERT INTO facs_measurements (
-      facs_stain_id, population_full_path, population, metric, value, source_file
+  n <- DBI::dbWithTransaction(con, {
+    DBI::dbExecute(
+      con,
+      "INSERT INTO facs_stains (
+         sample_id, assay_id, vol_stained, count_method,
+         vol_resuspended, vol_measured,
+         bead_volume_added, bead_concentration, bead_population_path, stain_date
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT (sample_id, assay_id) DO NOTHING",
+      params = list(
+        sample_id, assay_id, vol_stained, count_method,
+        vol_resuspended, vol_measured,
+        bead_volume_added, bead_concentration, bead_population_path, stain_date
+      )
     )
-    SELECT facs_stain_id, population_full_path, population, metric, value, source_file
-    FROM tmp_facs_measurements
-    ON CONFLICT (facs_stain_id, population_full_path, metric) DO NOTHING
-  ")
+
+    facs_stain_id <- DBI::dbGetQuery(
+      con,
+      "SELECT facs_stain_id FROM facs_stains WHERE sample_id = ? AND assay_id = ?",
+      params = list(sample_id, assay_id)
+    )$facs_stain_id[[1]]
+
+    DBI::dbExecute(con, "
+      INSERT INTO facs_measurements (
+        facs_stain_id, population_full_path, population, metric, value, source_file
+      )
+      SELECT ?, population_full_path, population, metric, value, source_file
+      FROM tmp_facs_measurements
+      ON CONFLICT (facs_stain_id, population_full_path, metric) DO NOTHING
+    ", params = list(facs_stain_id))
+  })
 
   invisible(n)
 }
@@ -137,10 +138,18 @@ db_write_facs <- function(con, data, mouse_id, tissue, assay_name, count_method,
 #' Writes a tidy tibble of ELISA measurements (as produced by
 #' `elisa_read_results()`) into `elisa_measurements`.
 #'
+#' `elisa_measurements`'s uniqueness constraint (which backs duplicate-import
+#' detection) is `UNIQUE(sample_id, assay_id, cytokine, sample_id_raw,
+#' replicate)`; because SQL treats `NULL <> NULL`, an `NA` in `data$sample_id`
+#' (written as `sample_id_raw`) or `data$replicate` would let a repeat import
+#' insert duplicate rows undetected, so this function errors before writing
+#' anything if either column contains `NA`.
+#'
 #' @param con A `DBI` connection from [db_connect()].
 #' @param data A tibble with columns `cytokine`, `sample_id` (raw plate
 #'   label), `replicate`, `value`, `unit`, `result_status` -- the shape
-#'   `elisa_read_results()` produces.
+#'   `elisa_read_results()` produces. `sample_id` and `replicate` must not
+#'   contain `NA`.
 #' @param mouse_id Character scalar identifying the subject.
 #' @param tissue Character scalar identifying the sample.
 #' @param assay_name Character scalar identifying the assay/panel (already
@@ -149,6 +158,15 @@ db_write_facs <- function(con, data, mouse_id, tissue, assay_name, count_method,
 #' @returns Invisibly, the number of rows inserted.
 #' @export
 db_write_elisa <- function(con, data, mouse_id, tissue, assay_name, source_file = NA_character_) {
+  if (anyNA(data$sample_id) || anyNA(data$replicate)) {
+    stop(
+      "db_write_elisa() requires non-NA sample_id and replicate for every row ",
+      "-- these back the table's uniqueness constraint; NA values would break ",
+      "duplicate-import detection.",
+      call. = FALSE
+    )
+  }
+
   sample_id <- lookup_sample_id_(con, mouse_id, tissue)
   assay_id <- lookup_assay_id_(con, assay_name, domain = "elisa")
 
