@@ -457,7 +457,9 @@ git commit -m "feat: add db_write_experiment()"
   `mouse_id`, `experiment_code`, and optionally `mdc_id`, `cage`,
   `mouse_strain`, `generation`, `sex`, `mouse_treatment`, `treatment_group`,
   `dob`, `start_date`, `bmt_date`, `end_date`. Returns invisibly the number
-  of rows inserted. Also produces the internal helper `fill_missing_cols_(data, cols)`.
+  of rows inserted. Errors clearly (naming every unresolved `experiment_code`)
+  rather than silently dropping rows whose `experiment_code` isn't registered
+  yet. Also produces the internal helper `fill_missing_cols_(data, cols)`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -497,6 +499,18 @@ test_that("db_write_subjects is idempotent and fills missing optional columns", 
   expect_equal(nrow(row), 1)
   expect_true(is.na(row$sex))
 })
+
+test_that("db_write_subjects errors clearly on an unknown experiment_code", {
+  con <- local_test_db()
+
+  expect_error(
+    db_write_subjects(con, tibble::tibble(mouse_id = "25-7-1", experiment_code = "not-registered")),
+    "Unknown experiment_code"
+  )
+
+  row <- DBI::dbGetQuery(con, "SELECT * FROM subjects WHERE mouse_id = '25-7-1'")
+  expect_equal(nrow(row), 0)
+})
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -521,6 +535,8 @@ fill_missing_cols_ <- function(data, cols) {
 #' `subjects` table: one row per mouse, with `mouse_id` and an
 #' `experiment_code` identifying an experiment already registered via
 #' [db_write_experiment()]. Rows whose `mouse_id` already exists are skipped.
+#' Errors if any row's `experiment_code` isn't registered yet -- naming
+#' every unresolved code -- rather than silently dropping those rows.
 #'
 #' @param con A `DBI` connection from [db_connect()].
 #' @param data A tibble with columns `mouse_id`, `experiment_code`, and
@@ -537,6 +553,20 @@ db_write_subjects <- function(con, data) {
   ))
   duckdb::duckdb_register(con, "tmp_subjects", data)
   on.exit(duckdb::duckdb_unregister(con, "tmp_subjects"), add = TRUE)
+
+  unknown_codes <- DBI::dbGetQuery(con, "
+    SELECT DISTINCT s.experiment_code
+    FROM tmp_subjects s
+    LEFT JOIN experiments e ON e.experiment_code = s.experiment_code
+    WHERE e.experiment_id IS NULL
+  ")$experiment_code
+  if (length(unknown_codes) > 0) {
+    stop(
+      "Unknown experiment_code(s): ", paste(sprintf("'%s'", unknown_codes), collapse = ", "),
+      " -- register them first via db_write_experiment().",
+      call. = FALSE
+    )
+  }
 
   n <- DBI::dbExecute(con, "
     INSERT INTO subjects (
@@ -587,7 +617,10 @@ git commit -m "feat: add db_write_subjects()"
   `mouse_id`, `tissue`, and optionally `collected_at`, `total_weight`,
   `facs_weight`, `vol_total`. Returns invisibly the number of rows inserted
   into `samples`. Writes to `sample_digestions` only for rows where at least
-  one of `total_weight`/`facs_weight`/`vol_total` is non-`NA`.
+  one of `total_weight`/`facs_weight`/`vol_total` is non-`NA`. Errors clearly
+  (naming every unresolved `mouse_id`) rather than silently dropping rows
+  whose `mouse_id` isn't registered yet -- same pattern as Task 3's
+  `db_write_subjects()`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -625,6 +658,18 @@ test_that("db_write_samples is idempotent", {
   n <- db_write_samples(con, tibble::tibble(mouse_id = "25-7-1", tissue = "spleen"))
   expect_equal(n, 0)
 })
+
+test_that("db_write_samples errors clearly on an unknown mouse_id", {
+  con <- local_test_db()
+
+  expect_error(
+    db_write_samples(con, tibble::tibble(mouse_id = "not-registered", tissue = "spleen")),
+    "Unknown mouse_id"
+  )
+
+  row <- DBI::dbGetQuery(con, "SELECT * FROM samples")
+  expect_equal(nrow(row), 0)
+})
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -642,7 +687,9 @@ Append to `R/db_write_dimensions.R`:
 #' Bulk-inserts sample rows, and -- for tissue that went through FACS
 #' dissociation -- the matching `sample_digestions` row. `data` must already
 #' be shaped with one row per subject x tissue, referencing subjects already
-#' registered via [db_write_subjects()].
+#' registered via [db_write_subjects()]. Errors if any row's `mouse_id` isn't
+#' registered yet -- naming every unresolved `mouse_id` -- rather than
+#' silently dropping those rows.
 #'
 #' @param con A `DBI` connection from [db_connect()].
 #' @param data A tibble with columns `mouse_id`, `tissue`, and optionally
@@ -657,6 +704,20 @@ db_write_samples <- function(con, data) {
   ))
   duckdb::duckdb_register(con, "tmp_samples", data)
   on.exit(duckdb::duckdb_unregister(con, "tmp_samples"), add = TRUE)
+
+  unknown_mice <- DBI::dbGetQuery(con, "
+    SELECT DISTINCT t.mouse_id
+    FROM tmp_samples t
+    LEFT JOIN subjects sub ON sub.mouse_id = t.mouse_id
+    WHERE sub.subject_id IS NULL
+  ")$mouse_id
+  if (length(unknown_mice) > 0) {
+    stop(
+      "Unknown mouse_id(s): ", paste(sprintf("'%s'", unknown_mice), collapse = ", "),
+      " -- register them first via db_write_subjects().",
+      call. = FALSE
+    )
+  }
 
   n <- DBI::dbExecute(con, "
     INSERT INTO samples (subject_id, tissue, collected_at)
