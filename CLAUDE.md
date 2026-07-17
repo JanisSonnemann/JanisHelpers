@@ -40,7 +40,7 @@ devtools::install()    # full install
 - `meta_` — experiment/subject metadata import and annotation
 - `elisa_` — multiplex bead ELISA (Luminex/Bio-Plex) import
 - `wrangle_` — general data wrangling [stub — no functions yet]
-- `db_` — database access [stub — no functions yet]
+- `db_` — database access (DuckDB: connect/write/query the FACS/ELISA/histology schema)
 
 New functions must follow the `domain_verb` pattern. Never add a function that doesn't belong to a declared domain.
 
@@ -149,6 +149,41 @@ New functions must follow the `domain_verb` pattern. Never add a function that d
   (`Mean`/`SD`/`SEM`/`CV %`/`Final Result`), are out of scope -- use the
   package's `analysis_` functions to summarize across replicates instead.
 
+### `db_connect()` / `db_write_*()` / `db_query_*()` -- lab measurements database
+- **Schema**: see `docs/superpowers/specs/2026-07-17-facs-db-schema-design.md`
+  for full DDL. Two layers: dimensions (`domains`, `experiments`, `subjects`,
+  `samples`, `sample_digestions`, `assays`) and per-domain fact tables
+  (`facs_stains` + `facs_measurements`, `elisa_measurements`,
+  `histo_measurements`), on DuckDB.
+- **`db_connect(path)`**: opens/creates the database file and idempotently
+  ensures the full schema exists, seeding `domains` with `"facs"`/`"histo"`/`"elisa"`.
+- **`db_write_experiment()`/`db_write_subjects()`/`db_write_samples()`/`db_write_assay()`**:
+  register dimension rows. All idempotent (`ON CONFLICT DO NOTHING` against
+  the schema's `UNIQUE` constraints) -- safe to re-run. `db_write_subjects()`
+  and `db_write_samples()` take a whole tibble (one row per mouse, or one row
+  per subject x tissue) and error, naming every unresolved key, if any row
+  references an `experiment_code`/`mouse_id` not already registered one level
+  up -- rather than silently dropping those rows.
+- **`db_write_facs()`/`db_write_elisa()`/`db_write_histo()`**: import a
+  domain's tidy long tibble (matching that domain's existing read function's
+  output shape) against an already-registered `mouse_id`/`tissue`/`assay_name`.
+  All idempotent. `db_write_facs()` additionally creates the `facs_stains` row
+  (one per sample x panel) on first write, branching on `count_method`
+  (`"volumetric"` or `"bead"`) -- the database's `CHECK` constraint enforces
+  that only the fields matching the chosen method are populated.
+  `db_write_histo()`'s `assay_name` is optional (unlike `facs`/`elisa`, where
+  it's required); rows written with `assay_name = NA` are not deduplicated
+  against each other, since SQL's `NULL <> NULL` means the
+  `UNIQUE(sample_id, assay_id, metric)` constraint doesn't catch a repeated
+  import when `assay_id` is `NULL` -- pass a registered `assay_name` for full
+  dedup protection.
+- **`db_query_facs()`/`db_query_elisa()`/`db_query_histo()`**: return a lazy
+  `dbplyr` `tbl` joining a fact table back to natural keys (`experiment_code`,
+  `mouse_id`, `tissue`, `assay_name`) -- callers never see surrogate IDs.
+  `dplyr::collect()` to materialize.
+- Migrating existing `data/MPOmRNA.db` (SQLite) data into this schema is a
+  separate, not-yet-started task.
+
 ---
 
 ## Dependency philosophy
@@ -157,7 +192,7 @@ New functions must follow the `domain_verb` pattern. Never add a function that d
 - **`Suggests`**: packages only needed in examples or vignettes. Currently none.
 - **Non-CRAN packages** (`fcexpr`): list in `Imports` as normal; document the install requirement in README. Do not add `remotes::` calls inside function bodies.
 
-Current `Imports`: `CytoML`, `diffcyt`, `dplyr`, `fcexpr`, `flowCore`, `FlowSOM`, `flowWorkspace`, `ggplot2`, `glue`, `gt`, `gtsummary`, `janitor`, `parallel`, `purrr`, `readxl`, `rmarkdown`, `rstatix`, `stats`, `stringr`, `SummarizedExperiment`, `tibble`, `tidyr`, `tools`, `uwot`, `xml2`, `xfun` (order matches `DESCRIPTION`'s `Imports:` block).
+Current `Imports`: `CytoML`, `DBI`, `dbplyr`, `diffcyt`, `dplyr`, `duckdb`, `fcexpr`, `flowCore`, `FlowSOM`, `flowWorkspace`, `ggplot2`, `glue`, `gt`, `gtsummary`, `janitor`, `parallel`, `purrr`, `readxl`, `rmarkdown`, `rstatix`, `stats`, `stringr`, `SummarizedExperiment`, `tibble`, `tidyr`, `tools`, `uwot`, `xml2`, `xfun` (order matches `DESCRIPTION`'s `Imports:` block). Note: `dbplyr` is currently flagged by `R CMD check` as an unused declared Import -- see "Known check output" below.
 
 ---
 
@@ -196,7 +231,50 @@ Current `Imports`: `CytoML`, `diffcyt`, `dplyr`, `fcexpr`, `flowCore`, `FlowSOM`
 
 ## Known check output
 
-`devtools::check()` currently produces **0 errors, 0 warnings**, plus a small set of pre-existing notes:
+`devtools::check()` on this branch (after the `db_` domain, Tasks 1-9) currently
+produces **0 errors, 2 warnings, 4 notes**. Three of those notes are the same
+pre-existing/expected false positives documented below (plus one new,
+expected tidy-eval note from `R/db_query.R`); the two warnings, and one of the
+four notes, are new and are genuine bugs introduced by the `db_` domain's own
+code -- NOT false positives, and still unresolved as of this task, whose scope
+was verify-and-document only (`CLAUDE.md`), not touching `R/`/`DESCRIPTION`:
+
+- **`checking Rd files` (WARNING, real, unresolved)**: `prepare_Rd: unknown macro '\u'`
+  at `man/db_connect.Rd:18`, `man/db_write_histo.Rd:25`, and
+  `man/db_write_histo.Rd:39`. Cause: `R/db_connect.R` line 5 and
+  `R/db_write_measurements.R` lines 186 and 195 write the six-character
+  escape-code sequence for U+2014 (em dash) / U+2013 (en dash) as literal
+  text inside `#'` roxygen comment text, following this file's own "escape
+  non-ASCII in R source with the Unicode escape form" rule (see
+  Code style above) -- but that rule is written for actual R string literals,
+  where R's parser unescapes `\uXXXX` at parse time. Roxygen `#'` comments
+  are plain text, never parsed as string literals, so the escape sequence
+  passes through unconverted into the generated `.Rd` file, where Rd's macro
+  processor doesn't recognize `\u` and warns. No other file in the package
+  hits this, because every other domain writes plain ASCII `--` in roxygen
+  prose instead of an em/en dash -- confirmed by grepping every `R/*.R` file
+  for a `\uXXXX` pattern inside a `#'` line: only these two files match. Fix:
+  replace those three occurrences with plain ASCII `--`, then re-run
+  `devtools::document()`.
+- **`checking for unstated dependencies in 'tests'` (WARNING, real, unresolved)**:
+  `withr::defer()` is called in `tests/testthat/helper-db.R` and
+  `tests/testthat/test-db_connect.R`, but `withr` is not declared anywhere in
+  `DESCRIPTION` (not `Imports`, not `Suggests`). Fix: add `withr` to
+  `Suggests`.
+- **`checking dependencies in R code` (NOTE, real, unresolved)**: `dbplyr` is
+  listed in `Imports` (added for the `db_` domain) but no `R/` file calls
+  `dbplyr::` anything -- `db_query_facs()`/`db_query_elisa()`/`db_query_histo()`
+  only ever call `dplyr::tbl()`/`dplyr::left_join()`/`dplyr::select()` against
+  a `DBI` connection; `dbplyr` supplies the SQL-translation backend those
+  `dplyr` verbs dispatch to implicitly, never through an explicit `dbplyr::`
+  call. `R CMD check` can't see that indirect need and flags it as an unused
+  declared Import. Needs a resolution (e.g. an explicit `dbplyr::` reference
+  somewhere, or documenting/justifying why it must stay in `Imports` despite
+  never being called directly) -- left unresolved by this task since fixing
+  it means editing `R/db_query.R` or `DESCRIPTION`, outside this task's
+  `CLAUDE.md`-only scope.
+
+Pre-existing/expected notes (false positives or environment-only):
 
 - `future file timestamps` — network/environment issue, not code.
 - `checking for hidden files and directories` (`.git`) — only observed when running `check()` from inside a git worktree, where `.git` is a file (pointing at the real gitdir) rather than a directory; R's default VCS-ignore logic doesn't recognize the file form. Does not appear when checking from a normal clone.
@@ -220,3 +298,4 @@ Current `Imports`: `CytoML`, `diffcyt`, `dplyr`, `fcexpr`, `flowCore`, `FlowSOM`
   - `facs_plot_cluster_abundance` variable-binding notes (`p_adj`, `.data`, `fraction`) — `p_adj` is a bare column name inside `dplyr::filter(p_adj <= p_adj_threshold)`; `.data` is the rlang tidy-eval pronoun used in `.data[[cluster_col]]`/`.data[[group_col]]` to subset by the user-supplied cluster/grouping column names; `fraction` is a bare column name inside `ggplot2::aes(y = fraction)` -- same false-positive pattern as `facs_plot_umap` above.
   - `facs_plot_cluster_heatmap` variable-binding notes (`marker`, `median`, `.data`, `fill_value`) — `marker` is a bare column name inside `dplyr::group_by(marker)` (and again inside `ggplot2::aes(x = marker, ...)`); `median` is a bare column name read inside the `dplyr::mutate(fill_value = ...)` z-score/raw branch (the per-marker, per-cluster median values `facs_calc_cluster_marker_medians()` already computed via namespaced `stats::median()`); `.data` is the rlang tidy-eval pronoun used in `.data[[cluster_col]]` to subset by the user-supplied cluster column name; `fill_value` is the column `dplyr::mutate()` defines and that is then referenced bare inside `ggplot2::aes(fill = fill_value)` -- same false-positive pattern as `facs_plot_cluster_abundance`/`facs_plot_umap` above. Because `median` also happens to name a base-R generic, this NOTE additionally prints a "Consider adding `importFrom("stats", "median")`" suggestion; no import is needed since `facs_plot_cluster_heatmap()` never calls `median()` as a function here -- it only reads the pre-computed `median` column -- so this is the same bare-column false positive, just with an extra suggestion line triggered by the name collision. `facs_calc_cluster_marker_medians()` (the function that produces the `marker`/`median` columns this consumes) produces no notes of its own: it resolves its columns entirely through `dplyr::across(dplyr::all_of(cluster_col))`/`dplyr::across(dplyr::all_of(markers), stats::median)` and `tidyr::pivot_longer(names_to =, values_to =)`, never referencing a column by a bare literal name.
   - `elisa_read_results` variable-binding notes (`Rep`, `sample_id`, `value`, `result_status`) — bare column names inside `dplyr::select()`/`dplyr::filter()`/`dplyr::mutate()`, same false-positive pattern as every other domain above. `cytokine` and `unit`, referenced inside the same `dplyr::mutate()` call, are not flagged because `cytokine` is a formal argument (also conditionally reassigned inside the function body) and `unit` is a local variable assigned earlier in the function body (`unit <- stringr::str_extract(...)`), which codetools resolves without a note, the same reason `facs_calc_count_per_g`'s own formal arguments go unflagged above. `replicate` is also unflagged, but for a different reason: it collides with the base-R function `replicate()`, and codetools treats base-package names as always resolved -- unlike the `stats::median`/`graphics::stars` collisions elsewhere in this section, which still get flagged (plus an `importFrom` suggestion) because `stats` and `graphics` are non-base default-attached packages rather than base itself.
+  - `db_query_facs`/`db_query_elisa`/`db_query_histo` variable-binding notes (`db_query_facs`: `experiment_code`, `mouse_id`, `tissue`, `assay_name`, `population_full_path`, `population`, `metric`, `value`, `count_method`, `vol_stained`, `vol_resuspended`, `vol_measured`, `bead_volume_added`, `bead_concentration`, `bead_population_path`, `source_file`, `imported_at`; `db_query_elisa`: `experiment_code`, `mouse_id`, `tissue`, `assay_name`, `cytokine`, `sample_id_raw`, `value`, `unit`, `result_status`, `source_file`, `imported_at`; `db_query_histo`: `experiment_code`, `mouse_id`, `tissue`, `assay_name`, `metric`, `value`, `source_file`, `imported_at`) -- bare column names inside each function's closing `dplyr::select()` call (selecting from the joined `dbplyr` lazy `tbl`), same false-positive pattern as every other domain above.
