@@ -54,3 +54,15 @@ test_that("db_write_subjects is idempotent and fills missing optional columns", 
   expect_equal(nrow(row), 1)
   expect_true(is.na(row$sex))
 })
+
+test_that("db_write_subjects errors clearly on an unknown experiment_code", {
+  con <- local_test_db()
+
+  expect_error(
+    db_write_subjects(con, tibble::tibble(mouse_id = "25-7-1", experiment_code = "not-registered")),
+    "Unknown experiment_code"
+  )
+
+  row <- DBI::dbGetQuery(con, "SELECT * FROM subjects WHERE mouse_id = '25-7-1'")
+  expect_equal(nrow(row), 0)
+})

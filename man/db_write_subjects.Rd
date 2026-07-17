@@ -22,4 +22,6 @@ Bulk-inserts subject rows. \code{data} must already be shaped to match the
 \code{subjects} table: one row per mouse, with \code{mouse_id} and an
 \code{experiment_code} identifying an experiment already registered via
 \code{\link[=db_write_experiment]{db_write_experiment()}}. Rows whose \code{mouse_id} already exists are skipped.
+Errors if any row's \code{experiment_code} isn't registered yet -- naming
+every unresolved code -- rather than silently dropping those rows.
 }

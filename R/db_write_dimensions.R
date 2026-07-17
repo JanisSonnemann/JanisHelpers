@@ -35,6 +35,8 @@ fill_missing_cols_ <- function(data, cols) {
 #' `subjects` table: one row per mouse, with `mouse_id` and an
 #' `experiment_code` identifying an experiment already registered via
 #' [db_write_experiment()]. Rows whose `mouse_id` already exists are skipped.
+#' Errors if any row's `experiment_code` isn't registered yet -- naming
+#' every unresolved code -- rather than silently dropping those rows.
 #'
 #' @param con A `DBI` connection from [db_connect()].
 #' @param data A tibble with columns `mouse_id`, `experiment_code`, and
@@ -51,6 +53,20 @@ db_write_subjects <- function(con, data) {
   ))
   duckdb::duckdb_register(con, "tmp_subjects", data)
   on.exit(duckdb::duckdb_unregister(con, "tmp_subjects"), add = TRUE)
+
+  unknown_codes <- DBI::dbGetQuery(con, "
+    SELECT DISTINCT s.experiment_code
+    FROM tmp_subjects s
+    LEFT JOIN experiments e ON e.experiment_code = s.experiment_code
+    WHERE e.experiment_id IS NULL
+  ")$experiment_code
+  if (length(unknown_codes) > 0) {
+    stop(
+      "Unknown experiment_code(s): ", paste(sprintf("'%s'", unknown_codes), collapse = ", "),
+      " -- register them first via db_write_experiment().",
+      call. = FALSE
+    )
+  }
 
   n <- DBI::dbExecute(con, "
     INSERT INTO subjects (
