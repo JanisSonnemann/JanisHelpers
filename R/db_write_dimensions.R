@@ -84,3 +84,61 @@ db_write_subjects <- function(con, data) {
   ")
   invisible(n)
 }
+
+#' Register samples (subject x tissue harvests)
+#'
+#' Bulk-inserts sample rows, and -- for tissue that went through FACS
+#' dissociation -- the matching `sample_digestions` row. `data` must already
+#' be shaped with one row per subject x tissue, referencing subjects already
+#' registered via [db_write_subjects()]. Errors if any row's `mouse_id` isn't
+#' registered yet -- naming every unresolved `mouse_id` -- rather than
+#' silently dropping those rows.
+#'
+#' @param con A `DBI` connection from [db_connect()].
+#' @param data A tibble with columns `mouse_id`, `tissue`, and optionally
+#'   `collected_at`, `total_weight`, `facs_weight`, `vol_total`. The three
+#'   weight/volume columns are only written to `sample_digestions` for rows
+#'   where at least one of them is non-`NA`.
+#' @returns Invisibly, the number of rows inserted into `samples`.
+#' @export
+db_write_samples <- function(con, data) {
+  data <- fill_missing_cols_(data, c(
+    "mouse_id", "tissue", "collected_at", "total_weight", "facs_weight", "vol_total"
+  ))
+  duckdb::duckdb_register(con, "tmp_samples", data)
+  on.exit(duckdb::duckdb_unregister(con, "tmp_samples"), add = TRUE)
+
+  unknown_mice <- DBI::dbGetQuery(con, "
+    SELECT DISTINCT t.mouse_id
+    FROM tmp_samples t
+    LEFT JOIN subjects sub ON sub.mouse_id = t.mouse_id
+    WHERE sub.subject_id IS NULL
+  ")$mouse_id
+  if (length(unknown_mice) > 0) {
+    stop(
+      "Unknown mouse_id(s): ", paste(sprintf("'%s'", unknown_mice), collapse = ", "),
+      " -- register them first via db_write_subjects().",
+      call. = FALSE
+    )
+  }
+
+  n <- DBI::dbExecute(con, "
+    INSERT INTO samples (subject_id, tissue, collected_at)
+    SELECT sub.subject_id, t.tissue, CAST(t.collected_at AS DATE)
+    FROM tmp_samples t
+    JOIN subjects sub ON sub.mouse_id = t.mouse_id
+    ON CONFLICT (subject_id, tissue) DO NOTHING
+  ")
+
+  DBI::dbExecute(con, "
+    INSERT INTO sample_digestions (sample_id, total_weight, facs_weight, vol_total)
+    SELECT sm.sample_id, t.total_weight, t.facs_weight, t.vol_total
+    FROM tmp_samples t
+    JOIN subjects sub ON sub.mouse_id = t.mouse_id
+    JOIN samples sm ON sm.subject_id = sub.subject_id AND sm.tissue = t.tissue
+    WHERE t.total_weight IS NOT NULL OR t.facs_weight IS NOT NULL OR t.vol_total IS NOT NULL
+    ON CONFLICT (sample_id) DO NOTHING
+  ")
+
+  invisible(n)
+}

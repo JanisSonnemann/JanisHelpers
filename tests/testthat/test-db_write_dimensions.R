@@ -66,3 +66,47 @@ test_that("db_write_subjects errors clearly on an unknown experiment_code", {
   row <- DBI::dbGetQuery(con, "SELECT * FROM subjects WHERE mouse_id = '25-7-1'")
   expect_equal(nrow(row), 0)
 })
+
+test_that("db_write_samples inserts samples and digestions where weights are given", {
+  con <- local_test_db()
+  db_write_experiment(con, experiment_code = "25-7")
+  db_write_subjects(con, tibble::tibble(mouse_id = "25-7-1", experiment_code = "25-7"))
+
+  n <- db_write_samples(con, tibble::tibble(
+    mouse_id = c("25-7-1", "25-7-1"),
+    tissue = c("spleen", "serum"),
+    total_weight = c(0.12, NA),
+    facs_weight = c(0.05, NA),
+    vol_total = c(2.5, NA)
+  ))
+  expect_equal(n, 2)
+
+  digestions <- DBI::dbGetQuery(con, "
+    SELECT sm.tissue, d.total_weight
+    FROM sample_digestions d JOIN samples sm ON sm.sample_id = d.sample_id
+  ")
+  expect_equal(digestions$tissue, "spleen")
+  expect_equal(digestions$total_weight, 0.12)
+})
+
+test_that("db_write_samples is idempotent", {
+  con <- local_test_db()
+  db_write_experiment(con, experiment_code = "25-7")
+  db_write_subjects(con, tibble::tibble(mouse_id = "25-7-1", experiment_code = "25-7"))
+
+  db_write_samples(con, tibble::tibble(mouse_id = "25-7-1", tissue = "spleen"))
+  n <- db_write_samples(con, tibble::tibble(mouse_id = "25-7-1", tissue = "spleen"))
+  expect_equal(n, 0)
+})
+
+test_that("db_write_samples errors clearly on an unknown mouse_id", {
+  con <- local_test_db()
+
+  expect_error(
+    db_write_samples(con, tibble::tibble(mouse_id = "not-registered", tissue = "spleen")),
+    "Unknown mouse_id"
+  )
+
+  row <- DBI::dbGetQuery(con, "SELECT * FROM samples")
+  expect_equal(nrow(row), 0)
+})
