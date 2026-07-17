@@ -131,3 +131,48 @@ db_write_facs <- function(con, data, mouse_id, tissue, assay_name, count_method,
 
   invisible(n)
 }
+
+#' Import ELISA measurements
+#'
+#' Writes a tidy tibble of ELISA measurements (as produced by
+#' `elisa_read_results()`) into `elisa_measurements`.
+#'
+#' @param con A `DBI` connection from [db_connect()].
+#' @param data A tibble with columns `cytokine`, `sample_id` (raw plate
+#'   label), `replicate`, `value`, `unit`, `result_status` -- the shape
+#'   `elisa_read_results()` produces.
+#' @param mouse_id Character scalar identifying the subject.
+#' @param tissue Character scalar identifying the sample.
+#' @param assay_name Character scalar identifying the assay/panel (already
+#'   registered via [db_write_assay()] with `domain = "elisa"`).
+#' @param source_file Character scalar, optional.
+#' @returns Invisibly, the number of rows inserted.
+#' @export
+db_write_elisa <- function(con, data, mouse_id, tissue, assay_name, source_file = NA_character_) {
+  sample_id <- lookup_sample_id_(con, mouse_id, tissue)
+  assay_id <- lookup_assay_id_(con, assay_name, domain = "elisa")
+
+  to_write <- tibble::tibble(
+    sample_id = sample_id,
+    assay_id = assay_id,
+    cytokine = as.character(data$cytokine),
+    sample_id_raw = as.character(data$sample_id),
+    replicate = as.integer(data$replicate),
+    value = as.double(data$value),
+    unit = as.character(data$unit),
+    result_status = as.character(data$result_status),
+    source_file = source_file
+  )
+  duckdb::duckdb_register(con, "tmp_elisa_measurements", to_write)
+  on.exit(duckdb::duckdb_unregister(con, "tmp_elisa_measurements"), add = TRUE)
+
+  n <- DBI::dbExecute(con, "
+    INSERT INTO elisa_measurements (
+      sample_id, assay_id, cytokine, sample_id_raw, replicate, value, unit, result_status, source_file
+    )
+    SELECT sample_id, assay_id, cytokine, sample_id_raw, replicate, value, unit, result_status, source_file
+    FROM tmp_elisa_measurements
+    ON CONFLICT (sample_id, assay_id, cytokine, sample_id_raw, replicate) DO NOTHING
+  ")
+  invisible(n)
+}

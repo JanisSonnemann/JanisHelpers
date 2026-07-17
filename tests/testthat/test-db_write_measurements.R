@@ -99,3 +99,38 @@ test_that("db_write_facs is idempotent", {
   n <- do.call(db_write_facs, args)
   expect_equal(n, 0)
 })
+
+test_that("db_write_elisa inserts measurements", {
+  con <- local_test_db()
+  seed_minimal_fixture(con)
+
+  elisa_data <- tibble::tibble(
+    cytokine = "MPO",
+    sample_id = c("25-7-1", "25-7-1"),
+    replicate = c(1L, 2L),
+    value = c(12.3, 12.7),
+    unit = "pg/ml",
+    result_status = "OK"
+  )
+
+  n <- db_write_elisa(con, elisa_data, mouse_id = "25-7-1", tissue = "spleen", assay_name = "anti-MPO")
+  expect_equal(n, 2)
+
+  rows <- DBI::dbGetQuery(con, "SELECT replicate, value FROM elisa_measurements ORDER BY replicate")
+  expect_equal(rows$replicate, c(1L, 2L))
+  expect_equal(rows$value, c(12.3, 12.7))
+})
+
+test_that("db_write_elisa is idempotent", {
+  con <- local_test_db()
+  seed_minimal_fixture(con)
+
+  elisa_data <- tibble::tibble(
+    cytokine = "MPO", sample_id = "25-7-1", replicate = 1L,
+    value = 12.3, unit = "pg/ml", result_status = "OK"
+  )
+  args <- list(con = con, data = elisa_data, mouse_id = "25-7-1", tissue = "spleen", assay_name = "anti-MPO")
+  do.call(db_write_elisa, args)
+  n <- do.call(db_write_elisa, args)
+  expect_equal(n, 0)
+})
