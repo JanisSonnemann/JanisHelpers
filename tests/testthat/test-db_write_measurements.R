@@ -134,3 +134,28 @@ test_that("db_write_elisa is idempotent", {
   n <- do.call(db_write_elisa, args)
   expect_equal(n, 0)
 })
+
+test_that("db_write_histo inserts measurements without an assay", {
+  con <- local_test_db()
+  seed_minimal_fixture(con)
+
+  histo_data <- tibble::tibble(metric = c("damage_score", "fibrosis_pct"), value = c(2, 15.5))
+
+  n <- db_write_histo(con, histo_data, mouse_id = "25-7-1", tissue = "spleen")
+  expect_equal(n, 2)
+
+  rows <- DBI::dbGetQuery(con, "SELECT metric, value, assay_id FROM histo_measurements ORDER BY metric")
+  expect_equal(rows$metric, c("damage_score", "fibrosis_pct"))
+  expect_true(all(is.na(rows$assay_id)))
+})
+
+test_that("db_write_histo errors clearly on an unknown assay_name", {
+  con <- local_test_db()
+  seed_minimal_fixture(con)
+
+  histo_data <- tibble::tibble(metric = "damage_score", value = 2)
+  expect_error(
+    db_write_histo(con, histo_data, mouse_id = "25-7-1", tissue = "spleen", assay_name = "not-registered"),
+    "No assay found"
+  )
+})

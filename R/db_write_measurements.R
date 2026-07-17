@@ -176,3 +176,47 @@ db_write_elisa <- function(con, data, mouse_id, tissue, assay_name, source_file 
   ")
   invisible(n)
 }
+
+#' Import histology measurements
+#'
+#' Writes a tidy tibble of histology measurements into `histo_measurements`.
+#'
+#' Note: `assay_name` is optional (histology has traditionally used a single
+#' un-named stain/scoring protocol). Rows written with `assay_name = NA` are
+#' not deduplicated against each other \u2013 SQL's `NULL <> NULL` means the
+#' `UNIQUE(sample_id, assay_id, metric)` constraint doesn't catch a repeated
+#' import when `assay_id` is `NULL`. Pass an `assay_name` (registered via
+#' [db_write_assay()] with `domain = "histo"`) to get full dedup protection.
+#'
+#' @param con A `DBI` connection from [db_connect()].
+#' @param data A tibble with columns `metric`, `value`.
+#' @param mouse_id Character scalar identifying the subject.
+#' @param tissue Character scalar identifying the sample.
+#' @param assay_name Character scalar, optional \u2013 identifies the
+#'   stain/scoring protocol.
+#' @param source_file Character scalar, optional.
+#' @returns Invisibly, the number of rows inserted.
+#' @export
+db_write_histo <- function(con, data, mouse_id, tissue, assay_name = NA_character_,
+                            source_file = NA_character_) {
+  sample_id <- lookup_sample_id_(con, mouse_id, tissue)
+  assay_id <- if (!is.na(assay_name)) lookup_assay_id_(con, assay_name, domain = "histo") else NA_integer_
+
+  to_write <- tibble::tibble(
+    sample_id = sample_id,
+    assay_id = assay_id,
+    metric = as.character(data$metric),
+    value = as.double(data$value),
+    source_file = source_file
+  )
+  duckdb::duckdb_register(con, "tmp_histo_measurements", to_write)
+  on.exit(duckdb::duckdb_unregister(con, "tmp_histo_measurements"), add = TRUE)
+
+  n <- DBI::dbExecute(con, "
+    INSERT INTO histo_measurements (sample_id, assay_id, metric, value, source_file)
+    SELECT sample_id, assay_id, metric, value, source_file
+    FROM tmp_histo_measurements
+    ON CONFLICT (sample_id, assay_id, metric) DO NOTHING
+  ")
+  invisible(n)
+}
