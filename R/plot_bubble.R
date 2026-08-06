@@ -148,7 +148,11 @@ calc_bubble_fc_ <- function(data, control, group_col, population_col,
     stop('`test` must be one of "auto", "wilcox", "t.test", "kruskal".')
   }
 
-  population_levels <- unique(data[[population_col]])
+  population_levels <- if (is.factor(data[[population_col]])) {
+    levels(data[[population_col]])
+  } else {
+    unique(data[[population_col]])
+  }
 
   if (x_col == "comparison") {
     x_values <- setdiff(group_levels, control)
