@@ -58,7 +58,15 @@ plot_bubble_fc <- function(data,
     test, p_adjust_method, summary_fun, pseudocount
   )
 
-  ggplot2::ggplot(fc_data, ggplot2::aes(x = comparison, y = population)) +
+  x_label <- if (x_col == "comparison") "Comparison" else tools::toTitleCase(x_col)
+  caption <- if (x_col == "comparison") {
+    glue::glue("Compared to control: {control}")
+  } else {
+    comparison_group <- setdiff(unique(data[[group_col]]), control)
+    glue::glue("{comparison_group} vs control: {control}")
+  }
+
+  ggplot2::ggplot(fc_data, ggplot2::aes(x = .data[[x_col]], y = population)) +
     ggplot2::geom_point(ggplot2::aes(
       color = log2fc, size = abs(log2fc), shape = is.na(p_value)
     )) +
@@ -70,9 +78,9 @@ plot_bubble_fc <- function(data,
     ggplot2::scale_size_continuous(range = c(2, 10), name = "|log2FC|") +
     ggplot2::scale_shape_manual(values = c(`FALSE` = 16, `TRUE` = 1), guide = "none") +
     ggplot2::labs(
-      x = "Comparison",
+      x = x_label,
       y = "Population",
-      caption = glue::glue("Compared to control: {control}")
+      caption = caption
     ) +
     ggplot2::theme_minimal() +
     ggplot2::theme(

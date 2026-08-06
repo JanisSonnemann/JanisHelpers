@@ -462,3 +462,19 @@ test_that("plot_bubble_fc() builds when some cells are untestable (NA p-value)",
   p <- suppressWarnings(plot_bubble_fc(data, control = "control"))
   expect_no_error(ggplot2::ggplot_build(p))
 })
+
+test_that("plot_bubble_fc() builds with x_col = \"tissue\" and captions the single comparison group", {
+  data <- tibble::tibble(
+    group = c("control", "control", "treated", "treated",
+              "control", "control", "treated", "treated"),
+    population = "CD4",
+    tissue = c("Spleen", "Spleen", "Spleen", "Spleen",
+               "Blood", "Blood", "Blood", "Blood"),
+    value = c(9.7, 10.3, 19.6, 20.4, 4.8, 5.2, 4.85, 5.15)
+  )
+  p <- plot_bubble_fc(data, control = "control", x_col = "tissue")
+  expect_no_error(ggplot2::ggplot_build(p))
+  expect_match(p$labels$caption, "treated")
+  expect_match(p$labels$caption, "control")
+  expect_equal(p$labels$x, "Tissue")
+})
