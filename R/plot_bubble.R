@@ -213,6 +213,30 @@ adjust_p_ <- function(p, method) {
   out
 }
 
+dunn_test_for_population_ <- function(pop_data, pop, control, group_col, value_col,
+                                       p_adjust_method, x_value_fn) {
+  group_counts <- table(pop_data[[group_col]])
+  testable_groups <- names(group_counts)[group_counts >= 2L]
+  if (!(control %in% testable_groups) || length(testable_groups) < 2L) {
+    return(tibble::tibble(
+      population = character(), x_value = character(), p_value = double()
+    ))
+  }
+  pop_data_testable <- pop_data[pop_data[[group_col]] %in% testable_groups, ]
+  dunn <- rstatix::dunn_test(
+    pop_data_testable,
+    stats::as.formula(paste(value_col, "~", group_col)),
+    p.adjust.method = p_adjust_method
+  )
+  dunn |>
+    dplyr::filter(group1 == control | group2 == control) |>
+    dplyr::mutate(
+      x_value = x_value_fn(group1, group2),
+      population = pop
+    ) |>
+    dplyr::select(population, x_value, p_value = p.adj)
+}
+
 calc_bubble_p_values_ <- function(data, control, group_col, population_col,
                                    value_col, x_col, comparison_group,
                                    resolved_test, p_adjust_method, fc_table) {
@@ -249,26 +273,10 @@ calc_bubble_p_values_ <- function(data, control, group_col, population_col,
     if (x_col == "comparison") {
       purrr::map_dfr(population_levels, function(pop) {
         pop_data <- data[data[[population_col]] == pop, ]
-        group_counts <- table(pop_data[[group_col]])
-        testable_groups <- names(group_counts)[group_counts >= 2L]
-        if (!(control %in% testable_groups) || length(testable_groups) < 2L) {
-          return(tibble::tibble(
-            population = character(), x_value = character(), p_value = double()
-          ))
-        }
-        pop_data_testable <- pop_data[pop_data[[group_col]] %in% testable_groups, ]
-        dunn <- rstatix::dunn_test(
-          pop_data_testable,
-          stats::as.formula(paste(value_col, "~", group_col)),
-          p.adjust.method = p_adjust_method
+        dunn_test_for_population_(
+          pop_data, pop, control, group_col, value_col, p_adjust_method,
+          function(g1, g2) ifelse(g1 == control, g2, g1)
         )
-        dunn |>
-          dplyr::filter(group1 == control | group2 == control) |>
-          dplyr::mutate(
-            x_value = ifelse(group1 == control, group2, group1),
-            population = pop
-          ) |>
-          dplyr::select(population, x_value, p_value = p.adj)
       })
     } else {
       x_values <- unique(fc_table$x_value)
@@ -276,23 +284,10 @@ calc_bubble_p_values_ <- function(data, control, group_col, population_col,
         slice <- data[data[[x_col]] == x_value, ]
         purrr::map_dfr(population_levels, function(pop) {
           pop_data <- slice[slice[[population_col]] == pop, ]
-          group_counts <- table(pop_data[[group_col]])
-          testable_groups <- names(group_counts)[group_counts >= 2L]
-          if (!(control %in% testable_groups) || length(testable_groups) < 2L) {
-            return(tibble::tibble(
-              population = character(), x_value = character(), p_value = double()
-            ))
-          }
-          pop_data_testable <- pop_data[pop_data[[group_col]] %in% testable_groups, ]
-          dunn <- rstatix::dunn_test(
-            pop_data_testable,
-            stats::as.formula(paste(value_col, "~", group_col)),
-            p.adjust.method = p_adjust_method
+          dunn_test_for_population_(
+            pop_data, pop, control, group_col, value_col, p_adjust_method,
+            function(g1, g2) x_value
           )
-          dunn |>
-            dplyr::filter(group1 == control | group2 == control) |>
-            dplyr::mutate(population = pop, x_value = x_value) |>
-            dplyr::select(population, x_value, p_value = p.adj)
         })
       })
     }

@@ -329,6 +329,9 @@ test_that("calc_bubble_fc_() forces kruskal+dunn per x_value when x_col is set",
   )
   expect_equal(levels(result$tissue), c("Spleen", "Blood"))
   expect_true(all(!is.na(result$p_value)))
+  # Verify per-tissue independence: Spleen has larger group difference (9.7/9.9 vs 19.6/19.9)
+  # so its p-value should be smaller than Blood's (4.8/4.9 vs 4.85/4.95)
+  expect_true(result$p_value[result$tissue == "Spleen"] < result$p_value[result$tissue == "Blood"])
 })
 
 test_that("calc_bubble_fc_() assigns stars based on p-value thresholds", {
