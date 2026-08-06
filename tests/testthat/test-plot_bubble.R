@@ -68,6 +68,55 @@ test_that("calc_bubble_fc_() errors on an invalid test argument", {
   )
 })
 
+test_that("calc_bubble_fc_() errors when x_col is set and group_col has more than 2 distinct values", {
+  data <- tibble::tibble(
+    group = c("control", "control", "low", "low", "high", "high"),
+    population = "CD4",
+    tissue = "Spleen",
+    value = c(9.7, 9.9, 14.6, 14.9, 19.6, 19.9)
+  )
+  expect_error(
+    calc_bubble_fc_(
+      data, control = "control", group_col = "group",
+      population_col = "population", value_col = "value", x_col = "tissue",
+      test = "auto", p_adjust_method = "BH", summary_fun = mean, pseudocount = 0.5
+    ),
+    "exactly 2 distinct values"
+  )
+})
+
+test_that("calc_bubble_fc_() errors when x_col is not present in data", {
+  data <- tibble::tibble(
+    group = c("control", "control", "treated", "treated"),
+    population = "CD4",
+    value = c(9.7, 9.9, 19.6, 19.9)
+  )
+  expect_error(
+    calc_bubble_fc_(
+      data, control = "control", group_col = "group",
+      population_col = "population", value_col = "value", x_col = "tissue",
+      test = "auto", p_adjust_method = "BH", summary_fun = mean, pseudocount = 0.5
+    ),
+    "not found in `data`"
+  )
+})
+
+test_that("calc_bubble_fc_() errors when x_col equals group_col, population_col, or value_col", {
+  data <- tibble::tibble(
+    group = c("control", "control", "treated", "treated"),
+    population = "CD4",
+    value = c(9.7, 9.9, 19.6, 19.9)
+  )
+  expect_error(
+    calc_bubble_fc_(
+      data, control = "control", group_col = "group",
+      population_col = "population", value_col = "value", x_col = "group",
+      test = "auto", p_adjust_method = "BH", summary_fun = mean, pseudocount = 0.5
+    ),
+    "cannot be the same as"
+  )
+})
+
 make_data_ <- function(...) {
   groups <- list(...)
   purrr::imap_dfr(groups, function(values, group_pop) {

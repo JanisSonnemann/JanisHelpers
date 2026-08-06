@@ -45,13 +45,14 @@ plot_bubble_fc <- function(data,
                             group_col = "group",
                             population_col = "population",
                             value_col = "value",
+                            x_col = "comparison",
                             test = "auto",
                             p_adjust_method = "BH",
                             summary_fun = mean,
                             pseudocount = 0.5) {
 
   fc_data <- calc_bubble_fc_(
-    data, control, group_col, population_col, value_col,
+    data, control, group_col, population_col, value_col, x_col,
     test, p_adjust_method, summary_fun, pseudocount
   )
 
@@ -84,7 +85,7 @@ plot_bubble_fc <- function(data,
 # Stats engine behind plot_bubble_fc(): computes per-population,
 # per-comparison log2 fold-change and test statistics.
 calc_bubble_fc_ <- function(data, control, group_col, population_col,
-                             value_col, test, p_adjust_method,
+                             value_col, x_col = "comparison", test, p_adjust_method,
                              summary_fun, pseudocount) {
 
   missing_cols <- setdiff(c(group_col, population_col, value_col), names(data))
@@ -94,10 +95,34 @@ calc_bubble_fc_ <- function(data, control, group_col, population_col,
   if (!control %in% data[[group_col]]) {
     stop(glue::glue("`control` ('{control}') not found in `data${group_col}`."))
   }
-  if ("metric" %in% names(data) && dplyr::n_distinct(data[["metric"]]) > 1L) {
+
+  group_levels <- unique(data[[group_col]])
+
+  if (x_col != "comparison") {
+    if (x_col %in% c(group_col, population_col, value_col)) {
+      stop(glue::glue(
+        "`x_col` ('{x_col}') cannot be the same as `group_col`, ",
+        "`population_col`, or `value_col`."
+      ))
+    }
+    if (!x_col %in% names(data)) {
+      stop(glue::glue("`x_col` ('{x_col}') not found in `data`."))
+    }
+    if (length(group_levels) != 2L) {
+      stop(glue::glue(
+        "`x_col` can only be set to a column other than \"comparison\" when ",
+        "`group_col` has exactly 2 distinct values (control + one treatment); ",
+        "found {length(group_levels)}. Use x_col = \"comparison\" (default) ",
+        "for more groups."
+      ))
+    }
+  }
+  if ("metric" %in% names(data) && x_col != "metric" &&
+      dplyr::n_distinct(data[["metric"]]) > 1L) {
     stop("`data` contains more than one distinct `metric`; pre-filter to a single metric.")
   }
-  if ("tissue" %in% names(data) && dplyr::n_distinct(data[["tissue"]]) > 1L) {
+  if ("tissue" %in% names(data) && x_col != "tissue" &&
+      dplyr::n_distinct(data[["tissue"]]) > 1L) {
     stop("`data` contains more than one distinct `tissue`; pre-filter to a single tissue.")
   }
   if (!test %in% c("auto", "wilcox", "t.test", "kruskal")) {
