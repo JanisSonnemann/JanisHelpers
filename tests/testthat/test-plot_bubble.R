@@ -117,6 +117,23 @@ test_that("calc_bubble_fc_() errors when x_col equals group_col, population_col,
   )
 })
 
+test_that("calc_bubble_fc_() errors clearly when x_col contains NA", {
+  data <- tibble::tibble(
+    group = c("control", "control", "treated", "treated"),
+    population = "CD4",
+    tissue = c("Spleen", NA, "Spleen", "Blood"),
+    value = c(9.7, 9.9, 19.6, 19.9)
+  )
+  expect_error(
+    calc_bubble_fc_(
+      data, control = "control", group_col = "group",
+      population_col = "population", value_col = "value", x_col = "tissue",
+      test = "auto", p_adjust_method = "BH", summary_fun = mean, pseudocount = 0.5
+    ),
+    "NA"
+  )
+})
+
 make_data_ <- function(...) {
   groups <- list(...)
   purrr::imap_dfr(groups, function(values, group_pop) {
@@ -293,10 +310,10 @@ test_that("calc_bubble_fc_() lifts the tissue guard but keeps the metric guard w
 
 test_that("calc_bubble_fc_() applies p_adjust_method per x_value when x_col is set", {
   data <- tibble::tibble(
-    group = rep(c("control", "control", "treated", "treated"), 2),
-    population = rep(c("CD4", "CD8"), each = 4),
-    tissue = "Spleen",
-    value = c(9.7, 10.3, 19.6, 20.4, 4.8, 5.2, 4.85, 5.15)
+    group = rep(c("control", "control", "treated", "treated"), 4),
+    population = rep(rep(c("CD4", "CD8"), each = 4), 2),
+    tissue = rep(c("Spleen", "Blood"), each = 8),
+    value = rep(c(9.7, 10.3, 19.6, 20.4, 4.8, 5.2, 4.85, 5.15), 2)
   )
   raw <- calc_bubble_fc_(
     data, control = "control", group_col = "group",
@@ -308,11 +325,14 @@ test_that("calc_bubble_fc_() applies p_adjust_method per x_value when x_col is s
     population_col = "population", value_col = "value", x_col = "tissue",
     test = "wilcox", p_adjust_method = "bonferroni", summary_fun = mean, pseudocount = 0
   )
-  expect_equal(
-    sort(adjusted$p_value),
-    sort(stats::p.adjust(raw$p_value, method = "bonferroni")),
-    tolerance = 1e-8
-  )
+  # Per-tissue adjustment (2 populations per tissue) should differ from global adjustment (4 cells total)
+  per_tissue_expected <- raw |>
+    dplyr::group_by(tissue) |>
+    dplyr::mutate(p_value = stats::p.adjust(p_value, method = "bonferroni")) |>
+    dplyr::ungroup()
+  expect_equal(sort(adjusted$p_value), sort(per_tissue_expected$p_value), tolerance = 1e-8)
+  global_expected <- stats::p.adjust(raw$p_value, method = "bonferroni")
+  expect_false(isTRUE(all.equal(sort(adjusted$p_value), sort(global_expected))))
 })
 
 test_that("calc_bubble_fc_() forces kruskal+dunn per x_value when x_col is set", {

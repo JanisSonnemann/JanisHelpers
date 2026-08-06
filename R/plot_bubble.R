@@ -99,7 +99,7 @@ plot_bubble_fc <- function(data,
 }
 
 # Stats engine behind plot_bubble_fc(): computes per-population,
-# per-comparison log2 fold-change and test statistics.
+# per-x_col-value log2 fold-change and test statistics.
 calc_bubble_fc_ <- function(data, control, group_col, population_col,
                              value_col, x_col = "comparison", test, p_adjust_method,
                              summary_fun, pseudocount) {
@@ -123,6 +123,9 @@ calc_bubble_fc_ <- function(data, control, group_col, population_col,
     }
     if (!x_col %in% names(data)) {
       stop(glue::glue("`x_col` ('{x_col}') not found in `data`."))
+    }
+    if (anyNA(data[[x_col]])) {
+      stop(glue::glue("`data${x_col}` contains NA values; remove or filter them before plotting."))
     }
     if (length(group_levels) != 2L) {
       stop(glue::glue(
@@ -295,7 +298,7 @@ calc_bubble_p_values_ <- function(data, control, group_col, population_col,
     } else {
       x_values <- unique(fc_table$x_value)
       purrr::map_dfr(x_values, function(x_value) {
-        slice <- data[data[[x_col]] == x_value, ]
+        slice <- slice_for_x_value_(data, x_col, x_value, comparison_group)$slice
         purrr::map_dfr(population_levels, function(pop) {
           pop_data <- slice[slice[[population_col]] == pop, ]
           dunn_test_for_population_(
