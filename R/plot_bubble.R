@@ -6,7 +6,8 @@
 #' Each point is colored and sized by the log2 fold-change of the group's
 #' mean value versus the control's, and annotated with a significance-star
 #' summary from `test`. `data` must already be filtered to a single
-#' `metric` and a single `tissue` (if those columns are present).
+#' `metric` and a single `tissue` (if those columns are present), unless
+#' `x_col` is set to `"metric"`/`"tissue"` (see `x_col`).
 #'
 #' @param data tibble already filtered to one metric and one tissue; must
 #'   contain `group_col`, `population_col`, `value_col`.
@@ -18,8 +19,13 @@
 #'   population names. Default `"population"`.
 #' @param value_col character; column in `data` holding the numeric
 #'   measurement. Default `"value"`.
-#' @param x_col character; dimension that varies across the plot's x-axis.
-#'   Default `"comparison"` reproduces existing behavior (one column per group comparison).
+#' @param x_col character; which dimension varies across the plot's
+#'   x-axis. Default `"comparison"`: one column per non-control group, as
+#'   today, and works with any number of groups. Any other column name
+#'   present in `data` (typically `"tissue"` or `"metric"`, but not
+#'   restricted to those): one column per distinct value of that column
+#'   instead, holding the single non-control group fixed. Only valid when
+#'   `group_col` has exactly 2 distinct values (control + one treatment).
 #' @param test character; one of `"auto"` (default), `"wilcox"`,
 #'   `"t.test"`, `"kruskal"`. `"auto"` uses pairwise
 #'   `stats::wilcox.test()` when there are 2 groups (incl. control) and
