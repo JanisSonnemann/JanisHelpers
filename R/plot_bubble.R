@@ -18,6 +18,8 @@
 #'   population names. Default `"population"`.
 #' @param value_col character; column in `data` holding the numeric
 #'   measurement. Default `"value"`.
+#' @param x_col character; dimension that varies across the plot's x-axis.
+#'   Default `"comparison"` reproduces existing behavior (one column per group comparison).
 #' @param test character; one of `"auto"` (default), `"wilcox"`,
 #'   `"t.test"`, `"kruskal"`. `"auto"` uses pairwise
 #'   `stats::wilcox.test()` when there are 2 groups (incl. control) and

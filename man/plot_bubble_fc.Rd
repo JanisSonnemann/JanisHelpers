@@ -10,6 +10,7 @@ plot_bubble_fc(
   group_col = "group",
   population_col = "population",
   value_col = "value",
+  x_col = "comparison",
   test = "auto",
   p_adjust_method = "BH",
   summary_fun = mean,
@@ -31,6 +32,9 @@ population names. Default \code{"population"}.}
 
 \item{value_col}{character; column in \code{data} holding the numeric
 measurement. Default \code{"value"}.}
+
+\item{x_col}{character; dimension that varies across the plot's x-axis.
+Default \code{"comparison"} reproduces existing behavior (one column per group comparison).}
 
 \item{test}{character; one of \code{"auto"} (default), \code{"wilcox"},
 \code{"t.test"}, \code{"kruskal"}. \code{"auto"} uses pairwise
