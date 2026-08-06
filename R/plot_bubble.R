@@ -245,28 +245,56 @@ calc_bubble_p_values_ <- function(data, control, group_col, population_col,
       dplyr::ungroup()
   } else if (resolved_test == "kruskal") {
     population_levels <- unique(fc_table$population)
-    purrr::map_dfr(population_levels, function(pop) {
-      pop_data <- data[data[[population_col]] == pop, ]
-      group_counts <- table(pop_data[[group_col]])
-      testable_groups <- names(group_counts)[group_counts >= 2L]
-      if (!(control %in% testable_groups) || length(testable_groups) < 2L) {
-        return(tibble::tibble(
-          population = character(), x_value = character(), p_value = double()
-        ))
-      }
-      pop_data_testable <- pop_data[pop_data[[group_col]] %in% testable_groups, ]
-      dunn <- rstatix::dunn_test(
-        pop_data_testable,
-        stats::as.formula(paste(value_col, "~", group_col)),
-        p.adjust.method = p_adjust_method
-      )
-      dunn |>
-        dplyr::filter(group1 == control | group2 == control) |>
-        dplyr::mutate(
-          x_value = ifelse(group1 == control, group2, group1),
-          population = pop
-        ) |>
-        dplyr::select(population, x_value, p_value = p.adj)
-    })
+
+    if (x_col == "comparison") {
+      purrr::map_dfr(population_levels, function(pop) {
+        pop_data <- data[data[[population_col]] == pop, ]
+        group_counts <- table(pop_data[[group_col]])
+        testable_groups <- names(group_counts)[group_counts >= 2L]
+        if (!(control %in% testable_groups) || length(testable_groups) < 2L) {
+          return(tibble::tibble(
+            population = character(), x_value = character(), p_value = double()
+          ))
+        }
+        pop_data_testable <- pop_data[pop_data[[group_col]] %in% testable_groups, ]
+        dunn <- rstatix::dunn_test(
+          pop_data_testable,
+          stats::as.formula(paste(value_col, "~", group_col)),
+          p.adjust.method = p_adjust_method
+        )
+        dunn |>
+          dplyr::filter(group1 == control | group2 == control) |>
+          dplyr::mutate(
+            x_value = ifelse(group1 == control, group2, group1),
+            population = pop
+          ) |>
+          dplyr::select(population, x_value, p_value = p.adj)
+      })
+    } else {
+      x_values <- unique(fc_table$x_value)
+      purrr::map_dfr(x_values, function(x_value) {
+        slice <- data[data[[x_col]] == x_value, ]
+        purrr::map_dfr(population_levels, function(pop) {
+          pop_data <- slice[slice[[population_col]] == pop, ]
+          group_counts <- table(pop_data[[group_col]])
+          testable_groups <- names(group_counts)[group_counts >= 2L]
+          if (!(control %in% testable_groups) || length(testable_groups) < 2L) {
+            return(tibble::tibble(
+              population = character(), x_value = character(), p_value = double()
+            ))
+          }
+          pop_data_testable <- pop_data[pop_data[[group_col]] %in% testable_groups, ]
+          dunn <- rstatix::dunn_test(
+            pop_data_testable,
+            stats::as.formula(paste(value_col, "~", group_col)),
+            p.adjust.method = p_adjust_method
+          )
+          dunn |>
+            dplyr::filter(group1 == control | group2 == control) |>
+            dplyr::mutate(population = pop, x_value = x_value) |>
+            dplyr::select(population, x_value, p_value = p.adj)
+        })
+      })
+    }
   }
 }

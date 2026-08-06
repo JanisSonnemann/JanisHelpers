@@ -315,6 +315,22 @@ test_that("calc_bubble_fc_() applies p_adjust_method per x_value when x_col is s
   )
 })
 
+test_that("calc_bubble_fc_() forces kruskal+dunn per x_value when x_col is set", {
+  data <- tibble::tibble(
+    group = rep(c("control", "control", "treated", "treated"), 2),
+    population = "CD4",
+    tissue = rep(c("Spleen", "Blood"), each = 4),
+    value = c(9.7, 9.9, 19.6, 19.9, 4.8, 4.9, 4.85, 4.95)
+  )
+  result <- calc_bubble_fc_(
+    data, control = "control", group_col = "group",
+    population_col = "population", value_col = "value", x_col = "tissue",
+    test = "kruskal", p_adjust_method = "BH", summary_fun = mean, pseudocount = 0
+  )
+  expect_equal(levels(result$tissue), c("Spleen", "Blood"))
+  expect_true(all(!is.na(result$p_value)))
+})
+
 test_that("calc_bubble_fc_() assigns stars based on p-value thresholds", {
   data <- make_data_(
     control.CD4 = c(9.7, 9.9, 10.1, 10.3),
