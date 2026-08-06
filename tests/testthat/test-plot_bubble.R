@@ -231,6 +231,90 @@ test_that("calc_bubble_fc_() adjusts p-values per comparison column", {
   )
 })
 
+test_that("calc_bubble_fc_() supports x_col = \"tissue\" for a 2-group comparison", {
+  data <- tibble::tibble(
+    group = c("control", "control", "treated", "treated",
+              "control", "control", "treated", "treated"),
+    population = "CD4",
+    tissue = c("Spleen", "Spleen", "Spleen", "Spleen",
+               "Blood", "Blood", "Blood", "Blood"),
+    value = c(9.7, 10.3, 19.6, 20.4, 4.8, 5.2, 4.85, 5.15)
+  )
+  result <- calc_bubble_fc_(
+    data, control = "control", group_col = "group",
+    population_col = "population", value_col = "value", x_col = "tissue",
+    test = "wilcox", p_adjust_method = "none", summary_fun = mean, pseudocount = 0
+  )
+  expect_true("tissue" %in% names(result))
+  expect_false("comparison" %in% names(result))
+  expect_equal(levels(result$tissue), c("Spleen", "Blood"))
+  expect_equal(result$log2fc[result$tissue == "Spleen"], 1, tolerance = 1e-8)
+  expect_equal(result$log2fc[result$tissue == "Blood"], 0, tolerance = 1e-8)
+})
+
+test_that("calc_bubble_fc_() supports x_col = \"metric\" for a 2-group comparison", {
+  data <- tibble::tibble(
+    group = c("control", "control", "treated", "treated",
+              "control", "control", "treated", "treated"),
+    population = "CD4",
+    metric = c("Count", "Count", "Count", "Count",
+               "FractionOfParent", "FractionOfParent", "FractionOfParent", "FractionOfParent"),
+    value = c(9.7, 10.3, 19.6, 20.4, 4.8, 5.2, 4.85, 5.15)
+  )
+  result <- calc_bubble_fc_(
+    data, control = "control", group_col = "group",
+    population_col = "population", value_col = "value", x_col = "metric",
+    test = "wilcox", p_adjust_method = "none", summary_fun = mean, pseudocount = 0
+  )
+  expect_true("metric" %in% names(result))
+  expect_equal(levels(result$metric), c("Count", "FractionOfParent"))
+  expect_equal(result$log2fc[result$metric == "Count"], 1, tolerance = 1e-8)
+  expect_equal(result$log2fc[result$metric == "FractionOfParent"], 0, tolerance = 1e-8)
+})
+
+test_that("calc_bubble_fc_() lifts the tissue guard but keeps the metric guard when x_col = \"tissue\"", {
+  data <- tibble::tibble(
+    group = rep(c("control", "control", "treated", "treated"), 2),
+    population = "CD4",
+    tissue = rep(c("Spleen", "Blood"), each = 4),
+    metric = c("Count", "Count", "Count", "Count",
+               "FractionOfParent", "FractionOfParent", "FractionOfParent", "FractionOfParent"),
+    value = c(9.7, 10.3, 19.6, 20.4, 4.8, 5.2, 4.85, 5.15)
+  )
+  expect_error(
+    calc_bubble_fc_(
+      data, control = "control", group_col = "group",
+      population_col = "population", value_col = "value", x_col = "tissue",
+      test = "wilcox", p_adjust_method = "none", summary_fun = mean, pseudocount = 0
+    ),
+    "metric"
+  )
+})
+
+test_that("calc_bubble_fc_() applies p_adjust_method per x_value when x_col is set", {
+  data <- tibble::tibble(
+    group = rep(c("control", "control", "treated", "treated"), 2),
+    population = rep(c("CD4", "CD8"), each = 4),
+    tissue = "Spleen",
+    value = c(9.7, 10.3, 19.6, 20.4, 4.8, 5.2, 4.85, 5.15)
+  )
+  raw <- calc_bubble_fc_(
+    data, control = "control", group_col = "group",
+    population_col = "population", value_col = "value", x_col = "tissue",
+    test = "wilcox", p_adjust_method = "none", summary_fun = mean, pseudocount = 0
+  )
+  adjusted <- calc_bubble_fc_(
+    data, control = "control", group_col = "group",
+    population_col = "population", value_col = "value", x_col = "tissue",
+    test = "wilcox", p_adjust_method = "bonferroni", summary_fun = mean, pseudocount = 0
+  )
+  expect_equal(
+    sort(adjusted$p_value),
+    sort(stats::p.adjust(raw$p_value, method = "bonferroni")),
+    tolerance = 1e-8
+  )
+})
+
 test_that("calc_bubble_fc_() assigns stars based on p-value thresholds", {
   data <- make_data_(
     control.CD4 = c(9.7, 9.9, 10.1, 10.3),
