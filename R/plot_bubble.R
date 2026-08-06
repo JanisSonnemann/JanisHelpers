@@ -151,13 +151,9 @@ calc_bubble_fc_ <- function(data, control, group_col, population_col,
     x_value = x_values
   ) |>
     purrr::pmap_dfr(function(population, x_value) {
-      if (x_col == "comparison") {
-        slice <- data
-        comparison <- x_value
-      } else {
-        slice <- data[data[[x_col]] == x_value, ]
-        comparison <- comparison_group
-      }
+      sliced <- slice_for_x_value_(data, x_col, x_value, comparison_group)
+      slice <- sliced$slice
+      comparison <- sliced$comparison
       control_values <- slice[[value_col]][
         slice[[population_col]] == population & slice[[group_col]] == control
       ]
@@ -202,6 +198,14 @@ calc_bubble_fc_ <- function(data, control, group_col, population_col,
     dplyr::rename(!!x_col := x_value)
 }
 
+slice_for_x_value_ <- function(data, x_col, x_value, comparison_group) {
+  if (x_col == "comparison") {
+    list(slice = data, comparison = x_value)
+  } else {
+    list(slice = data[data[[x_col]] == x_value, ], comparison = comparison_group)
+  }
+}
+
 adjust_p_ <- function(p, method) {
   out <- rep(NA_real_, length(p))
   non_na <- !is.na(p)
@@ -217,13 +221,9 @@ calc_bubble_p_values_ <- function(data, control, group_col, population_col,
       purrr::pmap_dfr(function(population, x_value, log2fc, testable) {
         p_value <- NA_real_
         if (testable) {
-          if (x_col == "comparison") {
-            slice <- data
-            comparison <- x_value
-          } else {
-            slice <- data[data[[x_col]] == x_value, ]
-            comparison <- comparison_group
-          }
+          sliced <- slice_for_x_value_(data, x_col, x_value, comparison_group)
+          slice <- sliced$slice
+          comparison <- sliced$comparison
           control_values <- slice[[value_col]][
             slice[[population_col]] == population & slice[[group_col]] == control
           ]
