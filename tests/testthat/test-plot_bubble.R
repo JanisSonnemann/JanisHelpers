@@ -68,6 +68,72 @@ test_that("calc_bubble_fc_() errors on an invalid test argument", {
   )
 })
 
+test_that("calc_bubble_fc_() errors when x_col is set and group_col has more than 2 distinct values", {
+  data <- tibble::tibble(
+    group = c("control", "control", "low", "low", "high", "high"),
+    population = "CD4",
+    tissue = "Spleen",
+    value = c(9.7, 9.9, 14.6, 14.9, 19.6, 19.9)
+  )
+  expect_error(
+    calc_bubble_fc_(
+      data, control = "control", group_col = "group",
+      population_col = "population", value_col = "value", x_col = "tissue",
+      test = "auto", p_adjust_method = "BH", summary_fun = mean, pseudocount = 0.5
+    ),
+    "exactly 2 distinct values"
+  )
+})
+
+test_that("calc_bubble_fc_() errors when x_col is not present in data", {
+  data <- tibble::tibble(
+    group = c("control", "control", "treated", "treated"),
+    population = "CD4",
+    value = c(9.7, 9.9, 19.6, 19.9)
+  )
+  expect_error(
+    calc_bubble_fc_(
+      data, control = "control", group_col = "group",
+      population_col = "population", value_col = "value", x_col = "tissue",
+      test = "auto", p_adjust_method = "BH", summary_fun = mean, pseudocount = 0.5
+    ),
+    "not found in `data`"
+  )
+})
+
+test_that("calc_bubble_fc_() errors when x_col equals group_col, population_col, or value_col", {
+  data <- tibble::tibble(
+    group = c("control", "control", "treated", "treated"),
+    population = "CD4",
+    value = c(9.7, 9.9, 19.6, 19.9)
+  )
+  expect_error(
+    calc_bubble_fc_(
+      data, control = "control", group_col = "group",
+      population_col = "population", value_col = "value", x_col = "group",
+      test = "auto", p_adjust_method = "BH", summary_fun = mean, pseudocount = 0.5
+    ),
+    "cannot be the same as"
+  )
+})
+
+test_that("calc_bubble_fc_() errors clearly when x_col contains NA", {
+  data <- tibble::tibble(
+    group = c("control", "control", "treated", "treated"),
+    population = "CD4",
+    tissue = c("Spleen", NA, "Spleen", "Blood"),
+    value = c(9.7, 9.9, 19.6, 19.9)
+  )
+  expect_error(
+    calc_bubble_fc_(
+      data, control = "control", group_col = "group",
+      population_col = "population", value_col = "value", x_col = "tissue",
+      test = "auto", p_adjust_method = "BH", summary_fun = mean, pseudocount = 0.5
+    ),
+    "NA"
+  )
+})
+
 make_data_ <- function(...) {
   groups <- list(...)
   purrr::imap_dfr(groups, function(values, group_pop) {
@@ -180,6 +246,112 @@ test_that("calc_bubble_fc_() adjusts p-values per comparison column", {
     sort(stats::p.adjust(raw$p_value, method = "bonferroni")),
     tolerance = 1e-8
   )
+})
+
+test_that("calc_bubble_fc_() supports x_col = \"tissue\" for a 2-group comparison", {
+  data <- tibble::tibble(
+    group = c("control", "control", "treated", "treated",
+              "control", "control", "treated", "treated"),
+    population = "CD4",
+    tissue = c("Spleen", "Spleen", "Spleen", "Spleen",
+               "Blood", "Blood", "Blood", "Blood"),
+    value = c(9.7, 10.3, 19.6, 20.4, 4.8, 5.2, 4.85, 5.15)
+  )
+  result <- calc_bubble_fc_(
+    data, control = "control", group_col = "group",
+    population_col = "population", value_col = "value", x_col = "tissue",
+    test = "wilcox", p_adjust_method = "none", summary_fun = mean, pseudocount = 0
+  )
+  expect_true("tissue" %in% names(result))
+  expect_false("comparison" %in% names(result))
+  expect_equal(levels(result$tissue), c("Spleen", "Blood"))
+  expect_equal(result$log2fc[result$tissue == "Spleen"], 1, tolerance = 1e-8)
+  expect_equal(result$log2fc[result$tissue == "Blood"], 0, tolerance = 1e-8)
+})
+
+test_that("calc_bubble_fc_() supports x_col = \"metric\" for a 2-group comparison", {
+  data <- tibble::tibble(
+    group = c("control", "control", "treated", "treated",
+              "control", "control", "treated", "treated"),
+    population = "CD4",
+    metric = c("Count", "Count", "Count", "Count",
+               "FractionOfParent", "FractionOfParent", "FractionOfParent", "FractionOfParent"),
+    value = c(9.7, 10.3, 19.6, 20.4, 4.8, 5.2, 4.85, 5.15)
+  )
+  result <- calc_bubble_fc_(
+    data, control = "control", group_col = "group",
+    population_col = "population", value_col = "value", x_col = "metric",
+    test = "wilcox", p_adjust_method = "none", summary_fun = mean, pseudocount = 0
+  )
+  expect_true("metric" %in% names(result))
+  expect_equal(levels(result$metric), c("Count", "FractionOfParent"))
+  expect_equal(result$log2fc[result$metric == "Count"], 1, tolerance = 1e-8)
+  expect_equal(result$log2fc[result$metric == "FractionOfParent"], 0, tolerance = 1e-8)
+})
+
+test_that("calc_bubble_fc_() lifts the tissue guard but keeps the metric guard when x_col = \"tissue\"", {
+  data <- tibble::tibble(
+    group = rep(c("control", "control", "treated", "treated"), 2),
+    population = "CD4",
+    tissue = rep(c("Spleen", "Blood"), each = 4),
+    metric = c("Count", "Count", "Count", "Count",
+               "FractionOfParent", "FractionOfParent", "FractionOfParent", "FractionOfParent"),
+    value = c(9.7, 10.3, 19.6, 20.4, 4.8, 5.2, 4.85, 5.15)
+  )
+  expect_error(
+    calc_bubble_fc_(
+      data, control = "control", group_col = "group",
+      population_col = "population", value_col = "value", x_col = "tissue",
+      test = "wilcox", p_adjust_method = "none", summary_fun = mean, pseudocount = 0
+    ),
+    "metric"
+  )
+})
+
+test_that("calc_bubble_fc_() applies p_adjust_method per x_value when x_col is set", {
+  data <- tibble::tibble(
+    group = rep(c("control", "control", "treated", "treated"), 4),
+    population = rep(rep(c("CD4", "CD8"), each = 4), 2),
+    tissue = rep(c("Spleen", "Blood"), each = 8),
+    value = rep(c(9.7, 10.3, 19.6, 20.4, 4.8, 5.2, 4.85, 5.15), 2)
+  )
+  raw <- calc_bubble_fc_(
+    data, control = "control", group_col = "group",
+    population_col = "population", value_col = "value", x_col = "tissue",
+    test = "wilcox", p_adjust_method = "none", summary_fun = mean, pseudocount = 0
+  )
+  adjusted <- calc_bubble_fc_(
+    data, control = "control", group_col = "group",
+    population_col = "population", value_col = "value", x_col = "tissue",
+    test = "wilcox", p_adjust_method = "bonferroni", summary_fun = mean, pseudocount = 0
+  )
+  # Per-tissue adjustment (2 populations per tissue) should differ from global adjustment (4 cells total)
+  per_tissue_expected <- raw |>
+    dplyr::group_by(tissue) |>
+    dplyr::mutate(p_value = stats::p.adjust(p_value, method = "bonferroni")) |>
+    dplyr::ungroup()
+  expect_equal(sort(adjusted$p_value), sort(per_tissue_expected$p_value), tolerance = 1e-8)
+  global_expected <- stats::p.adjust(raw$p_value, method = "bonferroni")
+  expect_false(isTRUE(all.equal(sort(adjusted$p_value), sort(global_expected))))
+})
+
+test_that("calc_bubble_fc_() forces kruskal+dunn per x_value when x_col is set", {
+  data <- tibble::tibble(
+    group = rep(c("control", "control", "treated", "treated"), 2),
+    population = "CD4",
+    tissue = rep(c("Spleen", "Blood"), each = 4),
+    value = c(9.7, 9.9, 19.6, 19.9, 4.8, 4.9, 4.85, 4.95)
+  )
+  result <- calc_bubble_fc_(
+    data, control = "control", group_col = "group",
+    population_col = "population", value_col = "value", x_col = "tissue",
+    test = "kruskal", p_adjust_method = "BH", summary_fun = mean, pseudocount = 0
+  )
+  expect_equal(levels(result$tissue), c("Spleen", "Blood"))
+  expect_true(all(!is.na(result$p_value)))
+  # Verify per-tissue independence: Spleen has larger group difference (9.7/9.9 vs 19.6/19.9)
+  # so its p-value should be smaller than Blood's (4.8/4.9 vs 4.85/4.95)
+  expect_true(result$p_value[result$tissue == "Spleen"] < result$p_value[result$tissue == "Blood"])
 })
 
 test_that("calc_bubble_fc_() assigns stars based on p-value thresholds", {
@@ -309,4 +481,20 @@ test_that("plot_bubble_fc() builds when some cells are untestable (NA p-value)",
   )
   p <- suppressWarnings(plot_bubble_fc(data, control = "control"))
   expect_no_error(ggplot2::ggplot_build(p))
+})
+
+test_that("plot_bubble_fc() builds with x_col = \"tissue\" and captions the single comparison group", {
+  data <- tibble::tibble(
+    group = c("control", "control", "treated", "treated",
+              "control", "control", "treated", "treated"),
+    population = "CD4",
+    tissue = c("Spleen", "Spleen", "Spleen", "Spleen",
+               "Blood", "Blood", "Blood", "Blood"),
+    value = c(9.7, 10.3, 19.6, 20.4, 4.8, 5.2, 4.85, 5.15)
+  )
+  p <- plot_bubble_fc(data, control = "control", x_col = "tissue")
+  expect_no_error(ggplot2::ggplot_build(p))
+  expect_match(p$labels$caption, "treated")
+  expect_match(p$labels$caption, "control")
+  expect_equal(p$labels$x, "Tissue")
 })

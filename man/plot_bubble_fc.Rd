@@ -10,6 +10,7 @@ plot_bubble_fc(
   group_col = "group",
   population_col = "population",
   value_col = "value",
+  x_col = "comparison",
   test = "auto",
   p_adjust_method = "BH",
   summary_fun = mean,
@@ -31,6 +32,14 @@ population names. Default \code{"population"}.}
 
 \item{value_col}{character; column in \code{data} holding the numeric
 measurement. Default \code{"value"}.}
+
+\item{x_col}{character; which dimension varies across the plot's
+x-axis. Default \code{"comparison"}: one column per non-control group, as
+today, and works with any number of groups. Any other column name
+present in \code{data} (typically \code{"tissue"} or \code{"metric"}, but not
+restricted to those): one column per distinct value of that column
+instead, holding the single non-control group fixed. Only valid when
+\code{group_col} has exactly 2 distinct values (control + one treatment).}
 
 \item{test}{character; one of \code{"auto"} (default), \code{"wilcox"},
 \code{"t.test"}, \code{"kruskal"}. \code{"auto"} uses pairwise
@@ -57,7 +66,8 @@ one column per group-vs-control comparison and one row per population.
 Each point is colored and sized by the log2 fold-change of the group's
 mean value versus the control's, and annotated with a significance-star
 summary from \code{test}. \code{data} must already be filtered to a single
-\code{metric} and a single \code{tissue} (if those columns are present).
+\code{metric} and a single \code{tissue} (if those columns are present), unless
+\code{x_col} is set to \code{"metric"}/\code{"tissue"} (see \code{x_col}).
 }
 \examples{
 \dontrun{

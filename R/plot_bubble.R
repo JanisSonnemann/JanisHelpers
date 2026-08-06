@@ -6,7 +6,8 @@
 #' Each point is colored and sized by the log2 fold-change of the group's
 #' mean value versus the control's, and annotated with a significance-star
 #' summary from `test`. `data` must already be filtered to a single
-#' `metric` and a single `tissue` (if those columns are present).
+#' `metric` and a single `tissue` (if those columns are present), unless
+#' `x_col` is set to `"metric"`/`"tissue"` (see `x_col`).
 #'
 #' @param data tibble already filtered to one metric and one tissue; must
 #'   contain `group_col`, `population_col`, `value_col`.
@@ -18,6 +19,13 @@
 #'   population names. Default `"population"`.
 #' @param value_col character; column in `data` holding the numeric
 #'   measurement. Default `"value"`.
+#' @param x_col character; which dimension varies across the plot's
+#'   x-axis. Default `"comparison"`: one column per non-control group, as
+#'   today, and works with any number of groups. Any other column name
+#'   present in `data` (typically `"tissue"` or `"metric"`, but not
+#'   restricted to those): one column per distinct value of that column
+#'   instead, holding the single non-control group fixed. Only valid when
+#'   `group_col` has exactly 2 distinct values (control + one treatment).
 #' @param test character; one of `"auto"` (default), `"wilcox"`,
 #'   `"t.test"`, `"kruskal"`. `"auto"` uses pairwise
 #'   `stats::wilcox.test()` when there are 2 groups (incl. control) and
@@ -45,17 +53,26 @@ plot_bubble_fc <- function(data,
                             group_col = "group",
                             population_col = "population",
                             value_col = "value",
+                            x_col = "comparison",
                             test = "auto",
                             p_adjust_method = "BH",
                             summary_fun = mean,
                             pseudocount = 0.5) {
 
   fc_data <- calc_bubble_fc_(
-    data, control, group_col, population_col, value_col,
+    data, control, group_col, population_col, value_col, x_col,
     test, p_adjust_method, summary_fun, pseudocount
   )
 
-  ggplot2::ggplot(fc_data, ggplot2::aes(x = comparison, y = population)) +
+  x_label <- if (x_col == "comparison") "Comparison" else tools::toTitleCase(x_col)
+  caption <- if (x_col == "comparison") {
+    glue::glue("Compared to control: {control}")
+  } else {
+    comparison_group <- setdiff(unique(data[[group_col]]), control)
+    glue::glue("{comparison_group} vs control: {control}")
+  }
+
+  ggplot2::ggplot(fc_data, ggplot2::aes(x = .data[[x_col]], y = population)) +
     ggplot2::geom_point(ggplot2::aes(
       color = log2fc, size = abs(log2fc), shape = is.na(p_value)
     )) +
@@ -67,9 +84,9 @@ plot_bubble_fc <- function(data,
     ggplot2::scale_size_continuous(range = c(2, 10), name = "|log2FC|") +
     ggplot2::scale_shape_manual(values = c(`FALSE` = 16, `TRUE` = 1), guide = "none") +
     ggplot2::labs(
-      x = "Comparison",
+      x = x_label,
       y = "Population",
-      caption = glue::glue("Compared to control: {control}")
+      caption = caption
     ) +
     ggplot2::theme_minimal() +
     ggplot2::theme(
@@ -82,9 +99,9 @@ plot_bubble_fc <- function(data,
 }
 
 # Stats engine behind plot_bubble_fc(): computes per-population,
-# per-comparison log2 fold-change and test statistics.
+# per-x_col-value log2 fold-change and test statistics.
 calc_bubble_fc_ <- function(data, control, group_col, population_col,
-                             value_col, test, p_adjust_method,
+                             value_col, x_col = "comparison", test, p_adjust_method,
                              summary_fun, pseudocount) {
 
   missing_cols <- setdiff(c(group_col, population_col, value_col), names(data))
@@ -94,10 +111,37 @@ calc_bubble_fc_ <- function(data, control, group_col, population_col,
   if (!control %in% data[[group_col]]) {
     stop(glue::glue("`control` ('{control}') not found in `data${group_col}`."))
   }
-  if ("metric" %in% names(data) && dplyr::n_distinct(data[["metric"]]) > 1L) {
+
+  group_levels <- unique(data[[group_col]])
+
+  if (x_col != "comparison") {
+    if (x_col %in% c(group_col, population_col, value_col)) {
+      stop(glue::glue(
+        "`x_col` ('{x_col}') cannot be the same as `group_col`, ",
+        "`population_col`, or `value_col`."
+      ))
+    }
+    if (!x_col %in% names(data)) {
+      stop(glue::glue("`x_col` ('{x_col}') not found in `data`."))
+    }
+    if (anyNA(data[[x_col]])) {
+      stop(glue::glue("`data${x_col}` contains NA values; remove or filter them before plotting."))
+    }
+    if (length(group_levels) != 2L) {
+      stop(glue::glue(
+        "`x_col` can only be set to a column other than \"comparison\" when ",
+        "`group_col` has exactly 2 distinct values (control + one treatment); ",
+        "found {length(group_levels)}. Use x_col = \"comparison\" (default) ",
+        "for more groups."
+      ))
+    }
+  }
+  if ("metric" %in% names(data) && x_col != "metric" &&
+      dplyr::n_distinct(data[["metric"]]) > 1L) {
     stop("`data` contains more than one distinct `metric`; pre-filter to a single metric.")
   }
-  if ("tissue" %in% names(data) && dplyr::n_distinct(data[["tissue"]]) > 1L) {
+  if ("tissue" %in% names(data) && x_col != "tissue" &&
+      dplyr::n_distinct(data[["tissue"]]) > 1L) {
     stop("`data` contains more than one distinct `tissue`; pre-filter to a single tissue.")
   }
   if (!test %in% c("auto", "wilcox", "t.test", "kruskal")) {
@@ -105,8 +149,14 @@ calc_bubble_fc_ <- function(data, control, group_col, population_col,
   }
 
   population_levels <- unique(data[[population_col]])
-  group_levels <- unique(data[[group_col]])
-  comparison_levels <- setdiff(group_levels, control)
+
+  if (x_col == "comparison") {
+    x_values <- setdiff(group_levels, control)
+    comparison_group <- NA_character_
+  } else {
+    x_values <- unique(data[[x_col]])
+    comparison_group <- setdiff(group_levels, control)
+  }
 
   resolved_test <- test
   if (test == "auto") {
@@ -115,14 +165,17 @@ calc_bubble_fc_ <- function(data, control, group_col, population_col,
 
   fc_table <- tidyr::expand_grid(
     population = population_levels,
-    comparison = comparison_levels
+    x_value = x_values
   ) |>
-    purrr::pmap_dfr(function(population, comparison) {
-      control_values <- data[[value_col]][
-        data[[population_col]] == population & data[[group_col]] == control
+    purrr::pmap_dfr(function(population, x_value) {
+      sliced <- slice_for_x_value_(data, x_col, x_value, comparison_group)
+      slice <- sliced$slice
+      comparison <- sliced$comparison
+      control_values <- slice[[value_col]][
+        slice[[population_col]] == population & slice[[group_col]] == control
       ]
-      group_values <- data[[value_col]][
-        data[[population_col]] == population & data[[group_col]] == comparison
+      group_values <- slice[[value_col]][
+        slice[[population_col]] == population & slice[[group_col]] == comparison
       ]
       log2fc <- log2(
         (summary_fun(group_values) + pseudocount) / (summary_fun(control_values) + pseudocount)
@@ -131,23 +184,23 @@ calc_bubble_fc_ <- function(data, control, group_col, population_col,
       if (!testable) {
         warning(glue::glue(
           "Fewer than 2 observations for population '{population}', ",
-          "comparison '{comparison}' vs control '{control}'; p-value set to NA."
+          "{x_col} '{x_value}' vs control '{control}'; p-value set to NA."
         ))
       }
       tibble::tibble(
-        population = population, comparison = comparison,
+        population = population, x_value = x_value,
         log2fc = log2fc, testable = testable
       )
     })
 
   p_values <- calc_bubble_p_values_(
-    data, control, group_col, population_col, value_col,
+    data, control, group_col, population_col, value_col, x_col, comparison_group,
     resolved_test, p_adjust_method, fc_table
   )
 
   fc_table |>
     dplyr::select(!testable) |>
-    dplyr::left_join(p_values, by = c("population", "comparison")) |>
+    dplyr::left_join(p_values, by = c("population", "x_value")) |>
     dplyr::mutate(
       stars = dplyr::case_when(
         is.na(p_value) ~ "",
@@ -157,8 +210,17 @@ calc_bubble_fc_ <- function(data, control, group_col, population_col,
         TRUE ~ ""
       ),
       population = factor(population, levels = population_levels),
-      comparison = factor(comparison, levels = comparison_levels)
-    )
+      x_value = factor(x_value, levels = x_values)
+    ) |>
+    dplyr::rename(!!x_col := x_value)
+}
+
+slice_for_x_value_ <- function(data, x_col, x_value, comparison_group) {
+  if (x_col == "comparison") {
+    list(slice = data, comparison = x_value)
+  } else {
+    list(slice = data[data[[x_col]] == x_value, ], comparison = comparison_group)
+  }
 }
 
 adjust_p_ <- function(p, method) {
@@ -168,19 +230,46 @@ adjust_p_ <- function(p, method) {
   out
 }
 
+dunn_test_for_population_ <- function(pop_data, pop, control, group_col, value_col,
+                                       p_adjust_method, x_value_fn) {
+  group_counts <- table(pop_data[[group_col]])
+  testable_groups <- names(group_counts)[group_counts >= 2L]
+  if (!(control %in% testable_groups) || length(testable_groups) < 2L) {
+    return(tibble::tibble(
+      population = character(), x_value = character(), p_value = double()
+    ))
+  }
+  pop_data_testable <- pop_data[pop_data[[group_col]] %in% testable_groups, ]
+  dunn <- rstatix::dunn_test(
+    pop_data_testable,
+    stats::as.formula(paste(value_col, "~", group_col)),
+    p.adjust.method = p_adjust_method
+  )
+  dunn |>
+    dplyr::filter(group1 == control | group2 == control) |>
+    dplyr::mutate(
+      x_value = x_value_fn(group1, group2),
+      population = pop
+    ) |>
+    dplyr::select(population, x_value, p_value = p.adj)
+}
+
 calc_bubble_p_values_ <- function(data, control, group_col, population_col,
-                                   value_col, resolved_test, p_adjust_method,
-                                   fc_table) {
+                                   value_col, x_col, comparison_group,
+                                   resolved_test, p_adjust_method, fc_table) {
   if (resolved_test %in% c("wilcox", "t.test")) {
     raw <- fc_table |>
-      purrr::pmap_dfr(function(population, comparison, log2fc, testable) {
+      purrr::pmap_dfr(function(population, x_value, log2fc, testable) {
         p_value <- NA_real_
         if (testable) {
-          control_values <- data[[value_col]][
-            data[[population_col]] == population & data[[group_col]] == control
+          sliced <- slice_for_x_value_(data, x_col, x_value, comparison_group)
+          slice <- sliced$slice
+          comparison <- sliced$comparison
+          control_values <- slice[[value_col]][
+            slice[[population_col]] == population & slice[[group_col]] == control
           ]
-          group_values <- data[[value_col]][
-            data[[population_col]] == population & data[[group_col]] == comparison
+          group_values <- slice[[value_col]][
+            slice[[population_col]] == population & slice[[group_col]] == comparison
           ]
           p_value <- if (resolved_test == "wilcox") {
             stats::wilcox.test(control_values, group_values)$p.value
@@ -188,37 +277,36 @@ calc_bubble_p_values_ <- function(data, control, group_col, population_col,
             stats::t.test(control_values, group_values)$p.value
           }
         }
-        tibble::tibble(population = population, comparison = comparison, p_value = p_value)
+        tibble::tibble(population = population, x_value = x_value, p_value = p_value)
       })
 
     raw |>
-      dplyr::group_by(comparison) |>
+      dplyr::group_by(x_value) |>
       dplyr::mutate(p_value = adjust_p_(p_value, p_adjust_method)) |>
       dplyr::ungroup()
   } else if (resolved_test == "kruskal") {
     population_levels <- unique(fc_table$population)
-    purrr::map_dfr(population_levels, function(pop) {
-      pop_data <- data[data[[population_col]] == pop, ]
-      group_counts <- table(pop_data[[group_col]])
-      testable_groups <- names(group_counts)[group_counts >= 2L]
-      if (!(control %in% testable_groups) || length(testable_groups) < 2L) {
-        return(tibble::tibble(
-          population = character(), comparison = character(), p_value = double()
-        ))
-      }
-      pop_data_testable <- pop_data[pop_data[[group_col]] %in% testable_groups, ]
-      dunn <- rstatix::dunn_test(
-        pop_data_testable,
-        stats::as.formula(paste(value_col, "~", group_col)),
-        p.adjust.method = p_adjust_method
-      )
-      dunn |>
-        dplyr::filter(group1 == control | group2 == control) |>
-        dplyr::mutate(
-          comparison = ifelse(group1 == control, group2, group1),
-          population = pop
-        ) |>
-        dplyr::select(population, comparison, p_value = p.adj)
-    })
+
+    if (x_col == "comparison") {
+      purrr::map_dfr(population_levels, function(pop) {
+        pop_data <- data[data[[population_col]] == pop, ]
+        dunn_test_for_population_(
+          pop_data, pop, control, group_col, value_col, p_adjust_method,
+          function(g1, g2) ifelse(g1 == control, g2, g1)
+        )
+      })
+    } else {
+      x_values <- unique(fc_table$x_value)
+      purrr::map_dfr(x_values, function(x_value) {
+        slice <- slice_for_x_value_(data, x_col, x_value, comparison_group)$slice
+        purrr::map_dfr(population_levels, function(pop) {
+          pop_data <- slice[slice[[population_col]] == pop, ]
+          dunn_test_for_population_(
+            pop_data, pop, control, group_col, value_col, p_adjust_method,
+            function(g1, g2) x_value
+          )
+        })
+      })
+    }
   }
 }
