@@ -31,18 +31,48 @@
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+resolve_marker_from_metadata_ <- function(marker, stain_lookup, channel_names,
+                                          descriptions) {
+  description_matches <- channel_names[
+    !is.na(descriptions) & descriptions == marker
+  ]
+  if (length(description_matches) > 0L) {
+    compensated_matches <- description_matches[
+      startsWith(description_matches, "Comp-")
+    ]
+    if (length(compensated_matches) > 0L) {
+      return(compensated_matches[[1]])
+    }
+  }
+
+  if (marker %in% stain_lookup) {
+    return(names(stain_lookup)[stain_lookup == marker][[1]])
+  }
+
+  if (length(description_matches) > 0L) {
+    return(description_matches[[1]])
+  }
+
+  if (marker %in% channel_names) {
+    return(marker)
+  }
+
+  NA_character_
+}
+
 resolve_markers_ <- function(markers, gh, gated, file_name) {
   stain_lookup  <- flowWorkspace::markernames(gh)
-  channel_names <- flowCore::parameters(gated)$name
+  parameter_metadata <- flowCore::parameters(gated)
+  channel_names <- parameter_metadata$name
+  descriptions <- parameter_metadata$desc
 
   resolved <- purrr::map_chr(markers, function(m) {
-    if (m %in% stain_lookup) {
-      return(names(stain_lookup)[stain_lookup == m][[1]])
-    }
-    if (m %in% channel_names) {
-      return(m)
-    }
-    NA_character_
+    resolve_marker_from_metadata_(
+      marker = m,
+      stain_lookup = stain_lookup,
+      channel_names = channel_names,
+      descriptions = descriptions
+    )
   })
 
   unmatched <- markers[is.na(resolved)]
@@ -241,7 +271,10 @@ facs_read_fcs_gated <- function(wsp_path,
   # suggestion but breaks even base-function lookup inside the
   # function body -- confirmed empirically, see task report.)
   export_env <- new.env(parent = baseenv())
-  export_env$resolve_markers_ <- resolve_markers_
+  export_env$resolve_marker_from_metadata_ <- resolve_marker_from_metadata_
+  resolve_markers_export_ <- resolve_markers_
+  environment(resolve_markers_export_) <- export_env
+  export_env$resolve_markers_ <- resolve_markers_export_
   read_one_sample_solo_export_ <- read_one_sample_solo_
   environment(read_one_sample_solo_export_) <- export_env
 

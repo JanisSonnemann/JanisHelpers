@@ -6,6 +6,17 @@ fcs_dir  <- testthat::test_path("../fixtures/Treg")
 skip_msg <- "Treg fixture not available"
 cd45_gate <- "Singlets/Lymphocytes/live/CD45+"
 
+test_that("marker descriptions prefer the compensated channel", {
+  resolved <- JanisHelpers:::resolve_marker_from_metadata_(
+    marker = "CD4_IgD",
+    stain_lookup = c("BV510-A" = "CD4_IgD"),
+    channel_names = c("BV510-A", "Comp-BV510-A"),
+    descriptions = c("CD4_IgD", "CD4_IgD")
+  )
+
+  expect_identical(resolved, "Comp-BV510-A")
+})
+
 test_that("facs_read_fcs_gated() returns a wide tibble with one row per event", {
   skip_if_not(dir.exists(fcs_dir), skip_msg)
 
