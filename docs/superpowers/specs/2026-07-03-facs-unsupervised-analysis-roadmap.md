@@ -80,6 +80,25 @@ with the existing `meta_` domain for group/design information.
 
 ---
 
+## Optional additions
+
+### Audit trail (optional, not yet designed)
+Each wrapper function in this pipeline (`facs_read_fcs_gated()`,
+`facs_cluster_flowsom()`, `facs_reduce_umap()`, and later the Stage 4
+differential-abundance function) takes parameters that materially affect
+the result (gate path, markers, grid/metacluster counts, seeds, UMAP
+neighbors/min_dist, etc.). To keep results reproducible, add an opt-in
+audit trail: a dated document (one per run/session) recording every call
+to these wrapper functions with its full argument list, so a later reader
+can reconstruct exactly how a given result was produced without
+re-deriving it from script history. Open questions to settle if/when this
+is brainstormed: where the log lives (per-project file vs. per-call
+sidecar), what triggers a new dated document vs. appending to an existing
+one, and whether this is a cross-cutting helper (its own domain, e.g.
+`wrangle_` or a new `audit_` prefix) or logic embedded in each wrapper.
+
+---
+
 ## Open questions for future stages
 
 - Which domain prefix these new functions should use (`facs_` fits the
