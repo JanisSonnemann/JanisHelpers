@@ -68,8 +68,9 @@ Each stage gets its own design + plan when started.
 ## Calls made without you (check when convenient)
 
 - DB setup plan absorbed as Stage 0.
-- Prep result in `<exp>/processed/facs/<wsp>_prep.rds`, QC report in
-  `<exp>/qc/facs/<wsp>_qc.html` (one per `.wsp` version, overwritten on rerun).
+- Prep result and QC report go into new `processed/` and `qc/` folders in the
+  panel's raw `.fcs` folder, e.g. `raw/FACS/overview/{processed,qc}/` (your
+  call; one per `.wsp` version, overwritten on rerun).
 - `final <- TRUE` exports the saved `.rds` without re-reading; refuses if it's
   older than the `.wsp`. No separate QC prompt.
 - Exclusion rows need a reason; an applicable row matching no file stops the

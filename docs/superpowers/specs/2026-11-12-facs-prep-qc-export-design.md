@@ -1,6 +1,6 @@
 # FACS prep -> QC loop -> final export
 
-Status: draft, pending review
+Status: approved 2026-11-12
 Detailed design for Stages 2 + 3 of
 `2026-11-12-facs-pipeline-workflow-design.md` (the big-picture plan).
 
@@ -110,11 +110,15 @@ An `.rds` file holding a named list:
 - `info`: the `.wsp` path, `wsp_root`, version date, assay name, condition
   keyword, created-at time and JanisHelpers version.
 
-It is saved as `<exp>/processed/facs/<wsp basename>_prep.rds`, with one file
-per `.wsp` version that gets overwritten on rerun *(my call)*. The QC report
-goes to `<exp>/qc/facs/<wsp basename>_qc.html`, which is also one per version
-and overwritten on rerun *(my call)*. The report embeds the prep file's
-created-at time. Separate folders keep `raw/` limited to raw files.
+Both files go into new `processed/` and `qc/` folders inside the panel's folder
+of raw `.fcs` files (decided). For 26-1 overview that's
+`raw/FACS/overview/processed/<wsp basename>_prep.rds` and
+`raw/FACS/overview/qc/<wsp basename>_qc.html`. The helpers create the folders
+when they're missing. Panel folder names don't always match the assay name
+(`Treg` vs `treg`), so the prep script sets the panel folder in its config
+(e.g. `panel_dir <- "Treg"`) instead of deriving it *(my call)*. There's one
+file of each per `.wsp` version, overwritten on rerun *(my call)*. The report
+embeds the prep file's created-at time.
 
 Prep also runs the **one-file-per-mouse x tissue x condition check** that is in
 `db_import_26-1_common.R` today. In prep it is a warning, shown in the report,
@@ -168,7 +172,7 @@ the plan.
    idempotently by `db_connect()`, with an update to the schema spec and to
    CLAUDE.md's data-structures section.
 6. **Script template** `inst/scripts/facs_prep_template.R`: config (wsp,
-   assay, condition keyword, `final`), population selection, calculations,
+   panel folder, assay, condition keyword, `final`), population selection, calculations,
    then the prep/report or export branch. A copy of this is what each panel's
    script starts from.
 
