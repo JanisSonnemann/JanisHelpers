@@ -5,7 +5,8 @@ Status: draft, pending review
 > **2026-11-12:** calc inputs removed (`facs_stains` volume/bead/count-method
 > columns and their `CHECK`, the `sample_digestions` table), `wsp_root` +
 > `import_log` added, `facs_measurements` FK to `facs_stains` dropped -- see
-> `2026-11-12-db-schema-import-log-design.md`. The DDL below is current.
+> `2026-11-12-db-schema-import-log-design.md`. `import_exclusions` added
+> (`2026-11-12-facs-prep-qc-export-design.md`). The DDL below is current.
 Related: `docs/superpowers/specs/2026-07-17-facs-db-schema-diagram.html` (visual companion — entity cards, relationships, workflow diagram)
 
 ## Context
@@ -210,6 +211,22 @@ CREATE TABLE import_log (
   supersedes_import_id INTEGER,  -- no self-FK: EXPORT DATABASE rejects it; write_import_log_() checks
   imported_at          TIMESTAMP NOT NULL DEFAULT current_timestamp
 );
+
+-- Exclusion-sheet rows applied by one FACS export (db_export_facs()), kept
+-- when the root is overwritten later. FK to another table: snapshot-safe.
+CREATE SEQUENCE seq_import_exclusions START 1;
+CREATE TABLE import_exclusions (
+  import_exclusion_id INTEGER PRIMARY KEY DEFAULT nextval('seq_import_exclusions'),
+  import_id       INTEGER NOT NULL REFERENCES import_log(import_id),
+  mouse_id        VARCHAR NOT NULL,
+  tissue          VARCHAR,     -- NULL = all tissues
+  panel           VARCHAR,     -- NULL = all panels
+  condition       VARCHAR,     -- NULL = all conditions
+  file_name       VARCHAR,     -- NULL = all files
+  reason          VARCHAR NOT NULL,
+  decided_on      DATE,
+  n_files_matched INTEGER NOT NULL
+);
 ```
 
 Surrogate-key generation is shown above via `CREATE SEQUENCE` +
@@ -229,6 +246,7 @@ specifies.
 | `wsp_root` on `facs_stains` (2026-11-12) | The workspace root is the unit of export and overwrite; one root = one experiment x one panel. |
 | `condition` + `condition_keyword` on `facs_stains` (2026-11-12) | Wells of one sample x panel that differ in one variable (e.g. restimulation unstim / MPO / PMA-Iono) are separate stains. Generic name so any FlowJo keyword can be the variable; the keyword is stored too. One root uses one keyword. Cross-well values (ratios) are not stored -- computed in analysis. |
 | `import_log` (2026-11-12) | Every import is recorded permanently, including what it replaced, so overwriting never loses the history. |
+| `import_exclusions` (2026-11-12) | Excluded samples are not stored as measurements ("only clean data"), but the database records which were left out of each export and why, so a missing sample is never a mystery. See `2026-11-12-facs-prep-qc-export-design.md`. |
 | `domains` lookup table instead of a hard-coded `CHECK` list on `assays.domain` | DuckDB can't cheaply `ALTER` a `CHECK` constraint later. Adding a future modality (e.g. scRNA-seq) becomes a plain `INSERT`, not a schema migration. |
 | `source_file` + `imported_at` on every fact table | Every measurement traces back to the raw export it came from. |
 | `samples.tissue` is free `VARCHAR`, not an enum | Specimen types span organs and fluids (serum, urine) -- forcing a rigid vocabulary here would fight real lab variation; typo protection instead lives on the `assays` lookup, where it matters more. |

@@ -121,3 +121,9 @@ test_that("facs_prep_load stops when the wsp is newer than the rds", {
   Sys.setFileTime(d$wsp_path, Sys.time() + 60)
   expect_error(facs_prep_load(d$wsp_path, d$panel_dir), "newer")
 })
+
+test_that("the prep script template ships and parses", {
+  path <- system.file("scripts", "facs_prep_template.R", package = "JanisHelpers")
+  expect_true(nzchar(path))
+  expect_no_error(parse(path))
+})
