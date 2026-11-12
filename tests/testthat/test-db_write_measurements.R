@@ -441,13 +441,18 @@ test_that("db_write_elisa requires source_file", {
   expect_equal(nrow(DBI::dbGetQuery(con, "SELECT * FROM elisa_measurements")), 0)
 })
 
+histo_src_ <- "25-7/histo/scores.xlsx"
+
 test_that("db_write_histo inserts measurements without an assay", {
   con <- local_test_db()
   seed_minimal_fixture(con)
 
-  histo_data <- tibble::tibble(metric = c("damage_score", "fibrosis_pct"), value = c(2, 15.5))
+  histo_data <- tibble::tibble(
+    metric = c("damage_score", "fibrosis_pct"), value = c(2, 15.5),
+    mouse_id = "25-7-1", tissue = "spleen"
+  )
 
-  n <- db_write_histo(con, histo_data, mouse_id = "25-7-1", tissue = "spleen")
+  n <- db_write_histo(con, histo_data, source_file = histo_src_)
   expect_equal(n, 2)
 
   rows <- DBI::dbGetQuery(con, "SELECT metric, value, assay_id FROM histo_measurements ORDER BY metric")
@@ -459,9 +464,94 @@ test_that("db_write_histo errors clearly on an unknown assay_name", {
   con <- local_test_db()
   seed_minimal_fixture(con)
 
-  histo_data <- tibble::tibble(metric = "damage_score", value = 2)
+  histo_data <- tibble::tibble(
+    metric = "damage_score", value = 2, mouse_id = "25-7-1", tissue = "spleen"
+  )
   expect_error(
-    db_write_histo(con, histo_data, mouse_id = "25-7-1", tissue = "spleen", assay_name = "not-registered"),
+    db_write_histo(con, histo_data, assay_name = "not-registered", source_file = histo_src_),
     "No assay found"
   )
+})
+
+test_that("db_write_histo writes a whole table across mice", {
+  con <- local_test_db()
+  seed_two_mouse_plate_(con)
+
+  histo_data <- tibble::tibble(
+    metric = "damage_score", value = c(1, 3),
+    mouse_id = c("25-7-1", "25-7-2"), tissue = "serum"
+  )
+  db_write_histo(con, histo_data, source_file = histo_src_)
+
+  rows <- DBI::dbGetQuery(con, "
+    SELECT sub.mouse_id, sm.tissue, h.value FROM histo_measurements h
+    JOIN samples sm ON sm.sample_id = h.sample_id
+    JOIN subjects sub ON sub.subject_id = sm.subject_id
+    ORDER BY sub.mouse_id
+  ")
+  expect_equal(rows$mouse_id, c("25-7-1", "25-7-2"))
+  expect_equal(rows$tissue, c("serum", "serum"))
+  expect_equal(rows$value, c(1, 3))
+})
+
+test_that("db_write_histo lists every unresolved mouse_id x tissue and writes nothing", {
+  con <- local_test_db()
+  seed_two_mouse_plate_(con)
+
+  histo_data <- tibble::tibble(
+    metric = "damage_score", value = c(1, 2, 3),
+    mouse_id = c("25-7-1", "25-7-9", NA), tissue = c("serum", "serum", "kidney")
+  )
+  err <- expect_error(db_write_histo(con, histo_data, source_file = histo_src_))
+  expect_match(conditionMessage(err), "'25-7-9 x serum'", fixed = TRUE)
+  expect_match(conditionMessage(err), "'NA x kidney'", fixed = TRUE)
+  expect_equal(nrow(DBI::dbGetQuery(con, "SELECT * FROM histo_measurements")), 0)
+  expect_equal(nrow(read_log_(con)), 0)
+})
+
+test_that("db_write_histo requires mouse_id and tissue columns", {
+  con <- local_test_db()
+  seed_two_mouse_plate_(con)
+
+  histo_data <- tibble::tibble(
+    metric = "damage_score", value = 1, mouse_id = "25-7-1", tissue = "serum"
+  )
+  expect_error(
+    db_write_histo(con, dplyr::select(histo_data, !tissue), source_file = histo_src_),
+    "tissue"
+  )
+  expect_error(
+    db_write_histo(con, dplyr::rename(histo_data, mouse_ID = mouse_id), source_file = histo_src_),
+    "mouse_ID"
+  )
+})
+
+test_that("db_write_histo writes one import_log row per call", {
+  con <- local_test_db()
+  seed_two_mouse_plate_(con)
+
+  histo_data <- tibble::tibble(
+    metric = "damage_score", value = c(1, 3),
+    mouse_id = c("25-7-1", "25-7-2"), tissue = "serum"
+  )
+  db_write_histo(con, histo_data, source_file = histo_src_)
+
+  log <- read_log_(con)
+  expect_equal(nrow(log), 1)
+  expect_equal(log$domain_name, "histo")
+  expect_equal(log$experiment_code, "25-7")
+  expect_equal(log$import_unit, "scores.xlsx")
+  expect_equal(log$rows_written, 2L)
+  expect_true(is.na(log$qc_passed))
+})
+
+test_that("db_write_histo requires source_file", {
+  con <- local_test_db()
+  seed_two_mouse_plate_(con)
+
+  histo_data <- tibble::tibble(
+    metric = "damage_score", value = 1, mouse_id = "25-7-1", tissue = "serum"
+  )
+  expect_error(db_write_histo(con, histo_data), "source_file")
+  expect_error(db_write_histo(con, histo_data, source_file = ""), "source_file")
 })

@@ -49,8 +49,9 @@ test_that("db_query_histo returns a flat tibble and tolerates a NULL assay_id", 
   con <- local_test_db()
   seed_minimal_fixture(con)
   db_write_histo(
-    con, tibble::tibble(metric = "damage_score", value = 2),
-    mouse_id = "25-7-1", tissue = "spleen"
+    con,
+    tibble::tibble(metric = "damage_score", value = 2, mouse_id = "25-7-1", tissue = "spleen"),
+    source_file = "25-7/histo/scores.xlsx"
   )
 
   result <- db_query_histo(con) |> dplyr::collect()

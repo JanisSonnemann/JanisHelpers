@@ -7,6 +7,26 @@ check_string_arg_ <- function(x, arg, what) {
   invisible(x)
 }
 
+# Errors unless `data` has per-row `mouse_id` and `tissue` columns; hints at
+# renaming when it has meta_read()'s `mouse_ID` spelling instead.
+check_mouse_tissue_cols_ <- function(data, fn_name) {
+  missing_cols <- setdiff(c("mouse_id", "tissue"), names(data))
+  if (length(missing_cols) > 0) {
+    hint <- if ("mouse_id" %in% missing_cols && "mouse_ID" %in% names(data)) {
+      " `data` has `mouse_ID` -- rename it to `mouse_id` (the database's spelling)."
+    } else {
+      ""
+    }
+    stop(
+      fn_name, "() needs column(s) ",
+      paste(sprintf("`%s`", missing_cols), collapse = ", "),
+      " in `data`, one value per row.", hint,
+      call. = FALSE
+    )
+  }
+  invisible(TRUE)
+}
+
 # Guards for db_write_facs(): the .wsp filename belongs to the root, one root
 # per experiment x panel (and vice versa), one workspace version per root.
 # Errors before anything is written.
@@ -273,20 +293,7 @@ db_write_elisa <- function(con, data, assay_name, source_file) {
     if (missing(source_file)) NULL else source_file, "source_file",
     "the results file path relative to raw/ (e.g. \"25-7/elisa/Results_MPO.xlsx\")"
   )
-  missing_cols <- setdiff(c("mouse_id", "tissue"), names(data))
-  if (length(missing_cols) > 0) {
-    hint <- if ("mouse_id" %in% missing_cols && "mouse_ID" %in% names(data)) {
-      " `data` has `mouse_ID` -- rename it to `mouse_id` (the database's spelling)."
-    } else {
-      ""
-    }
-    stop(
-      "db_write_elisa() needs column(s) ",
-      paste(sprintf("`%s`", missing_cols), collapse = ", "),
-      " in `data`, one value per row.", hint,
-      call. = FALSE
-    )
-  }
+  check_mouse_tissue_cols_(data, "db_write_elisa")
   if (anyNA(data$sample_id) || anyNA(data$replicate)) {
     stop(
       "db_write_elisa() requires non-NA sample_id and replicate for every row ",
@@ -337,6 +344,11 @@ db_write_elisa <- function(con, data, assay_name, source_file) {
 #' Import histology measurements
 #'
 #' Writes a tidy tibble of histology measurements into `histo_measurements`.
+#' A whole table is written in one call: every row carries its own
+#' `mouse_id` and `tissue`, resolved against the registered
+#' `subjects`/`samples`. If any `mouse_id` x `tissue` combination isn't
+#' registered (including an `NA` `mouse_id`), the function errors naming
+#' every unresolved combination and writes nothing.
 #'
 #' Note: `assay_name` is optional (histology has traditionally used a single
 #' un-named stain/scoring protocol). Rows written with `assay_name = NA` are
@@ -346,21 +358,26 @@ db_write_elisa <- function(con, data, assay_name, source_file) {
 #' [db_write_assay()] with `domain = "histo"`) to get full dedup protection.
 #'
 #' @param con A `DBI` connection from [db_connect()].
-#' @param data A tibble with columns `metric`, `value`.
-#' @param mouse_id Character scalar identifying the subject.
-#' @param tissue Character scalar identifying the sample.
+#' @param data A tibble with columns `metric`, `value`, `mouse_id`, `tissue`.
 #' @param assay_name Character scalar, optional -- identifies the
 #'   stain/scoring protocol.
-#' @param source_file Character scalar, optional.
-#' @returns Invisibly, the number of rows inserted.
+#' @param source_file Character scalar, required -- the scores file, as a
+#'   path relative to the lab database's `raw/` folder (e.g.
+#'   `"25-7/histo/scores.xlsx"`). Stored on every row and in the log.
+#' @returns Invisibly, the number of rows inserted. Every call also writes one
+#'   `import_log` row (in the same transaction as the data).
 #' @export
-db_write_histo <- function(con, data, mouse_id, tissue, assay_name = NA_character_,
-                            source_file = NA_character_) {
-  sample_id <- lookup_sample_id_(con, mouse_id, tissue)
+db_write_histo <- function(con, data, assay_name = NA_character_, source_file) {
+  check_string_arg_(
+    if (missing(source_file)) NULL else source_file, "source_file",
+    "the scores file path relative to raw/ (e.g. \"25-7/histo/scores.xlsx\")"
+  )
+  check_mouse_tissue_cols_(data, "db_write_histo")
   assay_id <- if (!is.na(assay_name)) lookup_assay_id_(con, assay_name, domain = "histo") else NA_integer_
+  sample_ids <- lookup_sample_ids_(con, data$mouse_id, data$tissue)
 
   to_write <- tibble::tibble(
-    sample_id = sample_id,
+    sample_id = sample_ids,
     assay_id = assay_id,
     metric = as.character(data$metric),
     value = as.double(data$value),
@@ -369,11 +386,21 @@ db_write_histo <- function(con, data, mouse_id, tissue, assay_name = NA_characte
   duckdb::duckdb_register(con, "tmp_histo_measurements", to_write)
   on.exit(duckdb::duckdb_unregister(con, "tmp_histo_measurements"), add = TRUE)
 
-  n <- DBI::dbExecute(con, "
-    INSERT INTO histo_measurements (sample_id, assay_id, metric, value, source_file)
-    SELECT sample_id, assay_id, metric, value, source_file
-    FROM tmp_histo_measurements
-    ON CONFLICT (sample_id, assay_id, metric) DO NOTHING
-  ")
+  n <- DBI::dbWithTransaction(con, {
+    n <- DBI::dbExecute(con, "
+      INSERT INTO histo_measurements (sample_id, assay_id, metric, value, source_file)
+      SELECT sample_id, assay_id, metric, value, source_file
+      FROM tmp_histo_measurements
+      ON CONFLICT (sample_id, assay_id, metric) DO NOTHING
+    ")
+    write_import_log_(
+      con, "histo",
+      experiment_code = experiment_codes_(con, sample_ids),
+      import_unit = basename(source_file),
+      source_file = source_file,
+      rows_written = n
+    )
+    n
+  })
   invisible(n)
 }

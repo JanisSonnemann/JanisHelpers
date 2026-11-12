@@ -4,34 +4,31 @@
 \alias{db_write_histo}
 \title{Import histology measurements}
 \usage{
-db_write_histo(
-  con,
-  data,
-  mouse_id,
-  tissue,
-  assay_name = NA_character_,
-  source_file = NA_character_
-)
+db_write_histo(con, data, assay_name = NA_character_, source_file)
 }
 \arguments{
 \item{con}{A \code{DBI} connection from \code{\link[=db_connect]{db_connect()}}.}
 
-\item{data}{A tibble with columns \code{metric}, \code{value}.}
-
-\item{mouse_id}{Character scalar identifying the subject.}
-
-\item{tissue}{Character scalar identifying the sample.}
+\item{data}{A tibble with columns \code{metric}, \code{value}, \code{mouse_id}, \code{tissue}.}
 
 \item{assay_name}{Character scalar, optional -- identifies the
 stain/scoring protocol.}
 
-\item{source_file}{Character scalar, optional.}
+\item{source_file}{Character scalar, required -- the scores file, as a
+path relative to the lab database's \verb{raw/} folder (e.g.
+\code{"25-7/histo/scores.xlsx"}). Stored on every row and in the log.}
 }
 \value{
-Invisibly, the number of rows inserted.
+Invisibly, the number of rows inserted. Every call also writes one
+\code{import_log} row (in the same transaction as the data).
 }
 \description{
 Writes a tidy tibble of histology measurements into \code{histo_measurements}.
+A whole table is written in one call: every row carries its own
+\code{mouse_id} and \code{tissue}, resolved against the registered
+\code{subjects}/\code{samples}. If any \code{mouse_id} x \code{tissue} combination isn't
+registered (including an \code{NA} \code{mouse_id}), the function errors naming
+every unresolved combination and writes nothing.
 }
 \details{
 Note: \code{assay_name} is optional (histology has traditionally used a single
