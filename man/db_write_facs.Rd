@@ -55,3 +55,13 @@ Writes one staining event's tidy long measurements (as produced by
 and organ weights are not stored: they are calculation inputs, used by the
 export script before the data reaches the database.
 }
+\details{
+Errors, writing nothing, if:
+\itemize{
+\item \code{basename(source_file)} isn't \verb{<wsp_root>_YYYYMMDD.wsp};
+\item this experiment x panel is already stored under a different root;
+\item \code{wsp_root} is already used for a different experiment or panel;
+\item the root already holds data from a different \code{source_file} (a newer
+workspace version replaces a root via the Stage 3 export, not here).
+}
+}

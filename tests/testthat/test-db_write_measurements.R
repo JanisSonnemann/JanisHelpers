@@ -136,6 +136,128 @@ test_that("db_write_facs requires a single non-empty wsp_root", {
   expect_equal(DBI::dbGetQuery(con, "SELECT COUNT(*) AS n FROM facs_stains")$n, 0)
 })
 
+seed_guard_fixture_ <- function(con) {
+  seed_minimal_fixture(con)
+  db_write_subjects(con, tibble::tibble(mouse_id = "25-7-2", experiment_code = "25-7"))
+  db_write_samples(con, tibble::tibble(mouse_id = "25-7-2", tissue = "spleen"))
+  db_write_experiment(con, experiment_code = "25-8")
+  db_write_subjects(con, tibble::tibble(mouse_id = "25-8-1", experiment_code = "25-8"))
+  db_write_samples(con, tibble::tibble(mouse_id = "25-8-1", tissue = "spleen"))
+  db_write_assay(con, assay_name = "treg", domain = "facs")
+  invisible(con)
+}
+
+write_cd4_ <- function(con, mouse_id, wsp_root, source_file, assay_name = "overview") {
+  db_write_facs(
+    con, cd4_data_(),
+    mouse_id = mouse_id, tissue = "spleen", assay_name = assay_name,
+    wsp_root = wsp_root, source_file = source_file
+  )
+}
+
+facs_row_counts_ <- function(con) {
+  c(
+    stains = DBI::dbGetQuery(con, "SELECT COUNT(*) AS n FROM facs_stains")$n,
+    measurements = DBI::dbGetQuery(con, "SELECT COUNT(*) AS n FROM facs_measurements")$n
+  )
+}
+
+test_that("db_write_facs rejects a source_file that doesn't match wsp_root", {
+  con <- local_test_db()
+  seed_guard_fixture_(con)
+
+  expect_error(
+    write_cd4_(con, "25-7-1", "overview_25-7", "25-7/facs/treg_25-7_20261112.wsp"),
+    "wsp_root"
+  )
+  expect_error(
+    write_cd4_(con, "25-7-1", "overview_25-7", "25-7/facs/overview_25-7.wsp"),
+    "wsp_root"
+  )
+  expect_equal(facs_row_counts_(con), c(stains = 0, measurements = 0))
+})
+
+test_that("db_write_facs matches the root literally", {
+  con <- local_test_db()
+  seed_guard_fixture_(con)
+  db_write_assay(con, assay_name = "cd4+", domain = "facs")
+
+  expect_error(
+    write_cd4_(con, "25-7-1", "cd4+_25-7", "25-7/facs/cd44_25-7_20261112.wsp", "cd4+"),
+    "wsp_root"
+  )
+  expect_equal(facs_row_counts_(con), c(stains = 0, measurements = 0))
+  expect_no_error(
+    write_cd4_(con, "25-7-1", "cd4+_25-7", "25-7/facs/cd4+_25-7_20261112.wsp", "cd4+")
+  )
+})
+
+test_that("db_write_facs rejects a second root for the same experiment x panel", {
+  con <- local_test_db()
+  seed_guard_fixture_(con)
+  write_cd4_(con, "25-7-1", "overview_25-7", overview_wsp_)
+  before <- facs_row_counts_(con)
+
+  expect_error(
+    write_cd4_(con, "25-7-2", "overview2_25-7", "25-7/facs/overview2_25-7_20261112.wsp"),
+    "overview_25-7"
+  )
+  expect_equal(facs_row_counts_(con), before)
+})
+
+test_that("db_write_facs rejects one root across two panels or experiments", {
+  con <- local_test_db()
+  seed_guard_fixture_(con)
+  write_cd4_(con, "25-7-1", "overview_25-7", overview_wsp_)
+  before <- facs_row_counts_(con)
+
+  expect_error(
+    write_cd4_(con, "25-7-2", "overview_25-7", overview_wsp_, assay_name = "treg"),
+    "overview_25-7"
+  )
+  expect_error(
+    write_cd4_(con, "25-8-1", "overview_25-7", overview_wsp_),
+    "overview_25-7"
+  )
+  expect_equal(facs_row_counts_(con), before)
+})
+
+test_that("db_write_facs rejects a second workspace version of a root", {
+  con <- local_test_db()
+  seed_guard_fixture_(con)
+  write_cd4_(con, "25-7-1", "overview_25-7", overview_wsp_)
+  before <- facs_row_counts_(con)
+  newer <- "25-7/facs/overview_25-7_20261120.wsp"
+
+  expect_error(write_cd4_(con, "25-7-1", "overview_25-7", newer), "Stage 3|export")
+  expect_error(write_cd4_(con, "25-7-2", "overview_25-7", newer), "Stage 3|export")
+  expect_equal(facs_row_counts_(con), before)
+})
+
+test_that("db_write_facs accepts further samples of the same workspace", {
+  con <- local_test_db()
+  seed_guard_fixture_(con)
+
+  write_cd4_(con, "25-7-1", "overview_25-7", overview_wsp_)
+  expect_no_error(write_cd4_(con, "25-7-2", "overview_25-7", overview_wsp_))
+  expect_equal(facs_row_counts_(con), c(stains = 2, measurements = 2))
+})
+
+test_that("every facs measurement has a matching stain", {
+  con <- local_test_db()
+  seed_guard_fixture_(con)
+  write_cd4_(con, "25-7-1", "overview_25-7", overview_wsp_)
+  write_cd4_(con, "25-7-2", "overview_25-7", overview_wsp_)
+  write_cd4_(con, "25-7-1", "treg_25-7", "25-7/facs/treg_25-7_20261112.wsp", "treg")
+
+  orphans <- DBI::dbGetQuery(con, "
+    SELECT COUNT(*) AS n FROM facs_measurements m
+    LEFT JOIN facs_stains s USING (facs_stain_id)
+    WHERE s.facs_stain_id IS NULL
+  ")$n
+  expect_equal(orphans, 0)
+})
+
 seed_two_mouse_plate_ <- function(con) {
   seed_minimal_fixture(con)
   db_write_subjects(con, tibble::tibble(mouse_id = "25-7-2", experiment_code = "25-7"))

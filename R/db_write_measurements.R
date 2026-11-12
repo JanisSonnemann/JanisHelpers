@@ -7,6 +7,73 @@ check_string_arg_ <- function(x, arg, what) {
   invisible(x)
 }
 
+# Guards for db_write_facs(): the .wsp filename belongs to the root, one root
+# per experiment x panel (and vice versa), one workspace version per root.
+# Errors before anything is written.
+check_facs_root_ <- function(con, sample_id, assay_id, wsp_root, source_file) {
+  file <- basename(source_file)
+  suffix <- substring(file, nchar(wsp_root) + 1)
+  if (!startsWith(file, wsp_root) || !grepl("^_[0-9]{8}\\.wsp$", suffix)) {
+    stop(
+      "`source_file` '", file, "' doesn't belong to `wsp_root` '", wsp_root,
+      "' -- expected '", wsp_root, "_YYYYMMDD.wsp'.",
+      call. = FALSE
+    )
+  }
+
+  experiment_id <- DBI::dbGetQuery(con, "
+    SELECT sub.experiment_id FROM samples sm
+    JOIN subjects sub ON sub.subject_id = sm.subject_id
+    WHERE sm.sample_id = ?", params = list(sample_id))$experiment_id[[1]]
+
+  other_roots <- DBI::dbGetQuery(con, "
+    SELECT DISTINCT fs.wsp_root FROM facs_stains fs
+    JOIN samples sm ON sm.sample_id = fs.sample_id
+    JOIN subjects sub ON sub.subject_id = sm.subject_id
+    WHERE sub.experiment_id = ? AND fs.assay_id = ? AND fs.wsp_root <> ?",
+    params = list(experiment_id, assay_id, wsp_root))$wsp_root
+  if (length(other_roots) > 0) {
+    stop(
+      "This experiment x panel is already stored under root '", other_roots[[1]],
+      "', not '", wsp_root, "'. Re-export root '", other_roots[[1]],
+      "' to replace it, or fix the workspace name.",
+      call. = FALSE
+    )
+  }
+
+  elsewhere <- DBI::dbGetQuery(con, "
+    SELECT DISTINCT e.experiment_code, a.assay_name FROM facs_stains fs
+    JOIN samples sm ON sm.sample_id = fs.sample_id
+    JOIN subjects sub ON sub.subject_id = sm.subject_id
+    JOIN experiments e ON e.experiment_id = sub.experiment_id
+    JOIN assays a ON a.assay_id = fs.assay_id
+    WHERE fs.wsp_root = ? AND (sub.experiment_id <> ? OR fs.assay_id <> ?)",
+    params = list(wsp_root, experiment_id, assay_id))
+  if (nrow(elsewhere) > 0) {
+    stop(
+      "Root '", wsp_root, "' is already used for experiment '",
+      elsewhere$experiment_code[[1]], "' x panel '", elsewhere$assay_name[[1]],
+      "'. One root covers exactly one experiment x panel.",
+      call. = FALSE
+    )
+  }
+
+  other_versions <- DBI::dbGetQuery(con, "
+    SELECT DISTINCT m.source_file FROM facs_measurements m
+    JOIN facs_stains fs ON fs.facs_stain_id = m.facs_stain_id
+    WHERE fs.wsp_root = ? AND m.source_file <> ?",
+    params = list(wsp_root, source_file))$source_file
+  if (length(other_versions) > 0) {
+    stop(
+      "Root '", wsp_root, "' already holds data from '", other_versions[[1]],
+      "'. Replacing a root with a newer workspace version is the Stage 3 ",
+      "export's job, not db_write_facs().",
+      call. = FALSE
+    )
+  }
+  invisible(TRUE)
+}
+
 lookup_sample_id_ <- function(con, mouse_id, tissue) {
   result <- DBI::dbGetQuery(
     con,
@@ -85,6 +152,13 @@ lookup_assay_id_ <- function(con, assay_name, domain) {
 #' and organ weights are not stored: they are calculation inputs, used by the
 #' export script before the data reaches the database.
 #'
+#' Errors, writing nothing, if:
+#' - `basename(source_file)` isn't `<wsp_root>_YYYYMMDD.wsp`;
+#' - this experiment x panel is already stored under a different root;
+#' - `wsp_root` is already used for a different experiment or panel;
+#' - the root already holds data from a different `source_file` (a newer
+#'   workspace version replaces a root via the Stage 3 export, not here).
+#'
 #' @param con A `DBI` connection from [db_connect()].
 #' @param data A tibble with columns `PopulationFullPath`, `Population`,
 #'   `metric`, `value` -- the shape `facs_import_wsp()` produces, filtered to
@@ -120,6 +194,7 @@ db_write_facs <- function(con, data, mouse_id, tissue, assay_name, wsp_root,
 
   sample_id <- lookup_sample_id_(con, mouse_id, tissue)
   assay_id <- lookup_assay_id_(con, assay_name, domain = "facs")
+  check_facs_root_(con, sample_id, assay_id, wsp_root, source_file)
 
   to_write <- tibble::tibble(
     population_full_path = as.character(data$PopulationFullPath),
