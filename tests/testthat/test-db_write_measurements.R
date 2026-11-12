@@ -187,65 +187,108 @@ test_that("db_write_facs requires a single non-empty source_file and writes noth
   expect_equal(DBI::dbGetQuery(con, "SELECT COUNT(*) AS n FROM facs_stains")$n, 0)
 })
 
-test_that("db_write_elisa inserts measurements", {
-  con <- local_test_db()
+seed_two_mouse_plate_ <- function(con) {
   seed_minimal_fixture(con)
+  db_write_subjects(con, tibble::tibble(mouse_id = "25-7-2", experiment_code = "25-7"))
+  db_write_samples(con, tibble::tibble(
+    mouse_id = c("25-7-1", "25-7-2"), tissue = c("serum", "serum")
+  ))
+  invisible(con)
+}
 
-  elisa_data <- tibble::tibble(
+elisa_plate_ <- function(...) {
+  plate <- tibble::tibble(
     cytokine = "MPO",
-    sample_id = c("25-7-1", "25-7-1"),
-    replicate = c(1L, 2L),
-    value = c(12.3, 12.7),
+    sample_id = c("P1", "P1", "P2", "P3"),
+    replicate = c(1L, 2L, 1L, 1L),
+    value = c(12.3, 12.7, 30.1, 4.2),
     unit = "pg/ml",
-    result_status = "OK"
+    result_status = "OK",
+    mouse_id = c("25-7-1", "25-7-1", "25-7-2", "25-7-1"),
+    tissue = c("serum", "serum", "serum", "spleen")
   )
+  overrides <- list(...)
+  for (nm in names(overrides)) plate[[nm]] <- overrides[[nm]]
+  plate
+}
 
-  n <- db_write_elisa(con, elisa_data, mouse_id = "25-7-1", tissue = "spleen", assay_name = "anti-MPO")
-  expect_equal(n, 2)
+test_that("db_write_elisa writes a whole plate, resolving each row's sample", {
+  con <- local_test_db()
+  seed_two_mouse_plate_(con)
 
-  rows <- DBI::dbGetQuery(con, "SELECT replicate, value FROM elisa_measurements ORDER BY replicate")
-  expect_equal(rows$replicate, c(1L, 2L))
-  expect_equal(rows$value, c(12.3, 12.7))
+  n <- db_write_elisa(
+    con, elisa_plate_(), assay_name = "anti-MPO",
+    source_file = "25-7/elisa/Results_MPO.xlsx"
+  )
+  expect_equal(n, 4)
+
+  rows <- DBI::dbGetQuery(con, "
+    SELECT sub.mouse_id, sm.tissue, e.sample_id_raw, e.replicate, e.value, e.source_file
+    FROM elisa_measurements e
+    JOIN samples sm ON sm.sample_id = e.sample_id
+    JOIN subjects sub ON sub.subject_id = sm.subject_id
+    ORDER BY e.sample_id_raw, e.replicate
+  ")
+  expect_equal(rows$mouse_id, c("25-7-1", "25-7-1", "25-7-2", "25-7-1"))
+  expect_equal(rows$tissue, c("serum", "serum", "serum", "spleen"))
+  expect_equal(rows$sample_id_raw, c("P1", "P1", "P2", "P3"))
+  expect_equal(rows$value, c(12.3, 12.7, 30.1, 4.2))
+  expect_equal(unique(rows$source_file), "25-7/elisa/Results_MPO.xlsx")
 })
 
 test_that("db_write_elisa is idempotent", {
   con <- local_test_db()
-  seed_minimal_fixture(con)
+  seed_two_mouse_plate_(con)
 
-  elisa_data <- tibble::tibble(
-    cytokine = "MPO", sample_id = "25-7-1", replicate = 1L,
-    value = 12.3, unit = "pg/ml", result_status = "OK"
-  )
-  args <- list(con = con, data = elisa_data, mouse_id = "25-7-1", tissue = "spleen", assay_name = "anti-MPO")
-  do.call(db_write_elisa, args)
-  n <- do.call(db_write_elisa, args)
+  db_write_elisa(con, elisa_plate_(), assay_name = "anti-MPO")
+  n <- db_write_elisa(con, elisa_plate_(), assay_name = "anti-MPO")
   expect_equal(n, 0)
+})
+
+test_that("db_write_elisa lists every unresolved mouse_id x tissue and writes nothing", {
+  con <- local_test_db()
+  seed_two_mouse_plate_(con)
+
+  plate <- elisa_plate_(
+    mouse_id = c("25-7-1", "25-7-1", "25-7-9", NA),
+    tissue = c("serum", "serum", "serum", "kidney")
+  )
+  err <- expect_error(db_write_elisa(con, plate, assay_name = "anti-MPO"))
+  expect_match(conditionMessage(err), "25-7-9 x serum", fixed = TRUE)
+  expect_match(conditionMessage(err), "NA x kidney", fixed = TRUE)
+  expect_no_match(conditionMessage(err), "25-7-1 x serum", fixed = TRUE)
+
+  expect_equal(nrow(DBI::dbGetQuery(con, "SELECT * FROM elisa_measurements")), 0)
+})
+
+test_that("db_write_elisa requires mouse_id and tissue columns, hinting at mouse_ID", {
+  con <- local_test_db()
+  seed_two_mouse_plate_(con)
+
+  expect_error(
+    db_write_elisa(con, dplyr::select(elisa_plate_(), !tissue), assay_name = "anti-MPO"),
+    "tissue"
+  )
+  expect_error(
+    db_write_elisa(con, dplyr::rename(elisa_plate_(), mouse_ID = mouse_id), assay_name = "anti-MPO"),
+    "mouse_ID"
+  )
 })
 
 test_that("db_write_elisa errors on NA sample_id or replicate and inserts nothing", {
   con <- local_test_db()
-  seed_minimal_fixture(con)
+  seed_two_mouse_plate_(con)
 
-  elisa_data_na_sample <- tibble::tibble(
-    cytokine = "MPO", sample_id = NA_character_, replicate = 1L,
-    value = 12.3, unit = "pg/ml", result_status = "OK"
+  expect_error(
+    db_write_elisa(con, elisa_plate_(sample_id = c("P1", NA, "P2", "P3")), assay_name = "anti-MPO"),
+    "requires non-NA sample_id and replicate"
   )
   expect_error(
-    db_write_elisa(con, elisa_data_na_sample, mouse_id = "25-7-1", tissue = "spleen", assay_name = "anti-MPO"),
+    db_write_elisa(con, elisa_plate_(replicate = c(1L, NA, 1L, 1L)), assay_name = "anti-MPO"),
     "requires non-NA sample_id and replicate"
   )
 
-  elisa_data_na_replicate <- tibble::tibble(
-    cytokine = "MPO", sample_id = "25-7-1", replicate = NA_integer_,
-    value = 12.3, unit = "pg/ml", result_status = "OK"
-  )
-  expect_error(
-    db_write_elisa(con, elisa_data_na_replicate, mouse_id = "25-7-1", tissue = "spleen", assay_name = "anti-MPO"),
-    "requires non-NA sample_id and replicate"
-  )
-
-  rows <- DBI::dbGetQuery(con, "SELECT * FROM elisa_measurements")
-  expect_equal(nrow(rows), 0)
+  expect_equal(nrow(DBI::dbGetQuery(con, "SELECT * FROM elisa_measurements")), 0)
 })
 
 test_that("db_write_histo inserts measurements without an assay", {

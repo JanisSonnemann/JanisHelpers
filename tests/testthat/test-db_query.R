@@ -30,9 +30,10 @@ test_that("db_query_elisa returns a flat tibble keyed by natural keys", {
     con,
     tibble::tibble(
       cytokine = "MPO", sample_id = "25-7-1", replicate = 1L,
-      value = 12.3, unit = "pg/ml", result_status = "OK"
+      value = 12.3, unit = "pg/ml", result_status = "OK",
+      mouse_id = "25-7-1", tissue = "spleen"
     ),
-    mouse_id = "25-7-1", tissue = "spleen", assay_name = "anti-MPO"
+    assay_name = "anti-MPO"
   )
 
   result <- db_query_elisa(con) |> dplyr::collect()

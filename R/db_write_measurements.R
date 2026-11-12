@@ -17,6 +17,37 @@ lookup_sample_id_ <- function(con, mouse_id, tissue) {
   result$sample_id[[1]]
 }
 
+# Vectorised lookup_sample_id_(): one sample_id per (mouse_id, tissue) pair,
+# in input order. Errors naming every unresolved pair (NA counts as unresolved).
+lookup_sample_ids_ <- function(con, mouse_id, tissue) {
+  keys <- tibble::tibble(
+    row_ = seq_along(mouse_id),
+    mouse_id = as.character(mouse_id),
+    tissue = as.character(tissue)
+  )
+  duckdb::duckdb_register(con, "tmp_sample_keys", keys)
+  on.exit(duckdb::duckdb_unregister(con, "tmp_sample_keys"), add = TRUE)
+
+  resolved <- DBI::dbGetQuery(con, "
+    SELECT k.row_, k.mouse_id, k.tissue, sm.sample_id
+    FROM tmp_sample_keys k
+    LEFT JOIN subjects sub ON sub.mouse_id = k.mouse_id
+    LEFT JOIN samples sm ON sm.subject_id = sub.subject_id AND sm.tissue = k.tissue
+    ORDER BY k.row_
+  ")
+
+  unresolved <- unique(resolved[is.na(resolved$sample_id), c("mouse_id", "tissue")])
+  if (nrow(unresolved) > 0) {
+    stop(
+      "No sample found for mouse_id x tissue: ",
+      paste(sprintf("'%s x %s'", unresolved$mouse_id, unresolved$tissue), collapse = ", "),
+      " -- register the subjects (db_write_subjects()) and samples (db_write_samples()) first.",
+      call. = FALSE
+    )
+  }
+  resolved$sample_id
+}
+
 lookup_assay_id_ <- function(con, assay_name, domain) {
   result <- DBI::dbGetQuery(
     con,
@@ -154,19 +185,39 @@ db_write_facs <- function(con, data, mouse_id, tissue, assay_name, count_method,
 #' insert duplicate rows undetected, so this function errors before writing
 #' anything if either column contains `NA`.
 #'
+#' A whole plate is written in one call: every row carries its own
+#' `mouse_id` and `tissue`, and each row's sample is resolved against the
+#' registered `subjects`/`samples`. If any `mouse_id` x `tissue` combination
+#' isn't registered (including an `NA` `mouse_id`), the function errors
+#' naming every unresolved combination and writes nothing. Drop standards,
+#' blanks and controls from `data` before calling.
+#'
 #' @param con A `DBI` connection from [db_connect()].
 #' @param data A tibble with columns `cytokine`, `sample_id` (raw plate
 #'   label), `replicate`, `value`, `unit`, `result_status` -- the shape
-#'   `elisa_read_results()` produces. `sample_id` and `replicate` must not
-#'   contain `NA`.
-#' @param mouse_id Character scalar identifying the subject.
-#' @param tissue Character scalar identifying the sample.
+#'   `elisa_read_results()` produces -- plus `mouse_id` and `tissue`, added
+#'   beforehand by joining a plate-label -> mouse table (e.g. with
+#'   [meta_annotate()]). `sample_id` and `replicate` must not contain `NA`.
 #' @param assay_name Character scalar identifying the assay/panel (already
 #'   registered via [db_write_assay()] with `domain = "elisa"`).
 #' @param source_file Character scalar, optional.
 #' @returns Invisibly, the number of rows inserted.
 #' @export
-db_write_elisa <- function(con, data, mouse_id, tissue, assay_name, source_file = NA_character_) {
+db_write_elisa <- function(con, data, assay_name, source_file = NA_character_) {
+  missing_cols <- setdiff(c("mouse_id", "tissue"), names(data))
+  if (length(missing_cols) > 0) {
+    hint <- if ("mouse_id" %in% missing_cols && "mouse_ID" %in% names(data)) {
+      " `data` has `mouse_ID` -- rename it to `mouse_id` (the database's spelling)."
+    } else {
+      ""
+    }
+    stop(
+      "db_write_elisa() needs column(s) ",
+      paste(sprintf("`%s`", missing_cols), collapse = ", "),
+      " in `data`, one value per row.", hint,
+      call. = FALSE
+    )
+  }
   if (anyNA(data$sample_id) || anyNA(data$replicate)) {
     stop(
       "db_write_elisa() requires non-NA sample_id and replicate for every row ",
@@ -176,11 +227,11 @@ db_write_elisa <- function(con, data, mouse_id, tissue, assay_name, source_file 
     )
   }
 
-  sample_id <- lookup_sample_id_(con, mouse_id, tissue)
   assay_id <- lookup_assay_id_(con, assay_name, domain = "elisa")
+  sample_ids <- lookup_sample_ids_(con, data$mouse_id, data$tissue)
 
   to_write <- tibble::tibble(
-    sample_id = sample_id,
+    sample_id = sample_ids,
     assay_id = assay_id,
     cytokine = as.character(data$cytokine),
     sample_id_raw = as.character(data$sample_id),

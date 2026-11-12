@@ -4,26 +4,16 @@
 \alias{db_write_elisa}
 \title{Import ELISA measurements}
 \usage{
-db_write_elisa(
-  con,
-  data,
-  mouse_id,
-  tissue,
-  assay_name,
-  source_file = NA_character_
-)
+db_write_elisa(con, data, assay_name, source_file = NA_character_)
 }
 \arguments{
 \item{con}{A \code{DBI} connection from \code{\link[=db_connect]{db_connect()}}.}
 
 \item{data}{A tibble with columns \code{cytokine}, \code{sample_id} (raw plate
 label), \code{replicate}, \code{value}, \code{unit}, \code{result_status} -- the shape
-\code{elisa_read_results()} produces. \code{sample_id} and \code{replicate} must not
-contain \code{NA}.}
-
-\item{mouse_id}{Character scalar identifying the subject.}
-
-\item{tissue}{Character scalar identifying the sample.}
+\code{elisa_read_results()} produces -- plus \code{mouse_id} and \code{tissue}, added
+beforehand by joining a plate-label -> mouse table (e.g. with
+\code{\link[=meta_annotate]{meta_annotate()}}). \code{sample_id} and \code{replicate} must not contain \code{NA}.}
 
 \item{assay_name}{Character scalar identifying the assay/panel (already
 registered via \code{\link[=db_write_assay]{db_write_assay()}} with \code{domain = "elisa"}).}
@@ -43,4 +33,11 @@ detection) is \code{UNIQUE(sample_id, assay_id, cytokine, sample_id_raw, replica
 (written as \code{sample_id_raw}) or \code{data$replicate} would let a repeat import
 insert duplicate rows undetected, so this function errors before writing
 anything if either column contains \code{NA}.
+
+A whole plate is written in one call: every row carries its own
+\code{mouse_id} and \code{tissue}, and each row's sample is resolved against the
+registered \code{subjects}/\code{samples}. If any \code{mouse_id} x \code{tissue} combination
+isn't registered (including an \code{NA} \code{mouse_id}), the function errors
+naming every unresolved combination and writes nothing. Drop standards,
+blanks and controls from \code{data} before calling.
 }
