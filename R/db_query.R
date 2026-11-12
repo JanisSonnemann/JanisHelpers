@@ -21,7 +21,7 @@ db_query_facs <- function(con) {
     dplyr::select(
       experiment_code, mouse_id, tissue, assay_name,
       population_full_path, population, metric, value,
-      wsp_root, source_file, imported_at
+      wsp_root, condition, condition_keyword, source_file, imported_at
     )
 }
 

@@ -6,7 +6,7 @@
 #' untouched.
 #'
 #' Errors if the file was created by an older schema (one whose
-#' `facs_stains` table has no `wsp_root` column) -- such a file must be
+#' `facs_stains` table has no `wsp_root` or `condition` column) -- such a file must be
 #' recreated, since `CREATE TABLE IF NOT EXISTS` would silently keep the old
 #' tables.
 #'
@@ -15,14 +15,19 @@
 #' @export
 db_connect <- function(path) {
   con <- DBI::dbConnect(duckdb::duckdb(), path)
-  if (DBI::dbExistsTable(con, "facs_stains") &&
-      !"wsp_root" %in% DBI::dbListFields(con, "facs_stains")) {
-    DBI::dbDisconnect(con, shutdown = TRUE)
-    stop(
-      "'", path, "' was created by an older schema (facs_stains has no ",
-      "wsp_root column). Recreate the database file and re-import.",
-      call. = FALSE
+  if (DBI::dbExistsTable(con, "facs_stains")) {
+    missing_cols <- setdiff(
+      c("wsp_root", "condition"), DBI::dbListFields(con, "facs_stains")
     )
+    if (length(missing_cols) > 0) {
+      DBI::dbDisconnect(con, shutdown = TRUE)
+      stop(
+        "'", path, "' was created by an older schema (facs_stains has no ",
+        paste(missing_cols, collapse = "/"), " column). Recreate the database ",
+        "file and re-import.",
+        call. = FALSE
+      )
+    }
   }
   create_schema_(con)
   con
@@ -105,8 +110,13 @@ create_schema_ <- function(con) {
       sample_id     INTEGER NOT NULL REFERENCES samples(sample_id),
       assay_id      INTEGER NOT NULL REFERENCES assays(assay_id),
       wsp_root      VARCHAR NOT NULL,
+      -- the value of the one variable that differs between wells of the same
+      -- sample x panel (e.g. 'MPO409'), and the FlowJo keyword it came from
+      -- (e.g. 'restimulation'). 'none' / NULL for panels with no such variable.
+      condition         VARCHAR NOT NULL DEFAULT 'none',
+      condition_keyword VARCHAR,
       stain_date    DATE,
-      UNIQUE(sample_id, assay_id)
+      UNIQUE(sample_id, assay_id, condition)
     )
   ")
 

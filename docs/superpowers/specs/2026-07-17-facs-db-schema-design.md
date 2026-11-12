@@ -141,8 +141,10 @@ CREATE TABLE facs_stains (
   sample_id     INTEGER NOT NULL REFERENCES samples(sample_id),
   assay_id      INTEGER NOT NULL REFERENCES assays(assay_id),
   wsp_root      VARCHAR NOT NULL,   -- e.g. "treg_26-2"
+  condition         VARCHAR NOT NULL DEFAULT 'none',  -- e.g. "MPO"; "none" = one well
+  condition_keyword VARCHAR,          -- FlowJo keyword, e.g. "restimulation"; NULL with "none"
   stain_date    DATE,
-  UNIQUE(sample_id, assay_id)
+  UNIQUE(sample_id, assay_id, condition)
 );
 
 CREATE SEQUENCE seq_facs_measurements START 1;
@@ -225,6 +227,7 @@ specifies.
 | `UNIQUE` constraint on every fact table's natural key | Re-running an import script is idempotent (DuckDB rejects the collision) instead of relying on a manual check-then-append. |
 | No volumes/weights/bead settings stored (2026-11-12) | They are calculation inputs; the export script calculates absolute and derived values and stores those as extra `metric` rows. |
 | `wsp_root` on `facs_stains` (2026-11-12) | The workspace root is the unit of export and overwrite; one root = one experiment x one panel. |
+| `condition` + `condition_keyword` on `facs_stains` (2026-11-12) | Wells of one sample x panel that differ in one variable (e.g. restimulation unstim / MPO / PMA-Iono) are separate stains. Generic name so any FlowJo keyword can be the variable; the keyword is stored too. One root uses one keyword. Cross-well values (ratios) are not stored -- computed in analysis. |
 | `import_log` (2026-11-12) | Every import is recorded permanently, including what it replaced, so overwriting never loses the history. |
 | `domains` lookup table instead of a hard-coded `CHECK` list on `assays.domain` | DuckDB can't cheaply `ALTER` a `CHECK` constraint later. Adding a future modality (e.g. scRNA-seq) becomes a plain `INSERT`, not a schema migration. |
 | `source_file` + `imported_at` on every fact table | Every measurement traces back to the raw export it came from. |

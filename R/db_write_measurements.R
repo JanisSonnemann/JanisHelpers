@@ -123,6 +123,55 @@ check_facs_root_ <- function(con, sample_id, assay_id, wsp_root, source_file) {
   invisible(TRUE)
 }
 
+# condition and condition_keyword come as a pair: a real condition needs the
+# keyword it came from; the "none" placeholder must not have one.
+check_facs_condition_ <- function(condition, condition_keyword) {
+  check_string_arg_(
+    condition, "condition",
+    "the well's value of the varying variable (e.g. \"MPO409\"), or \"none\""
+  )
+  if (length(condition_keyword) != 1) {
+    stop("`condition_keyword` must be a single string or NA.", call. = FALSE)
+  }
+  has_keyword <- !is.na(condition_keyword) && nzchar(condition_keyword)
+  if (condition == "none" && has_keyword) {
+    stop(
+      "`condition_keyword` '", condition_keyword, "' was given but `condition` ",
+      "is \"none\" -- pass the well's value as `condition`, or drop the keyword.",
+      call. = FALSE
+    )
+  }
+  if (condition != "none" && !has_keyword) {
+    stop(
+      "`condition` '", condition, "' needs `condition_keyword` -- the FlowJo ",
+      "keyword it came from (e.g. \"restimulation\").",
+      call. = FALSE
+    )
+  }
+  invisible(TRUE)
+}
+
+# One root varies at most one variable: all its stains share one
+# condition_keyword (or all have none).
+check_facs_root_keyword_ <- function(con, wsp_root, condition_keyword) {
+  existing <- DBI::dbGetQuery(con, "
+    SELECT DISTINCT COALESCE(condition_keyword, '') AS keyword
+    FROM facs_stains WHERE wsp_root = ?",
+    params = list(wsp_root))$keyword
+  given <- if (is.na(condition_keyword)) "" else condition_keyword
+  other <- setdiff(existing, given)
+  if (length(other) > 0) {
+    show <- function(k) if (nzchar(k)) paste0("'", k, "'") else "no keyword"
+    stop(
+      "Root '", wsp_root, "' already holds stains with condition_keyword ",
+      show(other[[1]]), ", not ", show(given), ". One root varies at most one ",
+      "variable -- check the workspace's keywords.",
+      call. = FALSE
+    )
+  }
+  invisible(TRUE)
+}
+
 lookup_sample_id_ <- function(con, mouse_id, tissue) {
   result <- DBI::dbGetQuery(
     con,
@@ -206,7 +255,14 @@ lookup_assay_id_ <- function(con, assay_name, domain) {
 #' - this experiment x panel is already stored under a different root;
 #' - `wsp_root` is already used for a different experiment or panel;
 #' - the root already holds data from a different `source_file` (a newer
-#'   workspace version replaces a root via the Stage 3 export, not here).
+#'   workspace version replaces a root via the Stage 3 export, not here);
+#' - the root already holds stains with a different `condition_keyword`
+#'   (one root varies at most one variable).
+#'
+#' Wells of the same sample x panel that differ in one variable (e.g. a
+#' restimulation: `unstim` / `MPO409` / `PMA-Iono`) are stored as separate
+#' stains: pass the well's value as `condition` and the FlowJo keyword it
+#' came from as `condition_keyword`. They share one `wsp_root`.
 #'
 #' @param con A `DBI` connection from [db_connect()].
 #' @param data A tibble with columns `PopulationFullPath`, `Population`,
@@ -227,11 +283,18 @@ lookup_assay_id_ <- function(con, assay_name, domain) {
 #'   measurement row as provenance. The FCS filename is deliberately not used:
 #'   it doesn't identify which workspace version (gates, compensation)
 #'   produced the numbers.
+#' @param condition Character scalar -- the value of the variable that differs
+#'   between wells of this sample x panel (e.g. `"MPO409"`). Default `"none"`
+#'   for panels with one well per sample.
+#' @param condition_keyword Character scalar -- the FlowJo keyword `condition`
+#'   came from (e.g. `"restimulation"`). Required when `condition` isn't
+#'   `"none"`, must be `NA` when it is.
 #' @param stain_date Date scalar, optional.
 #' @returns Invisibly, the number of measurement rows inserted.
 #' @export
 db_write_facs <- function(con, data, mouse_id, tissue, assay_name, wsp_root,
-                           source_file, stain_date = NA) {
+                           source_file, condition = "none",
+                           condition_keyword = NA_character_, stain_date = NA) {
   check_string_arg_(
     if (missing(wsp_root)) NULL else wsp_root, "wsp_root",
     "the .wsp filename without its _YYYYMMDD suffix (e.g. \"treg_25-7\")"
@@ -240,11 +303,13 @@ db_write_facs <- function(con, data, mouse_id, tissue, assay_name, wsp_root,
     if (missing(source_file)) NULL else source_file, "source_file",
     "the .wsp path relative to data/ (e.g. \"25-7_exp/raw/FACS/treg_25-7_20261112.wsp\")"
   )
+  check_facs_condition_(condition, condition_keyword)
   check_facs_data_(data)
 
   sample_id <- lookup_sample_id_(con, mouse_id, tissue)
   assay_id <- lookup_assay_id_(con, assay_name, domain = "facs")
   check_facs_root_(con, sample_id, assay_id, wsp_root, source_file)
+  check_facs_root_keyword_(con, wsp_root, condition_keyword)
 
   to_write <- tibble::tibble(
     population_full_path = as.character(data$PopulationFullPath),
@@ -259,16 +324,22 @@ db_write_facs <- function(con, data, mouse_id, tissue, assay_name, wsp_root,
   n <- DBI::dbWithTransaction(con, {
     DBI::dbExecute(
       con,
-      "INSERT INTO facs_stains (sample_id, assay_id, wsp_root, stain_date)
-       VALUES (?, ?, ?, ?)
-       ON CONFLICT (sample_id, assay_id) DO NOTHING",
-      params = list(sample_id, assay_id, wsp_root, stain_date)
+      "INSERT INTO facs_stains (
+         sample_id, assay_id, wsp_root, condition, condition_keyword, stain_date
+       )
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT (sample_id, assay_id, condition) DO NOTHING",
+      params = list(
+        sample_id, assay_id, wsp_root, condition,
+        as.character(condition_keyword), stain_date
+      )
     )
 
     facs_stain_id <- DBI::dbGetQuery(
       con,
-      "SELECT facs_stain_id FROM facs_stains WHERE sample_id = ? AND assay_id = ?",
-      params = list(sample_id, assay_id)
+      "SELECT facs_stain_id FROM facs_stains
+       WHERE sample_id = ? AND assay_id = ? AND condition = ?",
+      params = list(sample_id, assay_id, condition)
     )$facs_stain_id[[1]]
 
     DBI::dbExecute(con, "

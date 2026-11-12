@@ -28,7 +28,7 @@ test_that("db_connect is idempotent", {
 test_that("schema has wsp_root, no calc-input columns, no sample_digestions", {
   con <- local_test_db()
   cols <- DBI::dbListFields(con, "facs_stains")
-  expect_true("wsp_root" %in% cols)
+  expect_true(all(c("wsp_root", "condition", "condition_keyword") %in% cols))
   expect_false(any(c(
     "vol_stained", "count_method", "vol_resuspended", "vol_measured",
     "bead_volume_added", "bead_concentration", "bead_population_path"
@@ -45,6 +45,14 @@ test_that("db_connect errors on a file created by the old schema", {
   path <- tempfile(fileext = ".duckdb")
   old <- DBI::dbConnect(duckdb::duckdb(), path)
   DBI::dbExecute(old, "CREATE TABLE facs_stains (facs_stain_id INTEGER, count_method VARCHAR)")
+  DBI::dbDisconnect(old, shutdown = TRUE)
+  expect_error(db_connect(path), "older schema")
+})
+
+test_that("db_connect errors on a file whose facs_stains has no condition column", {
+  path <- tempfile(fileext = ".duckdb")
+  old <- DBI::dbConnect(duckdb::duckdb(), path)
+  DBI::dbExecute(old, "CREATE TABLE facs_stains (facs_stain_id INTEGER, wsp_root VARCHAR)")
   DBI::dbDisconnect(old, shutdown = TRUE)
   expect_error(db_connect(path), "older schema")
 })

@@ -12,6 +12,8 @@ db_write_facs(
   assay_name,
   wsp_root,
   source_file,
+  condition = "none",
+  condition_keyword = NA_character_,
   stain_date = NA
 )
 }
@@ -42,6 +44,14 @@ measurement row as provenance. The FCS filename is deliberately not used:
 it doesn't identify which workspace version (gates, compensation)
 produced the numbers.}
 
+\item{condition}{Character scalar -- the value of the variable that differs
+between wells of this sample x panel (e.g. \code{"MPO409"}). Default \code{"none"}
+for panels with one well per sample.}
+
+\item{condition_keyword}{Character scalar -- the FlowJo keyword \code{condition}
+came from (e.g. \code{"restimulation"}). Required when \code{condition} isn't
+\code{"none"}, must be \code{NA} when it is.}
+
 \item{stain_date}{Date scalar, optional.}
 }
 \value{
@@ -62,6 +72,13 @@ Errors, writing nothing, if:
 \item this experiment x panel is already stored under a different root;
 \item \code{wsp_root} is already used for a different experiment or panel;
 \item the root already holds data from a different \code{source_file} (a newer
-workspace version replaces a root via the Stage 3 export, not here).
+workspace version replaces a root via the Stage 3 export, not here);
+\item the root already holds stains with a different \code{condition_keyword}
+(one root varies at most one variable).
 }
+
+Wells of the same sample x panel that differ in one variable (e.g. a
+restimulation: \code{unstim} / \code{MPO409} / \code{PMA-Iono}) are stored as separate
+stains: pass the well's value as \code{condition} and the FlowJo keyword it
+came from as \code{condition_keyword}. They share one \code{wsp_root}.
 }

@@ -277,6 +277,75 @@ test_that("db_write_facs accepts further samples of the same workspace", {
   expect_equal(facs_row_counts_(con), c(stains = 2, measurements = 2))
 })
 
+restim_wsp_ <- "25-7/facs/restim_25-7_20261112.wsp"
+
+write_restim_ <- function(con, condition, condition_keyword = "restimulation",
+                          mouse_id = "25-7-1", wsp_root = "restim_25-7",
+                          source_file = restim_wsp_) {
+  db_write_facs(
+    con, cd4_data_(),
+    mouse_id = mouse_id, tissue = "spleen", assay_name = "restim",
+    wsp_root = wsp_root, source_file = source_file,
+    condition = condition, condition_keyword = condition_keyword
+  )
+}
+
+test_that("db_write_facs defaults to condition 'none' with no keyword", {
+  con <- local_test_db()
+  seed_minimal_fixture(con)
+  write_cd4_(con, "25-7-1", "overview_25-7", overview_wsp_)
+
+  stain <- DBI::dbGetQuery(con, "SELECT condition, condition_keyword FROM facs_stains")
+  expect_equal(stain$condition, "none")
+  expect_true(is.na(stain$condition_keyword))
+})
+
+test_that("db_write_facs stores one stain per condition of the same sample x panel", {
+  con <- local_test_db()
+  seed_minimal_fixture(con)
+  db_write_assay(con, assay_name = "restim", domain = "facs")
+
+  for (cond in c("unstim", "MPO409", "PMA-Iono")) {
+    expect_equal(write_restim_(con, cond), 1)
+  }
+
+  stains <- DBI::dbGetQuery(con, "
+    SELECT condition, condition_keyword, wsp_root FROM facs_stains ORDER BY condition
+  ")
+  expect_equal(stains$condition, c("MPO409", "PMA-Iono", "unstim"))
+  expect_equal(unique(stains$condition_keyword), "restimulation")
+  expect_equal(unique(stains$wsp_root), "restim_25-7")
+  expect_equal(facs_row_counts_(con), c(stains = 3, measurements = 3))
+  expect_equal(write_restim_(con, "MPO409"), 0)
+})
+
+test_that("db_write_facs requires condition and condition_keyword together", {
+  con <- local_test_db()
+  seed_minimal_fixture(con)
+  db_write_assay(con, assay_name = "restim", domain = "facs")
+
+  expect_error(write_restim_(con, "MPO409", condition_keyword = NA_character_), "condition_keyword")
+  expect_error(write_restim_(con, "none", condition_keyword = "restimulation"), "condition")
+  expect_error(write_restim_(con, c("a", "b")), "condition")
+  expect_error(write_restim_(con, NA_character_), "condition")
+  expect_equal(facs_row_counts_(con), c(stains = 0, measurements = 0))
+})
+
+test_that("db_write_facs rejects a root that mixes condition keywords", {
+  con <- local_test_db()
+  seed_guard_fixture_(con)
+  db_write_assay(con, assay_name = "restim", domain = "facs")
+  write_restim_(con, "MPO409")
+  before <- facs_row_counts_(con)
+
+  expect_error(write_restim_(con, "24h", condition_keyword = "timepoint"), "keyword")
+  expect_error(
+    write_restim_(con, "none", condition_keyword = NA_character_, mouse_id = "25-7-2"),
+    "keyword"
+  )
+  expect_equal(facs_row_counts_(con), before)
+})
+
 test_that("every facs measurement has a matching stain", {
   con <- local_test_db()
   seed_guard_fixture_(con)

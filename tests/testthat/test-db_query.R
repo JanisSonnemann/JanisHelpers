@@ -15,6 +15,8 @@ test_that("db_query_facs returns a flat tibble keyed by natural keys", {
   result <- db_query_facs(con) |> dplyr::collect()
 
   expect_equal(result$wsp_root, "overview_25-7")
+  expect_equal(result$condition, "none")
+  expect_true(is.na(result$condition_keyword))
   expect_false("count_method" %in% names(result))
   expect_equal(result$mouse_id, "25-7-1")
   expect_equal(result$experiment_code, "25-7")
