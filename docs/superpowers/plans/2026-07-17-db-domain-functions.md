@@ -865,7 +865,7 @@ Expected: PASS, 0 failures.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add R/db_write_dimensions.R tests/testthat/test-db_write_dimensions.R man/db_write_assay.Rd
+git add R/db_write_dimensions.R tests/testthat/test-db_write_dimensions.R man/db_write_assay.Rd NAMESPACE
 git commit -m "feat: add db_write_assay()"
 ```
 
@@ -1168,7 +1168,7 @@ Expected: PASS, 0 failures.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add R/db_write_measurements.R tests/testthat/test-db_write_measurements.R tests/testthat/helper-db.R man/db_write_facs.Rd
+git add R/db_write_measurements.R tests/testthat/test-db_write_measurements.R tests/testthat/helper-db.R man/db_write_facs.Rd NAMESPACE
 git commit -m "feat: add db_write_facs()"
 ```
 
@@ -1314,7 +1314,7 @@ Expected: PASS, 0 failures.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add R/db_write_measurements.R tests/testthat/test-db_write_measurements.R tests/testthat/helper-db.R man/db_write_elisa.Rd
+git add R/db_write_measurements.R tests/testthat/test-db_write_measurements.R tests/testthat/helper-db.R man/db_write_elisa.Rd NAMESPACE
 git commit -m "feat: add db_write_elisa()"
 ```
 
@@ -1438,7 +1438,7 @@ Expected: PASS, 0 failures.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add R/db_write_measurements.R tests/testthat/test-db_write_measurements.R man/db_write_histo.Rd
+git add R/db_write_measurements.R tests/testthat/test-db_write_measurements.R man/db_write_histo.Rd NAMESPACE
 git commit -m "feat: add db_write_histo()"
 ```
 
@@ -1616,7 +1616,7 @@ Expected: PASS, 0 failures.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add R/db_query.R tests/testthat/test-db_query.R man/db_query_facs.Rd man/db_query_elisa.Rd man/db_query_histo.Rd
+git add R/db_query.R tests/testthat/test-db_query.R man/db_query_facs.Rd man/db_query_elisa.Rd man/db_query_histo.Rd NAMESPACE
 git commit -m "feat: add db_query_facs/elisa/histo()"
 ```
 
