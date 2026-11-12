@@ -27,6 +27,35 @@ check_mouse_tissue_cols_ <- function(data, fn_name) {
   invisible(TRUE)
 }
 
+# Errors unless `data` has the facs_import_wsp() columns, at least one row,
+# and (if it has FileName) rows from a single FCS file. Without this, a
+# wrong-shaped or empty tibble would create a stain with no measurements,
+# which the version guard can't see.
+check_facs_data_ <- function(data) {
+  needed <- c("PopulationFullPath", "Population", "metric", "value")
+  missing_cols <- setdiff(needed, names(data))
+  if (length(missing_cols) > 0) {
+    stop(
+      "db_write_facs() needs column(s) ",
+      paste(sprintf("`%s`", missing_cols), collapse = ", "),
+      " in `data` (the facs_import_wsp() shape: ",
+      paste(needed, collapse = ", "), ").",
+      call. = FALSE
+    )
+  }
+  if (nrow(data) == 0) {
+    stop("db_write_facs() got `data` with no rows -- nothing to write.", call. = FALSE)
+  }
+  if ("FileName" %in% names(data) && length(unique(data$FileName)) > 1) {
+    stop(
+      "db_write_facs() writes one stain (one FCS file) per call, but `data` has ",
+      length(unique(data$FileName)), " distinct FileName values -- filter to one first.",
+      call. = FALSE
+    )
+  }
+  invisible(TRUE)
+}
+
 # Guards for db_write_facs(): the .wsp filename belongs to the root, one root
 # per experiment x panel (and vice versa), one workspace version per root.
 # Errors before anything is written.
@@ -211,6 +240,7 @@ db_write_facs <- function(con, data, mouse_id, tissue, assay_name, wsp_root,
     if (missing(source_file)) NULL else source_file, "source_file",
     "the .wsp path relative to raw/ (e.g. \"25-7/facs/treg_25-7_20261112.wsp\")"
   )
+  check_facs_data_(data)
 
   sample_id <- lookup_sample_id_(con, mouse_id, tissue)
   assay_id <- lookup_assay_id_(con, assay_name, domain = "facs")

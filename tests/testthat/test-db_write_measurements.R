@@ -120,6 +120,40 @@ test_that("db_write_facs requires a single non-empty source_file and writes noth
   expect_equal(DBI::dbGetQuery(con, "SELECT COUNT(*) AS n FROM facs_stains")$n, 0)
 })
 
+test_that("db_write_facs rejects wrong-shaped or empty data and writes nothing", {
+  con <- local_test_db()
+  seed_minimal_fixture(con)
+  args <- list(
+    con = con, mouse_id = "25-7-1", tissue = "spleen", assay_name = "overview",
+    wsp_root = "overview_25-7", source_file = overview_wsp_
+  )
+
+  snake <- tibble::tibble(
+    population_full_path = "root/CD4+", population = "CD4+", metric = "Count", value = 1
+  )
+  expect_error(do.call(db_write_facs, c(args, list(data = snake))), "PopulationFullPath")
+  expect_error(do.call(db_write_facs, c(args, list(data = cd4_data_()[0, ]))), "no rows")
+  expect_equal(DBI::dbGetQuery(con, "SELECT COUNT(*) AS n FROM facs_stains")$n, 0)
+})
+
+test_that("db_write_facs rejects data from more than one FCS file", {
+  con <- local_test_db()
+  seed_minimal_fixture(con)
+
+  two_files <- dplyr::bind_rows(
+    dplyr::mutate(cd4_data_(), FileName = "spleen_001.fcs"),
+    dplyr::mutate(cd4_data_(), FileName = "spleen_002.fcs", value = 2000)
+  )
+  expect_error(
+    db_write_facs(
+      con, two_files, mouse_id = "25-7-1", tissue = "spleen", assay_name = "overview",
+      wsp_root = "overview_25-7", source_file = overview_wsp_
+    ),
+    "FileName"
+  )
+  expect_equal(DBI::dbGetQuery(con, "SELECT COUNT(*) AS n FROM facs_stains")$n, 0)
+})
+
 test_that("db_write_facs requires a single non-empty wsp_root", {
   con <- local_test_db()
   seed_minimal_fixture(con)
