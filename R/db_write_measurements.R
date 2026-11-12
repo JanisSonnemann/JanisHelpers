@@ -261,10 +261,18 @@ db_write_facs <- function(con, data, mouse_id, tissue, assay_name, wsp_root,
 #'   [meta_annotate()]). `sample_id` and `replicate` must not contain `NA`.
 #' @param assay_name Character scalar identifying the assay/panel (already
 #'   registered via [db_write_assay()] with `domain = "elisa"`).
-#' @param source_file Character scalar, optional.
-#' @returns Invisibly, the number of rows inserted.
+#' @param source_file Character scalar, required -- the results file, as a
+#'   path relative to the lab database's `raw/` folder (e.g.
+#'   `"25-7/elisa/Results_MPO.xlsx"`). Stored on every row and in the log.
+#' @returns Invisibly, the number of rows inserted. Every call also writes one
+#'   `import_log` row (in the same transaction as the data), even when 0 rows
+#'   are inserted because the plate was already imported.
 #' @export
-db_write_elisa <- function(con, data, assay_name, source_file = NA_character_) {
+db_write_elisa <- function(con, data, assay_name, source_file) {
+  check_string_arg_(
+    if (missing(source_file)) NULL else source_file, "source_file",
+    "the results file path relative to raw/ (e.g. \"25-7/elisa/Results_MPO.xlsx\")"
+  )
   missing_cols <- setdiff(c("mouse_id", "tissue"), names(data))
   if (length(missing_cols) > 0) {
     hint <- if ("mouse_id" %in% missing_cols && "mouse_ID" %in% names(data)) {
@@ -305,14 +313,24 @@ db_write_elisa <- function(con, data, assay_name, source_file = NA_character_) {
   duckdb::duckdb_register(con, "tmp_elisa_measurements", to_write)
   on.exit(duckdb::duckdb_unregister(con, "tmp_elisa_measurements"), add = TRUE)
 
-  n <- DBI::dbExecute(con, "
-    INSERT INTO elisa_measurements (
-      sample_id, assay_id, cytokine, sample_id_raw, replicate, value, unit, result_status, source_file
+  n <- DBI::dbWithTransaction(con, {
+    n <- DBI::dbExecute(con, "
+      INSERT INTO elisa_measurements (
+        sample_id, assay_id, cytokine, sample_id_raw, replicate, value, unit, result_status, source_file
+      )
+      SELECT sample_id, assay_id, cytokine, sample_id_raw, replicate, value, unit, result_status, source_file
+      FROM tmp_elisa_measurements
+      ON CONFLICT (sample_id, assay_id, cytokine, sample_id_raw, replicate) DO NOTHING
+    ")
+    write_import_log_(
+      con, "elisa",
+      experiment_code = experiment_codes_(con, sample_ids),
+      import_unit = basename(source_file),
+      source_file = source_file,
+      rows_written = n
     )
-    SELECT sample_id, assay_id, cytokine, sample_id_raw, replicate, value, unit, result_status, source_file
-    FROM tmp_elisa_measurements
-    ON CONFLICT (sample_id, assay_id, cytokine, sample_id_raw, replicate) DO NOTHING
-  ")
+    n
+  })
   invisible(n)
 }
 

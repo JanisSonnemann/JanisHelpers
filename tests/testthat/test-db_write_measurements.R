@@ -267,6 +267,8 @@ seed_two_mouse_plate_ <- function(con) {
   invisible(con)
 }
 
+elisa_src_ <- "25-7/elisa/Results_MPO.xlsx"
+
 elisa_plate_ <- function(...) {
   plate <- tibble::tibble(
     cytokine = "MPO",
@@ -311,8 +313,8 @@ test_that("db_write_elisa is idempotent", {
   con <- local_test_db()
   seed_two_mouse_plate_(con)
 
-  db_write_elisa(con, elisa_plate_(), assay_name = "anti-MPO")
-  n <- db_write_elisa(con, elisa_plate_(), assay_name = "anti-MPO")
+  db_write_elisa(con, elisa_plate_(), assay_name = "anti-MPO", source_file = elisa_src_)
+  n <- db_write_elisa(con, elisa_plate_(), assay_name = "anti-MPO", source_file = elisa_src_)
   expect_equal(n, 0)
 })
 
@@ -324,7 +326,7 @@ test_that("db_write_elisa lists every unresolved mouse_id x tissue and writes no
     mouse_id = c("25-7-1", "25-7-1", "25-7-9", NA),
     tissue = c("serum", "serum", "serum", "kidney")
   )
-  err <- expect_error(db_write_elisa(con, plate, assay_name = "anti-MPO"))
+  err <- expect_error(db_write_elisa(con, plate, assay_name = "anti-MPO", source_file = elisa_src_))
   expect_match(conditionMessage(err), "25-7-9 x serum", fixed = TRUE)
   expect_match(conditionMessage(err), "NA x kidney", fixed = TRUE)
   expect_no_match(conditionMessage(err), "25-7-1 x serum", fixed = TRUE)
@@ -337,11 +339,11 @@ test_that("db_write_elisa requires mouse_id and tissue columns, hinting at mouse
   seed_two_mouse_plate_(con)
 
   expect_error(
-    db_write_elisa(con, dplyr::select(elisa_plate_(), !tissue), assay_name = "anti-MPO"),
+    db_write_elisa(con, dplyr::select(elisa_plate_(), !tissue), assay_name = "anti-MPO", source_file = elisa_src_),
     "tissue"
   )
   expect_error(
-    db_write_elisa(con, dplyr::rename(elisa_plate_(), mouse_ID = mouse_id), assay_name = "anti-MPO"),
+    db_write_elisa(con, dplyr::rename(elisa_plate_(), mouse_ID = mouse_id), assay_name = "anti-MPO", source_file = elisa_src_),
     "mouse_ID"
   )
 })
@@ -351,14 +353,91 @@ test_that("db_write_elisa errors on NA sample_id or replicate and inserts nothin
   seed_two_mouse_plate_(con)
 
   expect_error(
-    db_write_elisa(con, elisa_plate_(sample_id = c("P1", NA, "P2", "P3")), assay_name = "anti-MPO"),
+    db_write_elisa(con, elisa_plate_(sample_id = c("P1", NA, "P2", "P3")), assay_name = "anti-MPO", source_file = elisa_src_),
     "requires non-NA sample_id and replicate"
   )
   expect_error(
-    db_write_elisa(con, elisa_plate_(replicate = c(1L, NA, 1L, 1L)), assay_name = "anti-MPO"),
+    db_write_elisa(con, elisa_plate_(replicate = c(1L, NA, 1L, 1L)), assay_name = "anti-MPO", source_file = elisa_src_),
     "requires non-NA sample_id and replicate"
   )
 
+  expect_equal(nrow(DBI::dbGetQuery(con, "SELECT * FROM elisa_measurements")), 0)
+})
+
+read_log_ <- function(con) {
+  DBI::dbGetQuery(con, "
+    SELECT l.*, d.domain_name FROM import_log l
+    JOIN domains d ON d.domain_id = l.domain_id
+    ORDER BY l.import_id
+  ")
+}
+
+test_that("db_write_elisa writes one import_log row per call", {
+  con <- local_test_db()
+  seed_two_mouse_plate_(con)
+
+  db_write_elisa(con, elisa_plate_(), assay_name = "anti-MPO", source_file = elisa_src_)
+  log <- read_log_(con)
+  expect_equal(nrow(log), 1)
+  expect_equal(log$domain_name, "elisa")
+  expect_equal(log$experiment_code, "25-7")
+  expect_equal(log$import_unit, "Results_MPO.xlsx")
+  expect_equal(log$source_file, elisa_src_)
+  expect_equal(log$rows_written, 4L)
+  expect_true(is.na(log$qc_passed))
+  expect_true(is.na(log$qc_report))
+  expect_true(is.na(log$source_version))
+  expect_true(is.na(log$supersedes_import_id))
+
+  db_write_elisa(con, elisa_plate_(), assay_name = "anti-MPO", source_file = elisa_src_)
+  log <- read_log_(con)
+  expect_equal(nrow(log), 2)
+  expect_equal(log$rows_written[[2]], 0L)
+})
+
+test_that("db_write_elisa logs every experiment on a mixed plate", {
+  con <- local_test_db()
+  seed_two_mouse_plate_(con)
+  db_write_experiment(con, experiment_code = "25-8")
+  db_write_subjects(con, tibble::tibble(mouse_id = "25-8-1", experiment_code = "25-8"))
+  db_write_samples(con, tibble::tibble(mouse_id = "25-8-1", tissue = "serum"))
+
+  plate <- elisa_plate_(
+    mouse_id = c("25-8-1", "25-8-1", "25-7-2", "25-7-1"),
+    tissue = c("serum", "serum", "serum", "serum")
+  )
+  db_write_elisa(con, plate, assay_name = "anti-MPO", source_file = elisa_src_)
+  expect_equal(read_log_(con)$experiment_code, "25-7, 25-8")
+})
+
+test_that("db_write_elisa writes no log row when the data insert fails", {
+  con <- local_test_db()
+  seed_two_mouse_plate_(con)
+
+  plate <- elisa_plate_(mouse_id = c("25-7-1", "25-7-1", "25-7-9", "25-7-1"))
+  expect_error(db_write_elisa(con, plate, assay_name = "anti-MPO", source_file = elisa_src_))
+  expect_equal(nrow(read_log_(con)), 0)
+
+  # fails inside the transaction: cytokine is NOT NULL
+  plate <- elisa_plate_(cytokine = c("MPO", NA, "MPO", "MPO"))
+  expect_error(db_write_elisa(con, plate, assay_name = "anti-MPO", source_file = elisa_src_))
+  expect_equal(nrow(read_log_(con)), 0)
+  expect_equal(nrow(DBI::dbGetQuery(con, "SELECT * FROM elisa_measurements")), 0)
+})
+
+test_that("db_write_elisa requires source_file", {
+  con <- local_test_db()
+  seed_two_mouse_plate_(con)
+
+  expect_error(db_write_elisa(con, elisa_plate_(), assay_name = "anti-MPO"), "source_file")
+  expect_error(
+    db_write_elisa(con, elisa_plate_(), assay_name = "anti-MPO", source_file = NA_character_),
+    "source_file"
+  )
+  expect_error(
+    db_write_elisa(con, elisa_plate_(), assay_name = "anti-MPO", source_file = ""),
+    "source_file"
+  )
   expect_equal(nrow(DBI::dbGetQuery(con, "SELECT * FROM elisa_measurements")), 0)
 })
 

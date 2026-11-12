@@ -4,7 +4,7 @@
 \alias{db_write_elisa}
 \title{Import ELISA measurements}
 \usage{
-db_write_elisa(con, data, assay_name, source_file = NA_character_)
+db_write_elisa(con, data, assay_name, source_file)
 }
 \arguments{
 \item{con}{A \code{DBI} connection from \code{\link[=db_connect]{db_connect()}}.}
@@ -18,10 +18,14 @@ beforehand by joining a plate-label -> mouse table (e.g. with
 \item{assay_name}{Character scalar identifying the assay/panel (already
 registered via \code{\link[=db_write_assay]{db_write_assay()}} with \code{domain = "elisa"}).}
 
-\item{source_file}{Character scalar, optional.}
+\item{source_file}{Character scalar, required -- the results file, as a
+path relative to the lab database's \verb{raw/} folder (e.g.
+\code{"25-7/elisa/Results_MPO.xlsx"}). Stored on every row and in the log.}
 }
 \value{
-Invisibly, the number of rows inserted.
+Invisibly, the number of rows inserted. Every call also writes one
+\code{import_log} row (in the same transaction as the data), even when 0 rows
+are inserted because the plate was already imported.
 }
 \description{
 Writes a tidy tibble of ELISA measurements (as produced by

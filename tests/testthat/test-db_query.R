@@ -34,7 +34,7 @@ test_that("db_query_elisa returns a flat tibble keyed by natural keys", {
       value = 12.3, unit = "pg/ml", result_status = "OK",
       mouse_id = "25-7-1", tissue = "spleen"
     ),
-    assay_name = "anti-MPO"
+    assay_name = "anti-MPO", source_file = "25-7/elisa/Results_MPO.xlsx"
   )
 
   result <- db_query_elisa(con) |> dplyr::collect()
