@@ -69,8 +69,12 @@ lookup_assay_id_ <- function(con, assay_name, domain) {
 #' @param bead_population_path Character scalar, required when
 #'   `count_method = "bead"`.
 #' @param stain_date Date scalar, optional.
-#' @param source_file Character scalar, optional -- defaults to
-#'   `data$FileName[1]` when `data` has a `FileName` column.
+#' @param source_file Character scalar, required -- the FlowJo workspace the
+#'   measurements came from, as a path relative to the lab database's `raw/`
+#'   folder (e.g. `"25-7/facs/treg_25-7_20261112.wsp"`). Recorded on every
+#'   measurement row as provenance. The FCS filename is deliberately not used:
+#'   it doesn't identify which workspace version (gates, compensation)
+#'   produced the numbers.
 #' @returns Invisibly, the number of measurement rows inserted.
 #' @export
 db_write_facs <- function(con, data, mouse_id, tissue, assay_name, count_method,
@@ -78,15 +82,20 @@ db_write_facs <- function(con, data, mouse_id, tissue, assay_name, count_method,
                            vol_resuspended = NA_real_, vol_measured = NA_real_,
                            bead_volume_added = NA_real_, bead_concentration = NA_real_,
                            bead_population_path = NA_character_,
-                           stain_date = NA, source_file = NULL) {
+                           stain_date = NA, source_file) {
   count_method <- match.arg(count_method, c("volumetric", "bead"))
+
+  if (missing(source_file) || !is.character(source_file) ||
+      length(source_file) != 1 || is.na(source_file) || !nzchar(source_file)) {
+    stop(
+      "`source_file` must be a single non-empty string: the .wsp path ",
+      "relative to raw/ (e.g. \"25-7/facs/treg_25-7_20261112.wsp\").",
+      call. = FALSE
+    )
+  }
 
   sample_id <- lookup_sample_id_(con, mouse_id, tissue)
   assay_id <- lookup_assay_id_(con, assay_name, domain = "facs")
-
-  if (is.null(source_file)) {
-    source_file <- if ("FileName" %in% names(data)) as.character(data$FileName[[1]]) else NA_character_
-  }
 
   to_write <- tibble::tibble(
     population_full_path = as.character(data$PopulationFullPath),

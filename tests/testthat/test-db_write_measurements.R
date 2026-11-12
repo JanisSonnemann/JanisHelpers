@@ -13,7 +13,8 @@ test_that("db_write_facs creates a stain and inserts measurements (volumetric)",
     con, facs_data,
     mouse_id = "25-7-1", tissue = "spleen", assay_name = "overview",
     count_method = "volumetric", vol_stained = 0.1,
-    vol_resuspended = 0.5, vol_measured = 0.05
+    vol_resuspended = 0.5, vol_measured = 0.05,
+    source_file = "25-7/facs/overview_20261112.wsp"
   )
   expect_equal(n, 2)
 
@@ -42,7 +43,8 @@ test_that("db_write_facs supports bead counting and rejects mixed fields", {
     con, facs_data,
     mouse_id = "25-7-1", tissue = "spleen", assay_name = "overview",
     count_method = "bead", vol_stained = 0.1,
-    bead_volume_added = 0.02, bead_concentration = 5000
+    bead_volume_added = 0.02, bead_concentration = 5000,
+    source_file = "25-7/facs/overview_20261112.wsp"
   )
   expect_equal(n, 1)
 
@@ -56,7 +58,8 @@ test_that("db_write_facs supports bead counting and rejects mixed fields", {
       mouse_id = "25-7-1", tissue = "spleen", assay_name = "treg",
       count_method = "bead", vol_stained = 0.1,
       bead_volume_added = 0.02, bead_concentration = 5000,
-      vol_measured = 0.05
+      vol_measured = 0.05,
+      source_file = "25-7/facs/treg_20261112.wsp"
     )
   )
 })
@@ -75,7 +78,8 @@ test_that("db_write_facs errors clearly when the sample doesn't exist", {
       con, facs_data,
       mouse_id = "25-7-1", tissue = "kidney", assay_name = "overview",
       count_method = "volumetric", vol_stained = 0.1,
-      vol_resuspended = 0.5, vol_measured = 0.05
+      vol_resuspended = 0.5, vol_measured = 0.05,
+      source_file = "25-7/facs/overview_20261112.wsp"
     ),
     "No sample found"
   )
@@ -93,7 +97,8 @@ test_that("db_write_facs is idempotent", {
     con = con, data = facs_data,
     mouse_id = "25-7-1", tissue = "spleen", assay_name = "overview",
     count_method = "volumetric", vol_stained = 0.1,
-    vol_resuspended = 0.5, vol_measured = 0.05
+    vol_resuspended = 0.5, vol_measured = 0.05,
+    source_file = "25-7/facs/overview_20261112.wsp"
   )
   do.call(db_write_facs, args)
   n <- do.call(db_write_facs, args)
@@ -116,7 +121,8 @@ test_that("db_write_facs rolls back the facs_stains row when the measurements in
       con, bad_facs_data,
       mouse_id = "25-7-1", tissue = "spleen", assay_name = "overview",
       count_method = "volumetric", vol_stained = 0.1,
-      vol_resuspended = 0.5, vol_measured = 0.05
+      vol_resuspended = 0.5, vol_measured = 0.05,
+      source_file = "25-7/facs/overview_20261112.wsp"
     )
   )
 
@@ -132,6 +138,53 @@ test_that("db_write_facs rolls back the facs_stains row when the measurements in
 
   measurements <- DBI::dbGetQuery(con, "SELECT * FROM facs_measurements")
   expect_equal(nrow(measurements), 0)
+})
+
+test_that("db_write_facs records the .wsp path as source_file, not the FCS filename", {
+  con <- local_test_db()
+  seed_minimal_fixture(con)
+
+  facs_data <- tibble::tibble(
+    FileName = "spleen_001.fcs",
+    PopulationFullPath = "root/Lymphocytes/CD4+", Population = "CD4+",
+    metric = "Count", value = 1000
+  )
+  db_write_facs(
+    con, facs_data,
+    mouse_id = "25-7-1", tissue = "spleen", assay_name = "overview",
+    count_method = "volumetric", vol_stained = 0.1,
+    vol_resuspended = 0.5, vol_measured = 0.05,
+    source_file = "25-7/facs/overview_20261112.wsp"
+  )
+
+  rows <- DBI::dbGetQuery(con, "SELECT source_file FROM facs_measurements")
+  expect_equal(rows$source_file, "25-7/facs/overview_20261112.wsp")
+})
+
+test_that("db_write_facs requires a single non-empty source_file and writes nothing otherwise", {
+  con <- local_test_db()
+  seed_minimal_fixture(con)
+
+  facs_data <- tibble::tibble(
+    FileName = "spleen_001.fcs",
+    PopulationFullPath = "root/Lymphocytes/CD4+", Population = "CD4+",
+    metric = "Count", value = 1000
+  )
+  args <- list(
+    con = con, data = facs_data,
+    mouse_id = "25-7-1", tissue = "spleen", assay_name = "overview",
+    count_method = "volumetric", vol_stained = 0.1,
+    vol_resuspended = 0.5, vol_measured = 0.05
+  )
+
+  expect_error(do.call(db_write_facs, args), "source_file")
+  expect_error(do.call(db_write_facs, c(args, source_file = NA_character_)), "source_file")
+  expect_error(do.call(db_write_facs, c(args, source_file = "")), "source_file")
+  expect_error(
+    do.call(db_write_facs, c(args, list(source_file = c("a.wsp", "b.wsp")))),
+    "source_file"
+  )
+  expect_equal(DBI::dbGetQuery(con, "SELECT COUNT(*) AS n FROM facs_stains")$n, 0)
 })
 
 test_that("db_write_elisa inserts measurements", {

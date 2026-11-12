@@ -18,7 +18,7 @@ db_write_facs(
   bead_concentration = NA_real_,
   bead_population_path = NA_character_,
   stain_date = NA,
-  source_file = NULL
+  source_file
 )
 }
 \arguments{
@@ -58,8 +58,12 @@ registered via \code{\link[=db_write_assay]{db_write_assay()}} with \code{domain
 
 \item{stain_date}{Date scalar, optional.}
 
-\item{source_file}{Character scalar, optional -- defaults to
-\code{data$FileName[1]} when \code{data} has a \code{FileName} column.}
+\item{source_file}{Character scalar, required -- the FlowJo workspace the
+measurements came from, as a path relative to the lab database's \verb{raw/}
+folder (e.g. \code{"25-7/facs/treg_25-7_20261112.wsp"}). Recorded on every
+measurement row as provenance. The FCS filename is deliberately not used:
+it doesn't identify which workspace version (gates, compensation)
+produced the numbers.}
 }
 \value{
 Invisibly, the number of measurement rows inserted.

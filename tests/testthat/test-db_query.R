@@ -9,7 +9,8 @@ test_that("db_query_facs returns a flat tibble keyed by natural keys", {
     ),
     mouse_id = "25-7-1", tissue = "spleen", assay_name = "overview",
     count_method = "volumetric", vol_stained = 0.1,
-    vol_resuspended = 0.5, vol_measured = 0.05
+    vol_resuspended = 0.5, vol_measured = 0.05,
+    source_file = "25-7/facs/overview_20261112.wsp"
   )
 
   result <- db_query_facs(con) |> dplyr::collect()
