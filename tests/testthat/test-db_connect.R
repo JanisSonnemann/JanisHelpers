@@ -4,7 +4,7 @@ test_that("db_connect creates all tables and seeds domains", {
   expect_true(all(c(
     "domains", "experiments", "subjects", "samples", "import_log",
     "assays", "facs_stains", "facs_measurements", "elisa_measurements",
-    "histo_measurements"
+    "histo_measurements", "import_exclusions"
   ) %in% DBI::dbListTables(con)))
 
   domain_names <- DBI::dbGetQuery(
@@ -60,6 +60,13 @@ test_that("db_connect errors on a file whose facs_stains has no condition column
 test_that("a database with data can be snapshotted with EXPORT DATABASE", {
   con <- local_test_db()
   seed_minimal_fixture(con)
+  import_id <- JanisHelpers:::write_import_log_(
+    con, "facs", "25-7", "overview_25-7",
+    "25-7/facs/overview_25-7_20261112.wsp", rows_written = 0L
+  )
+  DBI::dbExecute(con, "
+    INSERT INTO import_exclusions (import_id, mouse_id, reason, n_files_matched)
+    VALUES (?, '25-7-1', 'clots', 1)", params = list(import_id))
   out <- tempfile("snapshot")
   withr::defer(unlink(out, recursive = TRUE))
 
@@ -67,6 +74,7 @@ test_that("a database with data can be snapshotted with EXPORT DATABASE", {
 
   expect_true(file.exists(file.path(out, "schema.sql")))
   expect_true(file.exists(file.path(out, "import_log.parquet")))
+  expect_true(file.exists(file.path(out, "import_exclusions.parquet")))
 })
 
 test_that("a root's measurements and stains can be replaced in one transaction", {

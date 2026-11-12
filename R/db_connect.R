@@ -3,7 +3,8 @@
 #' Opens (creating if necessary) a DuckDB database file and ensures the full
 #' dimension/fact schema exists, creating any missing tables, sequences, and
 #' seed rows. Safe to call repeatedly -- existing tables and data are left
-#' untouched.
+#' untouched. This includes `import_log` and `import_exclusions` (the
+#' exclusion-sheet rows applied by each [db_export_facs()] call).
 #'
 #' Errors if the file was created by an older schema (one whose
 #' `facs_stains` table has no `wsp_root` or `condition` column) -- such a file must be
@@ -188,6 +189,26 @@ create_schema_ <- function(con) {
       -- checks the referenced row exists instead.
       supersedes_import_id INTEGER,
       imported_at          TIMESTAMP NOT NULL DEFAULT current_timestamp
+    )
+  ")
+
+  # Exclusion-sheet rows applied by one FACS export (db_export_facs()). Kept
+  # when the root is overwritten later, so every import_log row keeps its own
+  # record of what was left out and why. The FK points at another table, which
+  # EXPORT DATABASE handles fine.
+  DBI::dbExecute(con, "CREATE SEQUENCE IF NOT EXISTS seq_import_exclusions START 1")
+  DBI::dbExecute(con, "
+    CREATE TABLE IF NOT EXISTS import_exclusions (
+      import_exclusion_id INTEGER PRIMARY KEY DEFAULT nextval('seq_import_exclusions'),
+      import_id       INTEGER NOT NULL REFERENCES import_log(import_id),
+      mouse_id        VARCHAR NOT NULL,
+      tissue          VARCHAR,
+      panel           VARCHAR,
+      condition       VARCHAR,
+      file_name       VARCHAR,
+      reason          VARCHAR NOT NULL,
+      decided_on      DATE,
+      n_files_matched INTEGER NOT NULL
     )
   ")
 

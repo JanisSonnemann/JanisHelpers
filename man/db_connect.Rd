@@ -16,7 +16,8 @@ A \code{DBI} connection (class \code{duckdb_connection}).
 Opens (creating if necessary) a DuckDB database file and ensures the full
 dimension/fact schema exists, creating any missing tables, sequences, and
 seed rows. Safe to call repeatedly -- existing tables and data are left
-untouched.
+untouched. This includes \code{import_log} and \code{import_exclusions} (the
+exclusion-sheet rows applied by each \code{\link[=db_export_facs]{db_export_facs()}} call).
 }
 \details{
 Errors if the file was created by an older schema (one whose
