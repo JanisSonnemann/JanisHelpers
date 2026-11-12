@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Personal R utility package for biomedical research workflows at Charité Berlin. Wraps three domains: (1) FlowJo `.wsp` cytometry data import via `fcexpr`, producing tidy long-format tibbles; (2) statistical summary and post-hoc tables via `gtsummary`/`gt`/`rstatix`; (3) RMarkdown knitting helpers that render dated HTML/PDF output into structured experiment directories. Installed from GitHub via `devtools::install_github("JanisSonnemann/JanisHelpers", auth_token = gh::gh_token())`.
+Personal R utility package for biomedical research workflows at Charité Berlin: FlowJo/FCS import and analysis, experiment metadata, multiplex ELISA import, statistical tables, plots, RMarkdown knitting helpers, and a DuckDB lab database. Installed from GitHub via `devtools::install_github("JanisSonnemann/JanisHelpers", auth_token = gh::gh_token())`.
 
 ---
 
@@ -61,132 +61,23 @@ New functions must follow the `domain_verb` pattern. Never add a function that d
 - **Column references in tidy eval**: bare column names inside `dplyr` verbs are fine. For `.data$col` pronoun use, prefix with `.data` only when the column name is stored in a variable.
 - **Deselection**: `dplyr::select(!col)`, not `-col`.
 - **`invisible()`**: functions that return data frames/tibbles primarily for side-effects (e.g., import + message) should return `invisible(result)`.
-- **Non-ASCII**: escape all non-ASCII characters in R source with `\uXXXX` (e.g., em-dash = `—`). Caveat: this only works inside actual R string literals (inside quotes, in real code), where R's parser unescapes `\uXXXX` at parse time. It does NOT work inside `#'` roxygen comment text -- roxygen comments are never parsed as R string literals, so a literal `\uXXXX` sequence passes through unconverted into the generated `.Rd` file, where Rd's macro processor doesn't recognize `\u` and emits a `prepare_Rd: unknown macro '\u'` warning. Inside roxygen prose, just write plain ASCII (`--` for a dash, etc.) instead.
+- **Non-ASCII**: escape all non-ASCII characters in R source with `\uXXXX` (e.g., em-dash = `—`). Only inside R string literals -- in roxygen `#'` text write plain ASCII (`--`), since `\uXXXX` there breaks the `.Rd` build.
 
 ---
 
 ## Data structures
 
-### `facs_import_wsp()` — FlowJo workspace
-- **Input**: `path` = path to `.wsp` file
-- **Output**: long tibble, one row per `FileName × PopulationFullPath × metric`
+Roxygen docs (`?fn`) are the reference for arguments and return shapes; this is the map.
 
-| Column | Type | Notes |
-|---|---|---|
-| `FileName` | chr | FCS filename as stored in workspace |
-| `PopulationFullPath` | chr | Full gating hierarchy path |
-| `Population` | factor | Leaf gate name (`basename(PopulationFullPath)`); levels ordered by first-encountered depth-first gating-hierarchy traversal (matching `PopulationFullPath` order), not alphabetically |
-| `metric` | chr | `"Count"`, `"FractionOfParent"`, or `"<Stat>_<Label>"` e.g. `"Median_CD4"` |
-| `value` | dbl | Numeric measurement |
-| `<keyword>` | chr | One column per requested keyword (e.g. `mouse_ID`, `group`) |
-
-- Stats label priority: stain label (`$PnS`) over channel name (`$PnN`) via `dplyr::coalesce(stain, channel)`.
-- Keyword columns appended on the right; warnings issued for missing keywords (filled `NA_character_`).
-
-### `analysis_summary_table()` / `analysis_posthoc_tables()` — stats
-- **Input**: wide tibble with at minimum a `group` column and ≥1 numeric column. Optional `tissue` column triggers per-tissue subsetting.
-- **Output**:
-  - `analysis_summary_table()`: single `gt` table, or named list `tissue → gt` when `tissue_col` is set.
-  - `analysis_posthoc_tables()`: named list `tissue → population → gt` (or flat `population → gt` without tissue). Non-significant variables return a plain character string instead of a table.
-
-### `report_knit_*()` — knitting helpers
-- **Input**: `input` = path to `.Rmd` file (usually the active document).
-- **Output**: rendered HTML/PDF written to disk; returns the output path (from `rmarkdown::render()`).
-- `report_knit_exp()` and `report_knit_wide()` use `normalizePath(input)` to resolve the output directory — no RStudio dependency, works from Positron or the terminal.
-
-### `meta_read()` / `meta_clean()` / `meta_annotate()` — experiment metadata
-- **`meta_read(path)`**: reads every sheet of an Excel workbook into a named
-  list of cleaned tibbles (one per sheet, named after the sheet) -- blank
-  rows/columns dropped, column names snake_cased (except `mouse_ID`,
-  preserved verbatim), character columns trimmed, date columns coerced to
-  `Date`, `group` coerced to a factor if present (each rule applied
-  independently per sheet, only where applicable columns exist).
-- **`meta_clean(meta_list)`**: takes the list from `meta_read()`, pivots its
-  `organ_weights` element from wide-by-tissue (e.g. `kidney_total_weight`,
-  `kidney_facs_weight`) to long (`mouse_ID`, `tissue`, `total_weight`,
-  `facs_weight`), then joins it with `facs_volumes` (already long by
-  `tissue`) via `meta_annotate(by = c("mouse_ID", "tissue"))`. Returns one
-  tibble ready to pass as `meta` to `facs_calc_count_per_g()`. Errors if
-  `organ_weights` or `facs_volumes` is missing from `meta_list`.
-- **`meta_annotate(data, meta, by = "mouse_ID")`**: left-joins `meta` onto
-  `data` by `by`, a character vector of one or more shared column names
-  (e.g. `c("mouse_ID", "tissue")`). Errors if any `by` column is missing
-  from either side or if non-`by` column names collide. Warns (rows kept,
-  `NA` filled) if a `by` combination in `data` has no match in `meta`.
-
-### `plot_bubble_fc()` — group-vs-control fold-change bubble plot
-- **Input**: long tibble already filtered to one `metric` and one `tissue`
-  (if those columns are present); must contain a group column (default
-  `group`), a population column (default `population`), and a numeric
-  value column (default `value`).
-- **Output**: a `ggplot` object (not a tibble) — a bubble plot with one
-  column per non-control group (or, if `x_col` is set to a column other
-  than `"comparison"` and `group_col` has exactly 2 distinct values, one
-  column per distinct value of that column instead — e.g. `x_col =
-  "tissue"` to compare one treatment vs control across multiple tissues
-  in a single plot) and one row per population. Point color =
-  signed log2 fold-change (group mean vs `control` mean, diverging
-  blue/red), point size = `abs(log2fc)`, overlaid with significance stars
-  (`*`/`**`/`***`) from `test` (`"auto"`: `wilcox.test` for 2 groups,
-  `kruskal.test` + `rstatix::dunn_test()` post-hoc for >2). Caption names
-  the `control` group.
-
-### `elisa_read_results()` — multiplex ELISA back-calculated concentrations
-- **Input**: `path` = path to a `Results_<cytokine>.xlsx` multiplex bead
-  ELISA (Luminex/Bio-Plex) export. `cytokine` = optional label override,
-  default `NULL` derives it from the filename (`Results_<cytokine>.xlsx`).
-- **Output**: long tibble, one row per `sample_id x replicate`, read from
-  the sheet whose name ends in `"Unknowns"` (naming varies: plain
-  `"Unknowns"` or `"<cytokine>_Unknowns"`).
-
-| Column | Type | Notes |
-|---|---|---|
-| `cytokine` | chr | from filename or `cytokine` argument |
-| `sample_id` | chr | raw `Sample` value, e.g. `"25-7-1"` -- not assumed to equal `mouse_ID` |
-| `replicate` | int | from `Rep` |
-| `value` | dbl | back-calculated concentration; `NA` if out of standard-curve range (`"OOR<"`/`"OOR>"`) |
-| `unit` | chr | parsed from the Backcalc column header, e.g. `"pg/ml"` |
-| `result_status` | chr | `"OK"` / `"OOR<"` / `"OOR>"` / `"<LLOQ"` etc. |
-
-- Only the `Unknowns` sheet's per-replicate table is read; the `Curve` and
-  `Standards` sheets, and the sheet's own per-sample summary columns
-  (`Mean`/`SD`/`SEM`/`CV %`/`Final Result`), are out of scope -- use the
-  package's `analysis_` functions to summarize across replicates instead.
-
-### `db_connect()` / `db_write_*()` / `db_query_*()` -- lab measurements database
-- **Schema**: see `docs/superpowers/specs/2026-07-17-facs-db-schema-design.md`
-  for full DDL. Two layers: dimensions (`domains`, `experiments`, `subjects`,
-  `samples`, `sample_digestions`, `assays`) and per-domain fact tables
-  (`facs_stains` + `facs_measurements`, `elisa_measurements`,
-  `histo_measurements`), on DuckDB.
-- **`db_connect(path)`**: opens/creates the database file and idempotently
-  ensures the full schema exists, seeding `domains` with `"facs"`/`"histo"`/`"elisa"`.
-- **`db_write_experiment()`/`db_write_subjects()`/`db_write_samples()`/`db_write_assay()`**:
-  register dimension rows. All idempotent (`ON CONFLICT DO NOTHING` against
-  the schema's `UNIQUE` constraints) -- safe to re-run. `db_write_subjects()`
-  and `db_write_samples()` take a whole tibble (one row per mouse, or one row
-  per subject x tissue) and error, naming every unresolved key, if any row
-  references an `experiment_code`/`mouse_id` not already registered one level
-  up -- rather than silently dropping those rows.
-- **`db_write_facs()`/`db_write_elisa()`/`db_write_histo()`**: import a
-  domain's tidy long tibble (matching that domain's existing read function's
-  output shape) against an already-registered `mouse_id`/`tissue`/`assay_name`.
-  All idempotent. `db_write_facs()` additionally creates the `facs_stains` row
-  (one per sample x panel) on first write, branching on `count_method`
-  (`"volumetric"` or `"bead"`) -- the database's `CHECK` constraint enforces
-  that only the fields matching the chosen method are populated.
-  `db_write_histo()`'s `assay_name` is optional (unlike `facs`/`elisa`, where
-  it's required); rows written with `assay_name = NA` are not deduplicated
-  against each other, since SQL's `NULL <> NULL` means the
-  `UNIQUE(sample_id, assay_id, metric)` constraint doesn't catch a repeated
-  import when `assay_id` is `NULL` -- pass a registered `assay_name` for full
-  dedup protection.
-- **`db_query_facs()`/`db_query_elisa()`/`db_query_histo()`**: return a lazy
-  `dbplyr` `tbl` joining a fact table back to natural keys (`experiment_code`,
-  `mouse_id`, `tissue`, `assay_name`) -- callers never see surrogate IDs.
-  `dplyr::collect()` to materialize.
-- Migrating existing `data/MPOmRNA.db` (SQLite) data into this schema is a
-  separate, not-yet-started task.
+- **`facs_read_wsp()`** (current) -- named list `data` / `meta` / `panel`. `data` is long, one row per `file_name x population_full_path x metric`; `population` is a factor ordered by gating-hierarchy traversal, not alphabetically; requested keywords (e.g. `mouse_ID`, `tissue`, `panel`) appended as columns. `facs_import_wsp()` is the older CamelCase variant (`FileName`, `PopulationFullPath`, ...).
+- **`facs_calc_*()`** -- derived metrics on the long tibble (`pct_of`, `count_per_g`, `log2fc`, `diff`, cluster frequencies/medians). `facs_calc_count_per_g()` takes `meta` from `meta_clean()` and joins on `mouse_ID` + `tissue`.
+- **`facs_read_fcs_gated()` / `facs_cluster_flowsom()` / `facs_reduce_umap()` / `facs_test_cluster_abundance()` / `facs_plot_*()`** -- event-level unsupervised pipeline (gated events -> FlowSOM -> UMAP -> diffcyt).
+- **`meta_read()`** -- Excel workbook -> named list of cleaned tibbles (one per sheet). **`meta_clean()`** -- joins `organ_weights` (pivoted long) with `facs_volumes` by `mouse_ID` + base tissue. **`meta_annotate(data, meta, by)`** -- checked left join; errors on missing keys / name collisions, warns on unmatched rows.
+- **`analysis_summary_table()` / `analysis_posthoc_tables()`** -- wide tibble with `group` (+ optional `tissue`) -> `gt` table(s); non-significant post-hoc variables return a character string.
+- **`plot_bubble_fc()`** -- long tibble (one metric, one tissue) -> `ggplot` bubble plot of log2FC vs `control` with significance stars; `x_col` switches the x-axis to another column.
+- **`elisa_read_results()`** -- `Results_<cytokine>.xlsx` (`*Unknowns` sheet) -> long tibble `cytokine`, `sample_id`, `replicate`, `value`, `unit`, `result_status`. `sample_id` is not assumed to equal `mouse_ID`.
+- **`report_knit_*()`** -- render an `.Rmd` into dated output; return the output path. No RStudio dependency.
+- **`db_connect()` / `db_write_*()` / `db_query_*()`** -- DuckDB lab database (schema: `docs/superpowers/specs/2026-07-17-facs-db-schema-design.md`). `db_connect()` creates the schema idempotently. `db_write_*()` are idempotent; dimension writers error listing every unresolved key. `db_query_*()` return lazy `dbplyr` tables keyed by `experiment_code`, `mouse_id`, `tissue`, `assay_name` -- `dplyr::collect()` to materialize.
 
 ---
 
@@ -202,10 +93,9 @@ Current `Imports`: `CytoML`, `DBI`, `dbplyr`, `diffcyt`, `dplyr`, `duckdb`, `fce
 
 ## Testing conventions
 
-- No tests exist yet. When adding tests, use `testthat` (`usethis::use_testthat()`).
-- Test files mirror source: `tests/testthat/test-facs_import.R`, `test-analysis_stats.R`, etc.
-- `facs_import_wsp()` requires a real `.wsp` file — use a minimal fixture in `tests/fixtures/`. Do not mock `fcexpr` calls.
-- [TODO: define fixture `.wsp` file and add at least one smoke test per domain]
+- `testthat` (edition 3). Test files mirror source: `R/facs_read.R` -> `tests/testthat/test-facs_read.R`.
+- Workspace-reading functions use real fixtures in `tests/fixtures/`. Do not mock `fcexpr` calls.
+- `db_` tests use a temporary DuckDB file cleaned up with `withr::defer()` (see `helper-db.R`).
 
 ---
 
@@ -235,44 +125,10 @@ Current `Imports`: `CytoML`, `DBI`, `dbplyr`, `diffcyt`, `dplyr`, `duckdb`, `fce
 
 ## Known check output
 
-`devtools::check()` currently produces **0 errors, 0 warnings**, plus a small
-set of pre-existing notes. Task 10 originally surfaced three real bugs from
-the `db_` domain work (Tasks 1-9) here -- a `prepare_Rd: unknown macro '\u'`
-warning from literal `\uXXXX` escape text inside roxygen `#'` comments in
-`R/db_connect.R`/`R/db_write_measurements.R`, an "unstated dependencies in
-'tests'" warning from `withr::defer()` being called in tests without `withr`
-declared in `DESCRIPTION`, and a "dependencies in R code" note from `dbplyr`
-being declared in `Imports` but never referenced via explicit `dbplyr::`
-syntax -- all three have since been fixed (roxygen prose now uses plain ASCII
-`--`; `withr` added to `Suggests`; `R/db_query.R` gained an
-`#' @importFrom dbplyr sql` / `NULL` roxygen block to create a real
-`NAMESPACE` entry for the implicit `dplyr`-verb-dispatch dependency).
+Target: **0 errors, 0 warnings**. Expected NOTEs (do not chase):
 
-Pre-existing/expected notes (false positives or environment-only):
+- "no visible binding for global variable" / `.data` / `:=` / `%>%` -- tidy-eval column names, `ggplot2::aes()`, `gt` `rows =` predicates. False positives. Column names that collide with functions (`median`, `stars`) also trigger an `importFrom` suggestion -- ignore it.
+- `all_pops_fun` multiple definitions in `analysis_posthoc_tables()` -- known, low priority.
+- Environment-only: future file timestamps; `.git` hidden file (only when checking from a git worktree); top-level `docs` directory.
 
-- `future file timestamps` — network/environment issue, not code.
-- `checking for hidden files and directories` (`.git`) — only observed when running `check()` from inside a git worktree, where `.git` is a file (pointing at the real gitdir) rather than a directory; R's default VCS-ignore logic doesn't recognize the file form. Does not appear when checking from a normal clone.
-- `checking top-level files` (`docs`) — the `docs/superpowers/` directory (planning/spec notes from the `sdd` workflow, not package documentation) isn't covered by `.Rbuildignore`. Pre-existing since the `facs_read_wsp` work; not introduced or addressed by the `meta_` domain work.
-- `R code for possible problems` — remaining items are all tidy-eval / gt false positives, not bare calls:
-  - `%>%` in `analysis_stats.R` — kept intentionally in the gtsummary method-dispatch chain (see pipe rule above).
-  - `.data` in `analysis_stats.R` — the rlang tidy-eval pronoun; required for dynamic column selection, cannot be namespaced.
-  - `p.adj`, `p.value` in `analysis_stats.R` — bare column names inside gt `rows =` predicates; this is how gt row selection works.
-  - `all_pops_fun` multiple definitions in `analysis_posthoc_tables` — two branches define the function with different signatures; structural issue, low priority.
-  - All `facs_import_wsp` variable-binding notes (`FileName`, `PopulationFullPath`, etc.) — bare column names inside dplyr verbs; valid tidy eval, flagged as a static-analysis false positive.
-  - All `meta_read`/`meta_annotate` variable-binding notes (`mouse_id`, `mouse_ID`, `group`) — bare column names inside dplyr verbs; valid tidy eval, flagged as a static-analysis false positive.
-  - `meta_clean`/`pivot_organ_weights_long_` variable-binding notes (`tissue`, `tissue_variant_`, `mouse_ID`) — bare column names inside dplyr verbs, same false-positive pattern as above. `meta_clean()` derives a base organ from each `facs_volumes` tissue value (substring before the first hyphen, via the unexported `extract_base_tissue_()`) and joins `organ_weights` on that base organ instead of the literal tissue string, so a tissue variant of the same organ with no dedicated `organ_weights` columns (e.g. `kidney-whole`, an aliquot taken before further processing) reuses that organ's weight instead of requiring duplicate `organ_weights` columns.
-  - All `facs_calc_pct_of`/`facs_calc_count_per_g` variable-binding notes (`population`, `metric`, `value`, `file_name`, `population_full_path`, `ref_count`, `mouse_ID`, `tissue`, `method`, `bead_count`, `.env`) — bare column names inside dplyr verbs; valid tidy eval, flagged as a static-analysis false positive. `tissue` is a bare column reference (not a formal argument, unlike in the old single-tissue signature) — `facs_calc_count_per_g()` now joins `meta` on `mouse_ID` + `tissue` and processes every tissue present in `data` in one call. Note: the function's own formal arguments (`vol_total`, `vol_stained`, `vol_resuspended`, `vol_measured`, `organ_piece_weight`, `method_col`, `bead_pop`, `bead_concentration`) are also referenced bare inside `dplyr` verbs but are not flagged, since codetools resolves them against the matching parameter name in scope.
-  - `pivot_organ_weights_long_` (the internal `meta_clean()` helper that pivots `organ_weights` to long format) variable-binding note (`mouse_ID`) — bare column name inside a `tidyr::pivot_longer()` deselection (`cols = !mouse_ID`); valid tidy eval, flagged as a static-analysis false positive, same pattern as the existing `meta_read`/`meta_annotate` note above. (`meta_clean_sheet_`, the internal `meta_read()` per-sheet helper, also produces `mouse_id`/`group` notes -- already covered by the `meta_read`/`meta_annotate` bullet above.)
-  - All `calc_restim_proportions_` variable-binding notes (`population`, `metric`, `value`, `n`, `ref_count`, `proportion`, `.data`) — bare column names inside dplyr verbs, same false-positive pattern as `facs_calc_pct_of`/`facs_calc_count_per_g` above. `calc_restim_proportions_` is unexported (an internal helper shared by both `facs_calc_log2fc()` and `facs_calc_diff()`), so its notes are attributed to `R/facs_calc.R` as a whole rather than one function. Its nested `is_constant_` closure (used to detect passthrough columns constant within each `mouse_ID` x `tissue` group) adds its own notes (`mouse_ID`, `tissue`, `.data`, `n_distinct`) for the same bare-column-reference reason. `facs_calc_log2fc`'s and `facs_calc_diff`'s own top-level notes are limited to `.data`, from the anonymous `function(x) ...` closure each passes to `dplyr::mutate(dplyr::across(...))` to compute the log2-fold-change/difference column.
-  - `facs_read_fcs_gated` variable-binding notes (`key`, `value`) — bare column names inside `dplyr::filter()`/`tidyr::pivot_wider()`, same false-positive pattern as `facs_read_wsp`/`parse_keywords_` above. `facs_read_fcs_gated()` reads its `keywords` argument from the `.wsp` XML via the shared `parse_keywords_()` helper (not from `flowWorkspace::keyword()`, which only sees keywords physically embedded in the raw `.fcs` file's TEXT segment and misses keywords typed into FlowJo's UI but never written back to the `.fcs` file) — this is the same long-tibble (`file_name`, `key`, `value`) shape `facs_read_wsp()` already pivots, hence the identical notes.
-  - `facs_calc_cluster_freq` variable-binding notes (`file_name`, `.data`, `n`, `total`) — bare column names inside `dplyr`/`tidyr` verbs, same false-positive pattern as `facs_calc_pct_of`/`facs_calc_count_per_g` above. Its nested `is_constant_` closure (used to detect passthrough columns constant within each `file_name` group -- the single-tissue-per-file analog of `calc_restim_proportions_`'s own `is_constant_` helper) adds its own notes (`file_name`, `.data`, `n_distinct`) for the same bare-column-reference reason. `facs_cluster_flowsom()`, the FlowSOM clustering function whose output this helper summarizes, produces no `R CMD check` notes of its own.
-  - `plot_bubble_fc` variable-binding notes (`.data`, `population`, `log2fc`, `p_value`, `stars`) — `.data` is the rlang tidy-eval pronoun used in `.data[[x_col]]` to subset by the x-axis dimension column (either `"comparison"` by default or a user-supplied column name like `"tissue"` or `"metric"`); the remaining names are bare column references inside `ggplot2::aes()` calls, same false-positive pattern as elsewhere in the package. `stars` additionally triggers `R CMD check`'s `Consider adding importFrom("graphics", "stars")` suggestion, since `graphics::stars()` happens to share the name -- also a false positive, as it's a bare column reference, not a call to `graphics::stars()`.
-  - `calc_bubble_fc_` variable-binding notes (`testable`, `population`, `x_value`, `:=`) — `testable`, `population`, and `x_value` are bare column names inside the trailing `dplyr` verb chain (`select()`/`left_join()`/`mutate()`/`rename()`); `x_value` replaced the prior `comparison` reference after refactoring to support arbitrary x-axis columns. These are not flagged inside the `purrr::pmap_dfr()` closure where they are formal parameters (codetools resolves them against the function's own argument list). `:=` is the rlang walrus operator used in `dplyr::rename()` for dynamic column naming, a standard non-standard-evaluation idiom, not an actually-undefined function.
-  - `calc_bubble_p_values_` variable-binding notes (`x_value`, `p_value`) — bare column names inside `dplyr` verbs; `x_value` (replaced prior `comparison`) is the x-axis dimension column computed by `calc_bubble_fc_()`.
-  - `dunn_test_for_population_` variable-binding notes (`group1`, `group2`, `population`, `x_value`, `p.adj`) — an internal helper extracted during Task 3's review to eliminate code duplication in the Kruskal path; all five notes (`group1`, `group2`, `population`, `x_value`, `p.adj`) are bare column names inside the `dplyr` verb chain (`filter()`/`mutate()`/`select()`) that runs *after* `rstatix::dunn_test()` returns (the `dunn_test()` call itself uses formulas and has no bare column references). `adjust_p_()`, the internal `stats::p.adjust()` wrapper shared by the wilcox/t.test paths, produces no notes of its own (it only operates on a plain numeric vector, no data-frame columns).
-  - `facs_plot_umap` variable-binding notes (`UMAP1`, `UMAP2`, `.data`) — bare column names and the rlang tidy-eval pronoun inside `ggplot2::aes()`, same false-positive pattern as `.data` usage elsewhere in the package (see the `analysis_stats.R` bullet above). `facs_reduce_umap()` (Stage 3's other new function, which computes the `UMAP1`/`UMAP2` columns `facs_plot_umap()` consumes) produces no `R CMD check` notes of its own -- it accesses columns via `$`/`[[` subsetting rather than bare tidy-eval names.
-  - `facs_test_cluster_abundance` variable-binding notes (`file_name`, `:=`, `cluster_id`) — `file_name` is a bare column name inside `dplyr::rename(sample_id = file_name)`/`dplyr::select(dplyr::all_of(...))`/`tidyr::pivot_wider()`, same false-positive pattern as elsewhere. `:=` is the rlang walrus operator used in the closing `dplyr::rename(results, !!cluster_col := cluster_id)` call (renames the `diffcyt` result column back to the user-supplied `cluster_col` name) -- a standard dplyr/rlang non-standard-evaluation idiom, not an actually-undefined function. `cluster_id` is the bare right-hand-side reference in that same `rename()` call, matching the `cluster_id` column name `diffcyt::testDA_*()` returns in its `rowData`.
-  - `facs_plot_cluster_abundance` variable-binding notes (`p_adj`, `.data`, `fraction`) — `p_adj` is a bare column name inside `dplyr::filter(p_adj <= p_adj_threshold)`; `.data` is the rlang tidy-eval pronoun used in `.data[[cluster_col]]`/`.data[[group_col]]` to subset by the user-supplied cluster/grouping column names; `fraction` is a bare column name inside `ggplot2::aes(y = fraction)` -- same false-positive pattern as `facs_plot_umap` above.
-  - `facs_plot_cluster_heatmap` variable-binding notes (`marker`, `median`, `.data`, `fill_value`) — `marker` is a bare column name inside `dplyr::group_by(marker)` (and again inside `ggplot2::aes(x = marker, ...)`); `median` is a bare column name read inside the `dplyr::mutate(fill_value = ...)` z-score/raw branch (the per-marker, per-cluster median values `facs_calc_cluster_marker_medians()` already computed via namespaced `stats::median()`); `.data` is the rlang tidy-eval pronoun used in `.data[[cluster_col]]` to subset by the user-supplied cluster column name; `fill_value` is the column `dplyr::mutate()` defines and that is then referenced bare inside `ggplot2::aes(fill = fill_value)` -- same false-positive pattern as `facs_plot_cluster_abundance`/`facs_plot_umap` above. Because `median` also happens to name a base-R generic, this NOTE additionally prints a "Consider adding `importFrom("stats", "median")`" suggestion; no import is needed since `facs_plot_cluster_heatmap()` never calls `median()` as a function here -- it only reads the pre-computed `median` column -- so this is the same bare-column false positive, just with an extra suggestion line triggered by the name collision. `facs_calc_cluster_marker_medians()` (the function that produces the `marker`/`median` columns this consumes) produces no notes of its own: it resolves its columns entirely through `dplyr::across(dplyr::all_of(cluster_col))`/`dplyr::across(dplyr::all_of(markers), stats::median)` and `tidyr::pivot_longer(names_to =, values_to =)`, never referencing a column by a bare literal name.
-  - `elisa_read_results` variable-binding notes (`Rep`, `sample_id`, `value`, `result_status`) — bare column names inside `dplyr::select()`/`dplyr::filter()`/`dplyr::mutate()`, same false-positive pattern as every other domain above. `cytokine` and `unit`, referenced inside the same `dplyr::mutate()` call, are not flagged because `cytokine` is a formal argument (also conditionally reassigned inside the function body) and `unit` is a local variable assigned earlier in the function body (`unit <- stringr::str_extract(...)`), which codetools resolves without a note, the same reason `facs_calc_count_per_g`'s own formal arguments go unflagged above. `replicate` is also unflagged, but for a different reason: it collides with the base-R function `replicate()`, and codetools treats base-package names as always resolved -- unlike the `stats::median`/`graphics::stars` collisions elsewhere in this section, which still get flagged (plus an `importFrom` suggestion) because `stats` and `graphics` are non-base default-attached packages rather than base itself.
-  - `db_query_facs`/`db_query_elisa`/`db_query_histo` variable-binding notes (`db_query_facs`: `experiment_code`, `mouse_id`, `tissue`, `assay_name`, `population_full_path`, `population`, `metric`, `value`, `count_method`, `vol_stained`, `vol_resuspended`, `vol_measured`, `bead_volume_added`, `bead_concentration`, `bead_population_path`, `source_file`, `imported_at`; `db_query_elisa`: `experiment_code`, `mouse_id`, `tissue`, `assay_name`, `cytokine`, `sample_id_raw`, `value`, `unit`, `result_status`, `source_file`, `imported_at`; `db_query_histo`: `experiment_code`, `mouse_id`, `tissue`, `assay_name`, `metric`, `value`, `source_file`, `imported_at`) -- bare column names inside each function's closing `dplyr::select()` call (selecting from the joined `dbplyr` lazy `tbl`), same false-positive pattern as every other domain above.
+A new NOTE that is *not* one of these is a real issue -- fix it.
