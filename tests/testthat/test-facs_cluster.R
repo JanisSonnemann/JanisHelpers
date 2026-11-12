@@ -219,11 +219,11 @@ test_that("facs_cluster_flowsom() is reproducible with the same seed", {
 # recorded here for the historical record and because the underlying
 # ConsensusClusterPlus behavior is unchanged upstream. The tests below
 # use grid_xdim = 4, grid_ydim = 4, n_metaclusters = 6 (verified
-# reproducible across repeated seed = 1 runs: 6 distinct metaclusters, all
-# 16 raw SOM nodes used, exactly one zero-count file x metacluster cell)
-# instead of the smaller 2x2/4 grid, to avoid this bug while still
-# exercising the zero-fill behavior.
-test_that("facs_calc_cluster_freq() returns one row per file_name x metacluster, zero-filled", {
+# reproducible across repeated seed = 1 runs) instead of the smaller 2x2/4
+# grid, to avoid this bug. Whether any file x metacluster cell ends up empty
+# depends on the FlowSOM version (FlowSOM 2.20 / Bioconductor 3.23 leaves
+# none), so zero-filling is tested on synthetic input below instead.
+test_that("facs_calc_cluster_freq() returns one row per file_name x metacluster", {
   skip_if_not(dir.exists(fcs_dir), skip_msg)
 
   dat <- cluster_input() |>
@@ -232,7 +232,22 @@ test_that("facs_calc_cluster_freq() returns one row per file_name x metacluster,
 
   expect_true(all(c("file_name", "metacluster", "n", "fraction") %in% names(freq)))
   expect_equal(nrow(freq), dplyr::n_distinct(dat$file_name) * dplyr::n_distinct(dat$metacluster))
-  expect_true(any(freq$n == 0L))
+})
+
+test_that("facs_calc_cluster_freq() zero-fills file_name x metacluster cells with no events", {
+  dat <- tibble::tibble(
+    file_name   = c("a.fcs", "a.fcs", "a.fcs", "b.fcs", "b.fcs"),
+    metacluster = factor(c("1", "2", "2", "1", "1"), levels = c("1", "2")),
+    organ       = c("spleen", "spleen", "spleen", "kidney", "kidney")
+  )
+  freq <- facs_calc_cluster_freq(dat)
+
+  expect_equal(nrow(freq), 4L)
+  b2 <- freq[freq$file_name == "b.fcs" & freq$metacluster == "2", ]
+  expect_equal(b2$n, 0L)
+  expect_equal(b2$fraction, 0)
+  expect_equal(b2$organ, "kidney")
+  expect_equal(freq$fraction[freq$file_name == "a.fcs" & freq$metacluster == "2"], 2 / 3)
 })
 
 test_that("facs_calc_cluster_freq() fractions sum to 1 per file_name", {
