@@ -255,7 +255,7 @@ lookup_assay_id_ <- function(con, assay_name, domain) {
 #' - this experiment x panel is already stored under a different root;
 #' - `wsp_root` is already used for a different experiment or panel;
 #' - the root already holds data from a different `source_file` (a newer
-#'   workspace version replaces a root via the Stage 3 export, not here);
+#'   workspace version replaces a root via [db_export_facs()], not here);
 #' - the root already holds stains with a different `condition_keyword`
 #'   (one root varies at most one variable).
 #'
@@ -311,9 +311,33 @@ db_write_facs <- function(con, data, mouse_id, tissue, assay_name, wsp_root,
   check_facs_root_(con, sample_id, assay_id, wsp_root, source_file)
   check_facs_root_keyword_(con, wsp_root, condition_keyword)
 
+  measurements <- tibble::tibble(
+    population_full_path = data$PopulationFullPath,
+    population = data$Population,
+    metric = data$metric,
+    value = data$value
+  )
+  n <- DBI::dbWithTransaction(con, {
+    insert_facs_stain_(
+      con, sample_id, assay_id, measurements, wsp_root, source_file,
+      condition, condition_keyword, stain_date
+    )
+  })
+
+  invisible(n)
+}
+
+# Internal: insert one stain (if new) and its measurements. Opens NO
+# transaction -- callers wrap it (db_write_facs() per stain, db_export_facs()
+# around a whole root), since DuckDB doesn't nest transactions. `data` has
+# snake-case columns population_full_path, population, metric, value.
+# Returns the number of measurement rows inserted.
+insert_facs_stain_ <- function(con, sample_id, assay_id, data, wsp_root,
+                               source_file, condition, condition_keyword,
+                               stain_date = NA) {
   to_write <- tibble::tibble(
-    population_full_path = as.character(data$PopulationFullPath),
-    population = as.character(data$Population),
+    population_full_path = as.character(data$population_full_path),
+    population = as.character(data$population),
     metric = as.character(data$metric),
     value = as.double(data$value),
     source_file = source_file
@@ -321,38 +345,34 @@ db_write_facs <- function(con, data, mouse_id, tissue, assay_name, wsp_root,
   duckdb::duckdb_register(con, "tmp_facs_measurements", to_write)
   on.exit(duckdb::duckdb_unregister(con, "tmp_facs_measurements"), add = TRUE)
 
-  n <- DBI::dbWithTransaction(con, {
-    DBI::dbExecute(
-      con,
-      "INSERT INTO facs_stains (
-         sample_id, assay_id, wsp_root, condition, condition_keyword, stain_date
-       )
-       VALUES (?, ?, ?, ?, ?, ?)
-       ON CONFLICT (sample_id, assay_id, condition) DO NOTHING",
-      params = list(
-        sample_id, assay_id, wsp_root, condition,
-        as.character(condition_keyword), stain_date
-      )
+  DBI::dbExecute(
+    con,
+    "INSERT INTO facs_stains (
+       sample_id, assay_id, wsp_root, condition, condition_keyword, stain_date
+     )
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT (sample_id, assay_id, condition) DO NOTHING",
+    params = list(
+      sample_id, assay_id, wsp_root, condition,
+      as.character(condition_keyword), stain_date
     )
+  )
 
-    facs_stain_id <- DBI::dbGetQuery(
-      con,
-      "SELECT facs_stain_id FROM facs_stains
-       WHERE sample_id = ? AND assay_id = ? AND condition = ?",
-      params = list(sample_id, assay_id, condition)
-    )$facs_stain_id[[1]]
+  facs_stain_id <- DBI::dbGetQuery(
+    con,
+    "SELECT facs_stain_id FROM facs_stains
+     WHERE sample_id = ? AND assay_id = ? AND condition = ?",
+    params = list(sample_id, assay_id, condition)
+  )$facs_stain_id[[1]]
 
-    DBI::dbExecute(con, "
-      INSERT INTO facs_measurements (
-        facs_stain_id, population_full_path, population, metric, value, source_file
-      )
-      SELECT ?, population_full_path, population, metric, value, source_file
-      FROM tmp_facs_measurements
-      ON CONFLICT (facs_stain_id, population_full_path, metric) DO NOTHING
-    ", params = list(facs_stain_id))
-  })
-
-  invisible(n)
+  DBI::dbExecute(con, "
+    INSERT INTO facs_measurements (
+      facs_stain_id, population_full_path, population, metric, value, source_file
+    )
+    SELECT ?, population_full_path, population, metric, value, source_file
+    FROM tmp_facs_measurements
+    ON CONFLICT (facs_stain_id, population_full_path, metric) DO NOTHING
+  ", params = list(facs_stain_id))
 }
 
 #' Import ELISA measurements

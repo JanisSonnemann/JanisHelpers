@@ -3,6 +3,7 @@
 export(analysis_posthoc_tables)
 export(analysis_summary_table)
 export(db_connect)
+export(db_export_facs)
 export(db_query_elisa)
 export(db_query_facs)
 export(db_query_histo)

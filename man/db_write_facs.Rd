@@ -72,7 +72,7 @@ Errors, writing nothing, if:
 \item this experiment x panel is already stored under a different root;
 \item \code{wsp_root} is already used for a different experiment or panel;
 \item the root already holds data from a different \code{source_file} (a newer
-workspace version replaces a root via the Stage 3 export, not here);
+workspace version replaces a root via \code{\link[=db_export_facs]{db_export_facs()}}, not here);
 \item the root already holds stains with a different \code{condition_keyword}
 (one root varies at most one variable).
 }
