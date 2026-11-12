@@ -1,6 +1,11 @@
 # Lab database schema redesign
 
 Status: draft, pending review
+
+> **2026-11-12:** calc inputs removed (`facs_stains` volume/bead/count-method
+> columns and their `CHECK`, the `sample_digestions` table), `wsp_root` +
+> `import_log` added, `facs_measurements` FK to `facs_stains` dropped -- see
+> `2026-11-12-db-schema-import-log-design.md`. The DDL below is current.
 Related: `docs/superpowers/specs/2026-07-17-facs-db-schema-diagram.html` (visual companion — entity cards, relationships, workflow diagram)
 
 ## Context
@@ -112,16 +117,6 @@ CREATE TABLE samples (
   UNIQUE(subject_id, tissue)
 );
 
--- 1:1 extension of `samples`, FACS-only: the master single-cell suspension
--- made from a digested tissue piece, before it's split into stained aliquots.
--- Fluid samples (serum, urine) have no row here.
-CREATE TABLE sample_digestions (
-  sample_id    INTEGER PRIMARY KEY REFERENCES samples(sample_id),
-  total_weight DOUBLE,
-  facs_weight  DOUBLE,
-  vol_total    DOUBLE
-);
-
 CREATE SEQUENCE seq_assays START 1;
 CREATE TABLE assays (
   assay_id    INTEGER PRIMARY KEY DEFAULT nextval('seq_assays'),
@@ -136,39 +131,26 @@ CREATE TABLE assays (
 
 ```sql
 -- One row per (sample x panel) staining event -- i.e. one physical tube.
--- A single digested sample is routinely split into several differently
--- stained aliquots (e.g. 100ul of spleen suspension for the overview panel,
--- 200ul for the Treg panel), so vol_stained/vol_resuspended/vol_measured
--- belong here, one level below sample_digestions, not on the sample itself.
+-- Stain volumes, bead settings and organ weights are calculation inputs:
+-- the per-panel export script uses them before the data reaches the
+-- database, so they are not stored. wsp_root = the workspace root
+-- (one experiment x one panel), the unit the Stage 3 export replaces.
 CREATE SEQUENCE seq_facs_stains START 1;
 CREATE TABLE facs_stains (
-  facs_stain_id        INTEGER PRIMARY KEY DEFAULT nextval('seq_facs_stains'),
-  sample_id            INTEGER NOT NULL REFERENCES samples(sample_id),
-  assay_id             INTEGER NOT NULL REFERENCES assays(assay_id),
-  vol_stained          DOUBLE,             -- aliquot drawn from vol_total
-  count_method         VARCHAR NOT NULL CHECK (count_method IN ('volumetric', 'bead')),
-  vol_resuspended      DOUBLE,             -- volumetric method only
-  vol_measured         DOUBLE,             -- volumetric method only: volume acquired
-  bead_volume_added    DOUBLE,             -- bead method only: volume of bead reagent added
-  bead_concentration   DOUBLE,             -- bead method only: beads per ul of reagent
-  bead_population_path VARCHAR,           -- bead method only: which gated population is the bead cluster
-  stain_date           DATE,
-  UNIQUE(sample_id, assay_id),
-  CHECK (
-    (count_method = 'volumetric'
-      AND vol_resuspended IS NOT NULL AND vol_measured IS NOT NULL
-      AND bead_volume_added IS NULL AND bead_concentration IS NULL)
-    OR
-    (count_method = 'bead'
-      AND bead_volume_added IS NOT NULL AND bead_concentration IS NOT NULL
-      AND vol_resuspended IS NULL AND vol_measured IS NULL)
-  )
+  facs_stain_id INTEGER PRIMARY KEY DEFAULT nextval('seq_facs_stains'),
+  sample_id     INTEGER NOT NULL REFERENCES samples(sample_id),
+  assay_id      INTEGER NOT NULL REFERENCES assays(assay_id),
+  wsp_root      VARCHAR NOT NULL,   -- e.g. "treg_26-2"
+  stain_date    DATE,
+  UNIQUE(sample_id, assay_id)
 );
 
 CREATE SEQUENCE seq_facs_measurements START 1;
 CREATE TABLE facs_measurements (
   facs_measurement_id  BIGINT PRIMARY KEY DEFAULT nextval('seq_facs_measurements'),
-  facs_stain_id        INTEGER NOT NULL REFERENCES facs_stains(facs_stain_id),
+  facs_stain_id        INTEGER NOT NULL,   -- no FK: DuckDB can't delete a parent
+                                           -- row in the same transaction as its
+                                           -- children, which replacing a root needs
   population_full_path VARCHAR NOT NULL,
   population           VARCHAR NOT NULL,
   metric               VARCHAR NOT NULL,   -- "Count" / "FractionOfParent" / "Median_CD4" / ...
@@ -208,6 +190,24 @@ CREATE TABLE histo_measurements (
   imported_at          TIMESTAMP DEFAULT current_timestamp,
   UNIQUE(sample_id, assay_id, metric)
 );
+
+-- One row per import of any domain, never updated or deleted -- kept even
+-- after the data it describes is overwritten.
+CREATE SEQUENCE seq_import_log START 1;
+CREATE TABLE import_log (
+  import_id            INTEGER PRIMARY KEY DEFAULT nextval('seq_import_log'),
+  domain_id            INTEGER NOT NULL REFERENCES domains(domain_id),
+  experiment_code      VARCHAR,     -- ", "-joined if an ELISA plate spans experiments
+  import_unit          VARCHAR NOT NULL,   -- FACS: wsp root; ELISA/histo: file name
+  source_file          VARCHAR NOT NULL,   -- path relative to raw/
+  source_version       DATE,        -- FACS: date from <root>_<YYYYMMDD>.wsp
+  qc_report            VARCHAR,     -- FACS only
+  qc_passed            BOOLEAN,     -- FACS only
+  rows_written         INTEGER NOT NULL,
+  package_version      VARCHAR NOT NULL,
+  supersedes_import_id INTEGER REFERENCES import_log(import_id),
+  imported_at          TIMESTAMP NOT NULL DEFAULT current_timestamp
+);
 ```
 
 Surrogate-key generation is shown above via `CREATE SEQUENCE` +
@@ -223,8 +223,9 @@ specifies.
 |---|---|
 | Surrogate integer PKs, natural keys stay `UNIQUE` | Fast joins; `mouse_id`/`experiment_code` remain what any R-facing `db_` function exposes publicly, surrogate IDs stay internal. |
 | `UNIQUE` constraint on every fact table's natural key | Re-running an import script is idempotent (DuckDB rejects the collision) instead of relying on a manual check-then-append. |
-| `facs_stains` split from `sample_digestions` | One digested tissue sample is routinely split into several differently-stained aliquots, each with its own `vol_stained`/`vol_resuspended`/`vol_measured` (or bead equivalents) -- these can't live at the sample level. |
-| `count_method` branch with a cross-field `CHECK` | Some panels are counted volumetrically (HTS: acquired-volume fraction), others via counting beads (bead-to-cell ratio x reagent concentration) -- structurally different fields, and the `CHECK` catches a half-filled-in row at insert time. |
+| No volumes/weights/bead settings stored (2026-11-12) | They are calculation inputs; the export script calculates absolute and derived values and stores those as extra `metric` rows. |
+| `wsp_root` on `facs_stains` (2026-11-12) | The workspace root is the unit of export and overwrite; one root = one experiment x one panel. |
+| `import_log` (2026-11-12) | Every import is recorded permanently, including what it replaced, so overwriting never loses the history. |
 | `domains` lookup table instead of a hard-coded `CHECK` list on `assays.domain` | DuckDB can't cheaply `ALTER` a `CHECK` constraint later. Adding a future modality (e.g. scRNA-seq) becomes a plain `INSERT`, not a schema migration. |
 | `source_file` + `imported_at` on every fact table | Every measurement traces back to the raw export it came from. |
 | `samples.tissue` is free `VARCHAR`, not an enum | Specimen types span organs and fluids (serum, urine) -- forcing a rigid vocabulary here would fight real lab variation; typo protection instead lives on the `assays` lookup, where it matters more. |
@@ -243,8 +244,7 @@ Every domain follows the same pipeline (see the diagram doc for the visual):
    feeding into `analysis_*()`/`plot_*()`/`report_knit_*()`.
 
 Onboarding a new experiment follows the dimension chain top-down: register the
-experiment, register its subjects, register their samples (and
-`sample_digestions` for FACS-processed tissue), then import each domain's
+experiment, register its subjects, register their samples, then import each domain's
 measurements against those samples.
 
 ## Out of scope

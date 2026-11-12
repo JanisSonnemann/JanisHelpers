@@ -77,7 +77,7 @@ Roxygen docs (`?fn`) are the reference for arguments and return shapes; this is 
 - **`plot_bubble_fc()`** -- long tibble (one metric, one tissue) -> `ggplot` bubble plot of log2FC vs `control` with significance stars; `x_col` switches the x-axis to another column.
 - **`elisa_read_results()`** -- `Results_<cytokine>.xlsx` (`*Unknowns` sheet) -> long tibble `cytokine`, `sample_id`, `replicate`, `value`, `unit`, `result_status`. `sample_id` is not assumed to equal `mouse_ID`.
 - **`report_knit_*()`** -- render an `.Rmd` into dated output; return the output path. No RStudio dependency.
-- **`db_connect()` / `db_write_*()` / `db_query_*()`** -- DuckDB lab database (schema: `docs/superpowers/specs/2026-07-17-facs-db-schema-design.md`). `db_connect()` creates the schema idempotently. `db_write_*()` are idempotent; dimension writers error listing every unresolved key. `db_query_*()` return lazy `dbplyr` tables keyed by `experiment_code`, `mouse_id`, `tissue`, `assay_name` -- `dplyr::collect()` to materialize.
+- **`db_connect()` / `db_write_*()` / `db_query_*()`** -- DuckDB lab database (schema: `docs/superpowers/specs/2026-07-17-facs-db-schema-design.md`). `db_connect()` creates the schema idempotently. `db_write_*()` are idempotent; dimension writers error listing every unresolved key. `db_write_elisa()`/`db_write_histo()` take whole tables with `mouse_id`/`tissue` columns and write one `import_log` row per call (FACS logging comes from the Stage 3 export). `db_write_facs()` tags stains with `wsp_root` (one root = one experiment x one panel) and refuses a second root or workspace version. No volumes/weights are stored -- they are calculation inputs. `db_query_*()` return lazy `dbplyr` tables keyed by `experiment_code`, `mouse_id`, `tissue`, `assay_name` -- `dplyr::collect()` to materialize.
 
 ---
 
@@ -87,7 +87,7 @@ Roxygen docs (`?fn`) are the reference for arguments and return shapes; this is 
 - **`Suggests`**: packages only needed in examples, vignettes, or tests. Currently `testthat` and `withr` (the latter used for `withr::defer()` cleanup in `db_` domain tests).
 - **Non-CRAN packages** (`fcexpr`): list in `Imports` as normal; document the install requirement in README. Do not add `remotes::` calls inside function bodies.
 
-Current `Imports`: `CytoML`, `DBI`, `dbplyr`, `diffcyt`, `dplyr`, `duckdb`, `fcexpr`, `flowCore`, `FlowSOM`, `flowWorkspace`, `ggplot2`, `glue`, `gt`, `gtsummary`, `janitor`, `parallel`, `purrr`, `readxl`, `rmarkdown`, `rstatix`, `stats`, `stringr`, `SummarizedExperiment`, `tibble`, `tidyr`, `tools`, `uwot`, `xml2`, `xfun` (order matches `DESCRIPTION`'s `Imports:` block).
+Current `Imports`: `CytoML`, `DBI`, `dbplyr`, `diffcyt`, `dplyr`, `duckdb`, `fcexpr`, `flowCore`, `FlowSOM`, `flowWorkspace`, `ggplot2`, `glue`, `gt`, `gtsummary`, `janitor`, `parallel`, `purrr`, `readxl`, `rmarkdown`, `rstatix`, `stats`, `stringr`, `SummarizedExperiment`, `tibble`, `tidyr`, `tools`, `utils`, `uwot`, `xml2`, `xfun` (order matches `DESCRIPTION`'s `Imports:` block).
 
 ---
 
