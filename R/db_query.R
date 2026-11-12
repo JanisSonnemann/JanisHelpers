@@ -21,9 +21,7 @@ db_query_facs <- function(con) {
     dplyr::select(
       experiment_code, mouse_id, tissue, assay_name,
       population_full_path, population, metric, value,
-      count_method, vol_stained, vol_resuspended, vol_measured,
-      bead_volume_added, bead_concentration, bead_population_path,
-      source_file, imported_at
+      wsp_root, source_file, imported_at
     )
 }
 

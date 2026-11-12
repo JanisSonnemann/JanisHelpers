@@ -1,3 +1,12 @@
+# Errors unless `x` is a single non-NA, non-empty string. `NULL` stands for a
+# missing argument. `what` describes the expected value in the message.
+check_string_arg_ <- function(x, arg, what) {
+  if (is.null(x) || !is.character(x) || length(x) != 1 || is.na(x) || !nzchar(x)) {
+    stop("`", arg, "` must be a single non-empty string: ", what, ".", call. = FALSE)
+  }
+  invisible(x)
+}
+
 lookup_sample_id_ <- function(con, mouse_id, tissue) {
   result <- DBI::dbGetQuery(
     con,
@@ -71,11 +80,10 @@ lookup_assay_id_ <- function(con, assay_name, domain) {
 #'
 #' Writes one staining event's tidy long measurements (as produced by
 #' `facs_import_wsp()`, filtered to a single `FileName`) into
-#' `facs_measurements`, creating the matching `facs_stains` row first if it
-#' doesn't already exist. Which of `vol_resuspended`/`vol_measured` versus
-#' `bead_volume_added`/`bead_concentration`/`bead_population_path` are
-#' required depends on `count_method`; the database's `CHECK` constraint on
-#' `facs_stains` rejects a call that supplies the wrong subset.
+#' `facs_measurements`, creating the matching `facs_stains` row (tagged with
+#' `wsp_root`) first if it doesn't already exist. Stain volumes, bead settings
+#' and organ weights are not stored: they are calculation inputs, used by the
+#' export script before the data reaches the database.
 #'
 #' @param con A `DBI` connection from [db_connect()].
 #' @param data A tibble with columns `PopulationFullPath`, `Population`,
@@ -87,43 +95,28 @@ lookup_assay_id_ <- function(con, assay_name, domain) {
 #'   via [db_write_samples()]).
 #' @param assay_name Character scalar identifying the panel (already
 #'   registered via [db_write_assay()] with `domain = "facs"`).
-#' @param count_method Either `"volumetric"` or `"bead"`.
-#' @param vol_stained Numeric scalar, volume of suspension stained.
-#' @param vol_resuspended Numeric scalar, required when
-#'   `count_method = "volumetric"`.
-#' @param vol_measured Numeric scalar, required when
-#'   `count_method = "volumetric"`.
-#' @param bead_volume_added Numeric scalar, required when
-#'   `count_method = "bead"`.
-#' @param bead_concentration Numeric scalar, required when
-#'   `count_method = "bead"`.
-#' @param bead_population_path Character scalar, required when
-#'   `count_method = "bead"`.
-#' @param stain_date Date scalar, optional.
+#' @param wsp_root Character scalar, required -- the workspace root (the
+#'   `.wsp` filename without its `_YYYYMMDD` version suffix, e.g.
+#'   `"treg_25-7"`). One root = one experiment x one panel.
 #' @param source_file Character scalar, required -- the FlowJo workspace the
 #'   measurements came from, as a path relative to the lab database's `raw/`
 #'   folder (e.g. `"25-7/facs/treg_25-7_20261112.wsp"`). Recorded on every
 #'   measurement row as provenance. The FCS filename is deliberately not used:
 #'   it doesn't identify which workspace version (gates, compensation)
 #'   produced the numbers.
+#' @param stain_date Date scalar, optional.
 #' @returns Invisibly, the number of measurement rows inserted.
 #' @export
-db_write_facs <- function(con, data, mouse_id, tissue, assay_name, count_method,
-                           vol_stained,
-                           vol_resuspended = NA_real_, vol_measured = NA_real_,
-                           bead_volume_added = NA_real_, bead_concentration = NA_real_,
-                           bead_population_path = NA_character_,
-                           stain_date = NA, source_file) {
-  count_method <- match.arg(count_method, c("volumetric", "bead"))
-
-  if (missing(source_file) || !is.character(source_file) ||
-      length(source_file) != 1 || is.na(source_file) || !nzchar(source_file)) {
-    stop(
-      "`source_file` must be a single non-empty string: the .wsp path ",
-      "relative to raw/ (e.g. \"25-7/facs/treg_25-7_20261112.wsp\").",
-      call. = FALSE
-    )
-  }
+db_write_facs <- function(con, data, mouse_id, tissue, assay_name, wsp_root,
+                           source_file, stain_date = NA) {
+  check_string_arg_(
+    if (missing(wsp_root)) NULL else wsp_root, "wsp_root",
+    "the .wsp filename without its _YYYYMMDD suffix (e.g. \"treg_25-7\")"
+  )
+  check_string_arg_(
+    if (missing(source_file)) NULL else source_file, "source_file",
+    "the .wsp path relative to raw/ (e.g. \"25-7/facs/treg_25-7_20261112.wsp\")"
+  )
 
   sample_id <- lookup_sample_id_(con, mouse_id, tissue)
   assay_id <- lookup_assay_id_(con, assay_name, domain = "facs")
@@ -141,17 +134,10 @@ db_write_facs <- function(con, data, mouse_id, tissue, assay_name, count_method,
   n <- DBI::dbWithTransaction(con, {
     DBI::dbExecute(
       con,
-      "INSERT INTO facs_stains (
-         sample_id, assay_id, vol_stained, count_method,
-         vol_resuspended, vol_measured,
-         bead_volume_added, bead_concentration, bead_population_path, stain_date
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      "INSERT INTO facs_stains (sample_id, assay_id, wsp_root, stain_date)
+       VALUES (?, ?, ?, ?)
        ON CONFLICT (sample_id, assay_id) DO NOTHING",
-      params = list(
-        sample_id, assay_id, vol_stained, count_method,
-        vol_resuspended, vol_measured,
-        bead_volume_added, bead_concentration, bead_population_path, stain_date
-      )
+      params = list(sample_id, assay_id, wsp_root, stain_date)
     )
 
     facs_stain_id <- DBI::dbGetQuery(

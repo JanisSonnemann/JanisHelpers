@@ -5,11 +5,25 @@
 #' seed rows. Safe to call repeatedly -- existing tables and data are left
 #' untouched.
 #'
+#' Errors if the file was created by an older schema (one whose
+#' `facs_stains` table has no `wsp_root` column) -- such a file must be
+#' recreated, since `CREATE TABLE IF NOT EXISTS` would silently keep the old
+#' tables.
+#'
 #' @param path Path to the DuckDB database file. Created if it doesn't exist.
 #' @returns A `DBI` connection (class `duckdb_connection`).
 #' @export
 db_connect <- function(path) {
   con <- DBI::dbConnect(duckdb::duckdb(), path)
+  if (DBI::dbExistsTable(con, "facs_stains") &&
+      !"wsp_root" %in% DBI::dbListFields(con, "facs_stains")) {
+    DBI::dbDisconnect(con, shutdown = TRUE)
+    stop(
+      "'", path, "' was created by an older schema (facs_stains has no ",
+      "wsp_root column). Recreate the database file and re-import.",
+      call. = FALSE
+    )
+  }
   create_schema_(con)
   con
 }
@@ -73,15 +87,6 @@ create_schema_ <- function(con) {
     )
   ")
 
-  DBI::dbExecute(con, "
-    CREATE TABLE IF NOT EXISTS sample_digestions (
-      sample_id    INTEGER PRIMARY KEY REFERENCES samples(sample_id),
-      total_weight DOUBLE,
-      facs_weight  DOUBLE,
-      vol_total    DOUBLE
-    )
-  ")
-
   DBI::dbExecute(con, "CREATE SEQUENCE IF NOT EXISTS seq_assays START 1")
   DBI::dbExecute(con, "
     CREATE TABLE IF NOT EXISTS assays (
@@ -96,27 +101,12 @@ create_schema_ <- function(con) {
   DBI::dbExecute(con, "CREATE SEQUENCE IF NOT EXISTS seq_facs_stains START 1")
   DBI::dbExecute(con, "
     CREATE TABLE IF NOT EXISTS facs_stains (
-      facs_stain_id        INTEGER PRIMARY KEY DEFAULT nextval('seq_facs_stains'),
-      sample_id            INTEGER NOT NULL REFERENCES samples(sample_id),
-      assay_id             INTEGER NOT NULL REFERENCES assays(assay_id),
-      vol_stained          DOUBLE,
-      count_method         VARCHAR NOT NULL CHECK (count_method IN ('volumetric', 'bead')),
-      vol_resuspended      DOUBLE,
-      vol_measured         DOUBLE,
-      bead_volume_added    DOUBLE,
-      bead_concentration   DOUBLE,
-      bead_population_path VARCHAR,
-      stain_date           DATE,
-      UNIQUE(sample_id, assay_id),
-      CHECK (
-        (count_method = 'volumetric'
-          AND vol_resuspended IS NOT NULL AND vol_measured IS NOT NULL
-          AND bead_volume_added IS NULL AND bead_concentration IS NULL)
-        OR
-        (count_method = 'bead'
-          AND bead_volume_added IS NOT NULL AND bead_concentration IS NOT NULL
-          AND vol_resuspended IS NULL AND vol_measured IS NULL)
-      )
+      facs_stain_id INTEGER PRIMARY KEY DEFAULT nextval('seq_facs_stains'),
+      sample_id     INTEGER NOT NULL REFERENCES samples(sample_id),
+      assay_id      INTEGER NOT NULL REFERENCES assays(assay_id),
+      wsp_root      VARCHAR NOT NULL,
+      stain_date    DATE,
+      UNIQUE(sample_id, assay_id)
     )
   ")
 
@@ -124,7 +114,10 @@ create_schema_ <- function(con) {
   DBI::dbExecute(con, "
     CREATE TABLE IF NOT EXISTS facs_measurements (
       facs_measurement_id  BIGINT PRIMARY KEY DEFAULT nextval('seq_facs_measurements'),
-      facs_stain_id        INTEGER NOT NULL REFERENCES facs_stains(facs_stain_id),
+      -- no FK to facs_stains: DuckDB can't delete a parent row in the same
+      -- transaction as its children, which replacing a root requires.
+      -- See docs/superpowers/specs/2026-11-12-db-schema-import-log-design.md
+      facs_stain_id        INTEGER NOT NULL,
       population_full_path VARCHAR NOT NULL,
       population           VARCHAR NOT NULL,
       metric               VARCHAR NOT NULL,
@@ -164,6 +157,24 @@ create_schema_ <- function(con) {
       source_file          VARCHAR,
       imported_at          TIMESTAMP DEFAULT current_timestamp,
       UNIQUE(sample_id, assay_id, metric)
+    )
+  ")
+
+  DBI::dbExecute(con, "CREATE SEQUENCE IF NOT EXISTS seq_import_log START 1")
+  DBI::dbExecute(con, "
+    CREATE TABLE IF NOT EXISTS import_log (
+      import_id            INTEGER PRIMARY KEY DEFAULT nextval('seq_import_log'),
+      domain_id            INTEGER NOT NULL REFERENCES domains(domain_id),
+      experiment_code      VARCHAR,
+      import_unit          VARCHAR NOT NULL,
+      source_file          VARCHAR NOT NULL,
+      source_version       DATE,
+      qc_report            VARCHAR,
+      qc_passed            BOOLEAN,
+      rows_written         INTEGER NOT NULL,
+      package_version      VARCHAR NOT NULL,
+      supersedes_import_id INTEGER REFERENCES import_log(import_id),
+      imported_at          TIMESTAMP NOT NULL DEFAULT current_timestamp
     )
   ")
 

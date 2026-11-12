@@ -87,24 +87,21 @@ db_write_subjects <- function(con, data) {
 
 #' Register samples (subject x tissue harvests)
 #'
-#' Bulk-inserts sample rows, and -- for tissue that went through FACS
-#' dissociation -- the matching `sample_digestions` row. `data` must already
-#' be shaped with one row per subject x tissue, referencing subjects already
-#' registered via [db_write_subjects()]. Errors if any row's `mouse_id` isn't
-#' registered yet -- naming every unresolved `mouse_id` -- rather than
-#' silently dropping those rows.
+#' Bulk-inserts sample rows. `data` must already be shaped with one row per
+#' subject x tissue, referencing subjects already registered via
+#' [db_write_subjects()]. Errors if any row's `mouse_id` isn't registered yet
+#' -- naming every unresolved `mouse_id` -- rather than silently dropping
+#' those rows. Organ weights and volumes are not stored (they are calculation
+#' inputs for the FACS export script); such columns in `data` are ignored.
 #'
 #' @param con A `DBI` connection from [db_connect()].
 #' @param data A tibble with columns `mouse_id`, `tissue`, and optionally
-#'   `collected_at`, `total_weight`, `facs_weight`, `vol_total`. The three
-#'   weight/volume columns are only written to `sample_digestions` for rows
-#'   where at least one of them is non-`NA`.
+#'   `collected_at`. Other columns are ignored.
 #' @returns Invisibly, the number of rows inserted into `samples`.
 #' @export
 db_write_samples <- function(con, data) {
-  data <- fill_missing_cols_(data, c(
-    "mouse_id", "tissue", "collected_at", "total_weight", "facs_weight", "vol_total"
-  ))
+  data <- fill_missing_cols_(data, c("mouse_id", "tissue", "collected_at"))
+  data <- data[c("mouse_id", "tissue", "collected_at")]
   duckdb::duckdb_register(con, "tmp_samples", data)
   on.exit(duckdb::duckdb_unregister(con, "tmp_samples"), add = TRUE)
 
@@ -122,27 +119,13 @@ db_write_samples <- function(con, data) {
     )
   }
 
-  n <- DBI::dbWithTransaction(con, {
-    n_samples <- DBI::dbExecute(con, "
-      INSERT INTO samples (subject_id, tissue, collected_at)
-      SELECT sub.subject_id, t.tissue, CAST(t.collected_at AS DATE)
-      FROM tmp_samples t
-      JOIN subjects sub ON sub.mouse_id = t.mouse_id
-      ON CONFLICT (subject_id, tissue) DO NOTHING
-    ")
-
-    DBI::dbExecute(con, "
-      INSERT INTO sample_digestions (sample_id, total_weight, facs_weight, vol_total)
-      SELECT sm.sample_id, t.total_weight, t.facs_weight, t.vol_total
-      FROM tmp_samples t
-      JOIN subjects sub ON sub.mouse_id = t.mouse_id
-      JOIN samples sm ON sm.subject_id = sub.subject_id AND sm.tissue = t.tissue
-      WHERE t.total_weight IS NOT NULL OR t.facs_weight IS NOT NULL OR t.vol_total IS NOT NULL
-      ON CONFLICT (sample_id) DO NOTHING
-    ")
-
-    n_samples
-  })
+  n <- DBI::dbExecute(con, "
+    INSERT INTO samples (subject_id, tissue, collected_at)
+    SELECT sub.subject_id, t.tissue, CAST(t.collected_at AS DATE)
+    FROM tmp_samples t
+    JOIN subjects sub ON sub.mouse_id = t.mouse_id
+    ON CONFLICT (subject_id, tissue) DO NOTHING
+  ")
 
   invisible(n)
 }

@@ -67,7 +67,7 @@ test_that("db_write_subjects errors clearly on an unknown experiment_code", {
   expect_equal(nrow(row), 0)
 })
 
-test_that("db_write_samples inserts samples and digestions where weights are given", {
+test_that("db_write_samples inserts samples and ignores weight columns", {
   con <- local_test_db()
   db_write_experiment(con, experiment_code = "25-7")
   db_write_subjects(con, tibble::tibble(mouse_id = "25-7-1", experiment_code = "25-7"))
@@ -81,12 +81,10 @@ test_that("db_write_samples inserts samples and digestions where weights are giv
   ))
   expect_equal(n, 2)
 
-  digestions <- DBI::dbGetQuery(con, "
-    SELECT sm.tissue, d.total_weight
-    FROM sample_digestions d JOIN samples sm ON sm.sample_id = d.sample_id
-  ")
-  expect_equal(digestions$tissue, "spleen")
-  expect_equal(digestions$total_weight, 0.12)
+  samples <- DBI::dbGetQuery(con, "SELECT tissue FROM samples ORDER BY tissue")
+  expect_equal(samples$tissue, c("serum", "spleen"))
+  expect_false(any(c("total_weight", "facs_weight", "vol_total") %in%
+    DBI::dbListFields(con, "samples")))
 })
 
 test_that("db_write_samples is idempotent", {

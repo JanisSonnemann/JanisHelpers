@@ -8,13 +8,14 @@ test_that("db_query_facs returns a flat tibble keyed by natural keys", {
       metric = "Count", value = 1000
     ),
     mouse_id = "25-7-1", tissue = "spleen", assay_name = "overview",
-    count_method = "volumetric", vol_stained = 0.1,
-    vol_resuspended = 0.5, vol_measured = 0.05,
-    source_file = "25-7/facs/overview_20261112.wsp"
+    wsp_root = "overview_25-7",
+    source_file = "25-7/facs/overview_25-7_20261112.wsp"
   )
 
   result <- db_query_facs(con) |> dplyr::collect()
 
+  expect_equal(result$wsp_root, "overview_25-7")
+  expect_false("count_method" %in% names(result))
   expect_equal(result$mouse_id, "25-7-1")
   expect_equal(result$experiment_code, "25-7")
   expect_equal(result$tissue, "spleen")

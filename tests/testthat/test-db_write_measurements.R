@@ -1,4 +1,13 @@
-test_that("db_write_facs creates a stain and inserts measurements (volumetric)", {
+overview_wsp_ <- "25-7/facs/overview_25-7_20261112.wsp"
+
+cd4_data_ <- function() {
+  tibble::tibble(
+    PopulationFullPath = "root/Lymphocytes/CD4+", Population = "CD4+",
+    metric = "Count", value = 1000
+  )
+}
+
+test_that("db_write_facs creates a stain with wsp_root and inserts measurements", {
   con <- local_test_db()
   seed_minimal_fixture(con)
 
@@ -12,74 +21,28 @@ test_that("db_write_facs creates a stain and inserts measurements (volumetric)",
   n <- db_write_facs(
     con, facs_data,
     mouse_id = "25-7-1", tissue = "spleen", assay_name = "overview",
-    count_method = "volumetric", vol_stained = 0.1,
-    vol_resuspended = 0.5, vol_measured = 0.05,
-    source_file = "25-7/facs/overview_20261112.wsp"
+    wsp_root = "overview_25-7", source_file = overview_wsp_
   )
   expect_equal(n, 2)
 
   stains <- DBI::dbGetQuery(con, "SELECT * FROM facs_stains")
   expect_equal(nrow(stains), 1)
-  expect_equal(stains$count_method, "volumetric")
+  expect_equal(stains$wsp_root, "overview_25-7")
 
   rows <- DBI::dbGetQuery(con, "SELECT population, value FROM facs_measurements ORDER BY population")
   expect_equal(rows$population, c("CD4+", "CD8+"))
   expect_equal(rows$value, c(1000, 800))
 })
 
-test_that("db_write_facs supports bead counting and rejects mixed fields", {
-  con <- local_test_db()
-  seed_minimal_fixture(con)
-  db_write_assay(con, assay_name = "treg", domain = "facs")
-
-  facs_data <- tibble::tibble(
-    PopulationFullPath = "root/Lymphocytes/CD4+",
-    Population = "CD4+",
-    metric = "Count",
-    value = 1000
-  )
-
-  n <- db_write_facs(
-    con, facs_data,
-    mouse_id = "25-7-1", tissue = "spleen", assay_name = "overview",
-    count_method = "bead", vol_stained = 0.1,
-    bead_volume_added = 0.02, bead_concentration = 5000,
-    source_file = "25-7/facs/overview_20261112.wsp"
-  )
-  expect_equal(n, 1)
-
-  # Uses a different assay ("treg") than the call above, so this is a genuinely
-  # new (sample_id, assay_id) pair -- the facs_stains INSERT is actually
-  # attempted (not skipped by ON CONFLICT DO NOTHING), and the CHECK
-  # constraint rejecting a mixed volumetric/bead field set fires as intended.
-  expect_error(
-    db_write_facs(
-      con, facs_data,
-      mouse_id = "25-7-1", tissue = "spleen", assay_name = "treg",
-      count_method = "bead", vol_stained = 0.1,
-      bead_volume_added = 0.02, bead_concentration = 5000,
-      vol_measured = 0.05,
-      source_file = "25-7/facs/treg_20261112.wsp"
-    )
-  )
-})
-
 test_that("db_write_facs errors clearly when the sample doesn't exist", {
   con <- local_test_db()
   seed_minimal_fixture(con)
 
-  facs_data <- tibble::tibble(
-    PopulationFullPath = "root/Lymphocytes/CD4+", Population = "CD4+",
-    metric = "Count", value = 1000
-  )
-
   expect_error(
     db_write_facs(
-      con, facs_data,
+      con, cd4_data_(),
       mouse_id = "25-7-1", tissue = "kidney", assay_name = "overview",
-      count_method = "volumetric", vol_stained = 0.1,
-      vol_resuspended = 0.5, vol_measured = 0.05,
-      source_file = "25-7/facs/overview_20261112.wsp"
+      wsp_root = "overview_25-7", source_file = overview_wsp_
     ),
     "No sample found"
   )
@@ -89,16 +52,10 @@ test_that("db_write_facs is idempotent", {
   con <- local_test_db()
   seed_minimal_fixture(con)
 
-  facs_data <- tibble::tibble(
-    PopulationFullPath = "root/Lymphocytes/CD4+", Population = "CD4+",
-    metric = "Count", value = 1000
-  )
   args <- list(
-    con = con, data = facs_data,
+    con = con, data = cd4_data_(),
     mouse_id = "25-7-1", tissue = "spleen", assay_name = "overview",
-    count_method = "volumetric", vol_stained = 0.1,
-    vol_resuspended = 0.5, vol_measured = 0.05,
-    source_file = "25-7/facs/overview_20261112.wsp"
+    wsp_root = "overview_25-7", source_file = overview_wsp_
   )
   do.call(db_write_facs, args)
   n <- do.call(db_write_facs, args)
@@ -120,61 +77,37 @@ test_that("db_write_facs rolls back the facs_stains row when the measurements in
     db_write_facs(
       con, bad_facs_data,
       mouse_id = "25-7-1", tissue = "spleen", assay_name = "overview",
-      count_method = "volumetric", vol_stained = 0.1,
-      vol_resuspended = 0.5, vol_measured = 0.05,
-      source_file = "25-7/facs/overview_20261112.wsp"
+      wsp_root = "overview_25-7", source_file = overview_wsp_
     )
   )
 
-  stains <- DBI::dbGetQuery(
-    con,
-    "SELECT fs.* FROM facs_stains fs
-     JOIN samples sm ON sm.sample_id = fs.sample_id
-     JOIN subjects sub ON sub.subject_id = sm.subject_id
-     JOIN assays a ON a.assay_id = fs.assay_id
-     WHERE sub.mouse_id = '25-7-1' AND sm.tissue = 'spleen' AND a.assay_name = 'overview'"
-  )
-  expect_equal(nrow(stains), 0)
-
-  measurements <- DBI::dbGetQuery(con, "SELECT * FROM facs_measurements")
-  expect_equal(nrow(measurements), 0)
+  expect_equal(nrow(DBI::dbGetQuery(con, "SELECT * FROM facs_stains")), 0)
+  expect_equal(nrow(DBI::dbGetQuery(con, "SELECT * FROM facs_measurements")), 0)
 })
 
 test_that("db_write_facs records the .wsp path as source_file, not the FCS filename", {
   con <- local_test_db()
   seed_minimal_fixture(con)
 
-  facs_data <- tibble::tibble(
-    FileName = "spleen_001.fcs",
-    PopulationFullPath = "root/Lymphocytes/CD4+", Population = "CD4+",
-    metric = "Count", value = 1000
-  )
+  facs_data <- dplyr::mutate(cd4_data_(), FileName = "spleen_001.fcs")
   db_write_facs(
     con, facs_data,
     mouse_id = "25-7-1", tissue = "spleen", assay_name = "overview",
-    count_method = "volumetric", vol_stained = 0.1,
-    vol_resuspended = 0.5, vol_measured = 0.05,
-    source_file = "25-7/facs/overview_20261112.wsp"
+    wsp_root = "overview_25-7", source_file = overview_wsp_
   )
 
   rows <- DBI::dbGetQuery(con, "SELECT source_file FROM facs_measurements")
-  expect_equal(rows$source_file, "25-7/facs/overview_20261112.wsp")
+  expect_equal(rows$source_file, overview_wsp_)
 })
 
 test_that("db_write_facs requires a single non-empty source_file and writes nothing otherwise", {
   con <- local_test_db()
   seed_minimal_fixture(con)
 
-  facs_data <- tibble::tibble(
-    FileName = "spleen_001.fcs",
-    PopulationFullPath = "root/Lymphocytes/CD4+", Population = "CD4+",
-    metric = "Count", value = 1000
-  )
   args <- list(
-    con = con, data = facs_data,
+    con = con, data = cd4_data_(),
     mouse_id = "25-7-1", tissue = "spleen", assay_name = "overview",
-    count_method = "volumetric", vol_stained = 0.1,
-    vol_resuspended = 0.5, vol_measured = 0.05
+    wsp_root = "overview_25-7"
   )
 
   expect_error(do.call(db_write_facs, args), "source_file")
@@ -184,6 +117,22 @@ test_that("db_write_facs requires a single non-empty source_file and writes noth
     do.call(db_write_facs, c(args, list(source_file = c("a.wsp", "b.wsp")))),
     "source_file"
   )
+  expect_equal(DBI::dbGetQuery(con, "SELECT COUNT(*) AS n FROM facs_stains")$n, 0)
+})
+
+test_that("db_write_facs requires a single non-empty wsp_root", {
+  con <- local_test_db()
+  seed_minimal_fixture(con)
+
+  args <- list(
+    con = con, data = cd4_data_(),
+    mouse_id = "25-7-1", tissue = "spleen", assay_name = "overview",
+    source_file = overview_wsp_
+  )
+
+  expect_error(do.call(db_write_facs, args), "wsp_root")
+  expect_error(do.call(db_write_facs, c(args, wsp_root = NA_character_)), "wsp_root")
+  expect_error(do.call(db_write_facs, c(args, wsp_root = "")), "wsp_root")
   expect_equal(DBI::dbGetQuery(con, "SELECT COUNT(*) AS n FROM facs_stains")$n, 0)
 })
 

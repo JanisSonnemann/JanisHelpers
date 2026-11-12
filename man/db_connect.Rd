@@ -18,3 +18,9 @@ dimension/fact schema exists, creating any missing tables, sequences, and
 seed rows. Safe to call repeatedly -- existing tables and data are left
 untouched.
 }
+\details{
+Errors if the file was created by an older schema (one whose
+\code{facs_stains} table has no \code{wsp_root} column) -- such a file must be
+recreated, since \verb{CREATE TABLE IF NOT EXISTS} would silently keep the old
+tables.
+}

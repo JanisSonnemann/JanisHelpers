@@ -10,18 +10,16 @@ db_write_samples(con, data)
 \item{con}{A \code{DBI} connection from \code{\link[=db_connect]{db_connect()}}.}
 
 \item{data}{A tibble with columns \code{mouse_id}, \code{tissue}, and optionally
-\code{collected_at}, \code{total_weight}, \code{facs_weight}, \code{vol_total}. The three
-weight/volume columns are only written to \code{sample_digestions} for rows
-where at least one of them is non-\code{NA}.}
+\code{collected_at}. Other columns are ignored.}
 }
 \value{
 Invisibly, the number of rows inserted into \code{samples}.
 }
 \description{
-Bulk-inserts sample rows, and -- for tissue that went through FACS
-dissociation -- the matching \code{sample_digestions} row. \code{data} must already
-be shaped with one row per subject x tissue, referencing subjects already
-registered via \code{\link[=db_write_subjects]{db_write_subjects()}}. Errors if any row's \code{mouse_id} isn't
-registered yet -- naming every unresolved \code{mouse_id} -- rather than
-silently dropping those rows.
+Bulk-inserts sample rows. \code{data} must already be shaped with one row per
+subject x tissue, referencing subjects already registered via
+\code{\link[=db_write_subjects]{db_write_subjects()}}. Errors if any row's \code{mouse_id} isn't registered yet
+-- naming every unresolved \code{mouse_id} -- rather than silently dropping
+those rows. Organ weights and volumes are not stored (they are calculation
+inputs for the FACS export script); such columns in \code{data} are ignored.
 }

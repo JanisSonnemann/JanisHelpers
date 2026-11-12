@@ -10,15 +10,9 @@ db_write_facs(
   mouse_id,
   tissue,
   assay_name,
-  count_method,
-  vol_stained,
-  vol_resuspended = NA_real_,
-  vol_measured = NA_real_,
-  bead_volume_added = NA_real_,
-  bead_concentration = NA_real_,
-  bead_population_path = NA_character_,
-  stain_date = NA,
-  source_file
+  wsp_root,
+  source_file,
+  stain_date = NA
 )
 }
 \arguments{
@@ -37,26 +31,9 @@ via \code{\link[=db_write_samples]{db_write_samples()}}).}
 \item{assay_name}{Character scalar identifying the panel (already
 registered via \code{\link[=db_write_assay]{db_write_assay()}} with \code{domain = "facs"}).}
 
-\item{count_method}{Either \code{"volumetric"} or \code{"bead"}.}
-
-\item{vol_stained}{Numeric scalar, volume of suspension stained.}
-
-\item{vol_resuspended}{Numeric scalar, required when
-\code{count_method = "volumetric"}.}
-
-\item{vol_measured}{Numeric scalar, required when
-\code{count_method = "volumetric"}.}
-
-\item{bead_volume_added}{Numeric scalar, required when
-\code{count_method = "bead"}.}
-
-\item{bead_concentration}{Numeric scalar, required when
-\code{count_method = "bead"}.}
-
-\item{bead_population_path}{Character scalar, required when
-\code{count_method = "bead"}.}
-
-\item{stain_date}{Date scalar, optional.}
+\item{wsp_root}{Character scalar, required -- the workspace root (the
+\code{.wsp} filename without its \verb{_YYYYMMDD} version suffix, e.g.
+\code{"treg_25-7"}). One root = one experiment x one panel.}
 
 \item{source_file}{Character scalar, required -- the FlowJo workspace the
 measurements came from, as a path relative to the lab database's \verb{raw/}
@@ -64,6 +41,8 @@ folder (e.g. \code{"25-7/facs/treg_25-7_20261112.wsp"}). Recorded on every
 measurement row as provenance. The FCS filename is deliberately not used:
 it doesn't identify which workspace version (gates, compensation)
 produced the numbers.}
+
+\item{stain_date}{Date scalar, optional.}
 }
 \value{
 Invisibly, the number of measurement rows inserted.
@@ -71,9 +50,8 @@ Invisibly, the number of measurement rows inserted.
 \description{
 Writes one staining event's tidy long measurements (as produced by
 \code{facs_import_wsp()}, filtered to a single \code{FileName}) into
-\code{facs_measurements}, creating the matching \code{facs_stains} row first if it
-doesn't already exist. Which of \code{vol_resuspended}/\code{vol_measured} versus
-\code{bead_volume_added}/\code{bead_concentration}/\code{bead_population_path} are
-required depends on \code{count_method}; the database's \code{CHECK} constraint on
-\code{facs_stains} rejects a call that supplies the wrong subset.
+\code{facs_measurements}, creating the matching \code{facs_stains} row (tagged with
+\code{wsp_root}) first if it doesn't already exist. Stain volumes, bead settings
+and organ weights are not stored: they are calculation inputs, used by the
+export script before the data reaches the database.
 }
