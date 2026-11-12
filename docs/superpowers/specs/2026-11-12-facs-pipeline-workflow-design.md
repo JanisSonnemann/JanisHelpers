@@ -25,9 +25,12 @@ re-reading workspaces.
 
 - Every major workspace change is a dated, saved `.wsp` version with a
   changelog entry explaining what changed and why.
-- Every workspace version that goes on to the database has a dated QC report.
-- Exporting to the database is one deliberate, logged step, gated by the
-  user's explicit "QC passed".
+- Every workspace version that goes on to the database has a QC report,
+  rendered from exactly the data that gets exported.
+- Exporting to the database is one deliberate, logged step (the `final`
+  switch in the panel's prep script), which is the user's "QC passed".
+- Excluded samples are dropped only at export, and the database records what
+  was excluded and why.
 - Analysis across experiments = connect, select experiments + populations,
   get one tidy tibble.
 
@@ -36,7 +39,7 @@ re-reading workspaces.
 - Automating the QC decision. The user decides whether QC passed.
 - Keeping multiple versions of the same experiment's data in the database.
 - Automated version comparison as part of the pipeline (it's manual, on
-  demand -- see Stage 2).
+  demand -- see Stages 2 + 3).
 - Analysis-side audit trail (logging calls to `facs_cluster_flowsom()` etc.,
   idea on branch `worktree-facs-roadmap-audit-trail`). Separate effort.
 
@@ -53,14 +56,15 @@ re-reading workspaces.
 FlowJo (.fcs analysed)
    |  major change? -> save dated .wsp + changelog entry        [Stage 1]
    v
-QC report per .wsp version (facs-qc-template.rmd)               [Stage 2]
-   |  (optional, manual) version comparison old vs new
-   |  user decides: QC passed
+Prep script, final <- FALSE  (repeat)                            [Stages 2+3]
+   .wsp -> select populations -> facs_calc_*()   all samples
+   -> save prep result (.rds) -> render QC report (flags exclusions)
+   review -> adjust gates (new .wsp version) / edit exclusions sheet -> rerun
    v
-Export script: .wsp + meta -> raw + calculated metrics -> DB    [Stage 3]
+Prep script, final <- TRUE
+   load saved .rds -> apply exclusions sheet -> DB
    root exists? no -> add; yes -> ask user to overwrite
-   writes import log row (qc_passed, report, .wsp version, time)
-   then dated DB snapshot
+   import log row + exclusion rows, then dated DB snapshot
    v
 Analysis: db_query_facs(experiments, populations) -> analysis_/plot_  [Stage 4]
 ```
@@ -70,7 +74,7 @@ Analysis: db_query_facs(experiments, populations) -> analysis_/plot_  [Stage 4]
 The existing `docs/superpowers/plans/2026-11-12-db-setup.md` (steps 2-7) is
 absorbed as the first stage of this plan, not run in parallel *(my call)*:
 trim CLAUDE.md, fix `db_write_facs()` provenance so `source_file` records the
-`.wsp` (step 3 -- directly needed by Stage 3), fix `db_write_elisa()`, merge
+`.wsp` (step 3 -- directly needed by Stages 2 + 3), fix `db_write_elisa()`, merge
 branch `worktree-db-domain-functions`, create the OneDrive folders, first
 import. Decisions recorded there (DuckDB at `~/lab-db/lab.duckdb`, raw files
 under OneDrive `Forschung/LabDB/raw/<experiment_code>/facs/`, snapshots under
@@ -107,99 +111,50 @@ Left to the builder:
 - Function name within the `facs_` domain (e.g. `facs_diff_wsp()`), how gate
   geometry differences are summarized, and tolerance for float noise.
 
-### Stage 2 -- QC report per workspace version
+### Stages 2 + 3 -- Prep / QC loop and final export
 
-Decided:
-- One dated QC report per workspace version, from a new
-  `facs-qc-template.rmd`.
-- The actual QC checks/functions are supplied later by the user. This stage
-  delivers the **skeleton**: template + parameters + rendering into the
-  right place.
-- After a major change, QC is redone from scratch on the new version.
-- A version comparison (old vs new populations) is **optional and manual**,
-  produced only when the user wants it, as a separate file. Not part of the
-  pipeline.
+Designed in detail in
+`docs/superpowers/specs/2026-11-12-facs-prep-qc-export-design.md`, which
+replaced the earlier separate "QC report" and "export script" stages. In
+short:
 
-Left to the builder:
-- Template under `inst/rmarkdown/templates/facs-qc-template/`, parameterized
-  by `.wsp` path (Rmd `params`), rendered via the existing
-  `report_knit_dated()`/`report_knit_exp()` helpers or a thin `report_`
-  wrapper.
-- Output location -- suggest `raw/<experiment_code>/facs/qc/<YYYY-MM-DD>_qc.html`
-  next to the workspace so Stage 3 can reference it *(my call)*.
-- Placeholder sections for the future checks.
+- One per-panel **prep script**, run interactively, handles the whole loop.
+  It reads the `.wsp`, selects populations and calculates derived values.
+  It saves the result as `.rds` and renders a QC report from it. You rerun
+  it after every gate change.
+- Prep and report show **all** samples. Exclusions live in an `exclusions`
+  sheet of the meta workbook (from a whole mouse down to one `.fcs` file,
+  each with a reason). The report only flags them.
+- `final <- TRUE` in the same script exports the saved `.rds` (no re-read),
+  applies the exclusions and stores them in a new `import_exclusions` table
+  linked to the import's log row.
+- The QC checks themselves are supplied later by the user. A version
+  comparison (old vs new populations) stays optional and manual.
 
-### Stage 3 -- Export to database (logged, overwriting)
+Unchanged from the original Stage 3 decisions (built in
+`2026-11-12-db-schema-import-log-design.md` or carried into the design above):
 
-Decided:
-- The user runs the export manually once satisfied with QC.
-- The user records "QC passed" manually at export time.
-- **Unit = workspace root.** Exporting `treg_26-2_20261120.wsp` concerns
-  exactly the data of root `treg_26-2` -- nothing else. Other roots of the
-  same experiment are untouched. The database never holds two versions of
-  one root.
-- **Existing-entry check.** The export first checks whether data for the
-  root already exists in the database. If not, it adds it. If it does, it
-  **asks the user whether to overwrite**; only on yes is the old data
-  replaced.
-- **Calculations happen in the export, results are stored.** Stain volumes
-  and organ weights are **not** stored in the database. They are read in the
-  export script only, to calculate absolute and derived values. The database
-  receives all raw counts, frequencies (FlowJo statistics) **and** the
-  calculated values (counts per g, % of CD45+ / other reference populations,
-  ratios, ...).
+- **Unit = workspace root.** The database never holds two versions of one
+  root. If the root already exists, the export asks before overwriting
+  (`utils::askYesNo()`); "no" aborts with no changes. The overwrite is one
+  transaction: delete the old stains and measurements, insert the new ones
+  and write the log row.
+- **Calculations happen before export, results are stored.** Volumes and
+  organ weights are calculation inputs and never stored. The database gets raw
+  counts, frequencies and calculated values as extra `metric` rows. Which
+  calculations run is defined per panel in the script.
 - FCS file -> mouse/tissue/panel mapping comes from the workspace keywords
-  `mouse_ID`, `tissue`, `panel` (panel = assay).
-- Logging with timestamp etc. is required.
-
-Consequence for the schema (on the unmerged `db_` branch): the volume /
-count-method / bead columns on `facs_stains`, its cross-field `CHECK`, and
-the `sample_digestions` table are no longer needed for FACS, and
-`db_write_facs()` loses those arguments. Calculated values are stored as
-additional `metric` rows in `facs_measurements`.
-
-Proposed *(my calls)*:
-- Export = a per-panel **plain R script** (decided: run by the user
-  interactively in R, never knitted), copied from a template and adapted. It
-  reads the `.wsp` with
-  `facs_read_wsp()`, reads the meta workbook with `meta_read()`/`meta_clean()`,
-  calculates derived values with the `facs_calc_*()` functions, then hands one
-  long tibble (raw + calculated metrics) to a package export function (e.g.
-  `db_export_facs()` -- name to settle in its design). Which calculations
-  are done is defined per panel in the script, not in the package.
-- The package export function takes `qc_passed = TRUE` (refuses otherwise),
-  the QC report path and the `.wsp` path. If the root already exists it
-  prompts (e.g. `utils::askYesNo()`); "no" aborts without changes.
-- Naming of calculated metrics (e.g. `"CountPerG"`, `"PctOf_CD45+"`,
-  `"Ratio_CD4_CD8"`) follows one documented convention, settled in the Stage 3
-  design.
-- Experiment, subjects and samples must already be registered; the export
-  errors listing every unresolved `mouse_ID` x `tissue` / panel (same pattern
-  as `db_write_samples()`), it does not create them.
-- The root has to be stored with the data so it can be found/deleted by root
-  (e.g. a `wsp_root` column on `facs_stains`) -- schema addition.
-- Overwrite happens in **one transaction**: delete the root's existing
-  `facs_measurements` and `facs_stains` rows, insert the new ones, write the
-  log row -- all or nothing.
-- A correction of a volume or weight goes through the same re-export of the
-  current `.wsp` (recalculates, prompts to overwrite) -- no separate path.
-- All schema changes (drop volume columns / `sample_digestions`, add
-  `wsp_root`, add `import_log`) are made on the `db_` branch **before the
-  first real import** (db-setup step 6), so no data migration is needed.
-- No hard check that the QC report matches the `.wsp` (avoid ceremony), but
-  the export **warns** if a newer dated version of the same root exists on
-  disk, and the log records both paths.
-- **Import log table** (new, e.g. `import_log`), one row per export, kept
-  even after the data it describes is overwritten: workspace root,
-  experiment, domain, `.wsp` file + version date, QC report path,
-  `qc_passed`, exported_at, JanisHelpers package version, rows written, and
-  the id of the log row it superseded (previous export of the same root).
-  Requires a schema addition to the DuckDB design.
-- After a successful export, take the dated `EXPORT DATABASE` snapshot already
-  described in the db-setup plan.
-
-Left to the builder: exact log columns, whether the log also covers ELISA/
-histo imports (suggest yes, `domain` column), how FCS files map to stains.
+  `mouse_ID`, `tissue`, `panel`. Experiment and subjects must already be
+  registered.
+- **Import log** (`import_log`): one row per export, kept after overwrite,
+  with root, `.wsp` file + version date, QC report path, `qc_passed`,
+  timestamp, package version, rows written and the superseded log id.
+- The export warns if a newer dated `.wsp` of the same root exists on disk.
+  There's no hard check that the report matches the `.wsp` beyond the prep
+  staleness check.
+- A volume or weight correction goes through the same loop: rerun prep, then
+  export with `final <- TRUE`.
+- A dated `EXPORT DATABASE` snapshot follows each export.
 
 ### Stage 4 -- Analysis from the database
 
@@ -231,7 +186,6 @@ joined in, and one consistent column naming (CamelCase from
 
 ## Order
 
-Stage 0 -> 1 -> 2 -> 3 -> 4. Stages 1 and 2 are independent of the database
-and could run before or alongside Stage 0; Stage 3 needs Stage 0 merged and
-the Stage 2 report location fixed. Each stage gets its own design + plan
-when picked up.
+Stage 0 -> 1 -> 2+3 -> 4. Stage 1 is independent of the database and could
+run before or alongside Stage 0; Stages 2+3 need Stage 0 merged. Each stage
+gets its own design + planwhen picked up.

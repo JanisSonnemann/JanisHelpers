@@ -7,7 +7,8 @@ Branch / worktree: `worktree-facs-pipeline-workflow`
 experiment. Analysis starts with a query, not with re-reading workspaces.
 
 ```
-FlowJo -> dated .wsp + changelog -> QC report -> export (log, overwrite) -> DB -> analysis
+FlowJo -> dated .wsp + changelog -> prep script (calc, QC report; repeat)
+       -> final <- TRUE: apply exclusions, export (log, overwrite) -> DB -> analysis
 ```
 
 ## Key rules
@@ -16,11 +17,16 @@ FlowJo -> dated .wsp + changelog -> QC report -> export (log, overwrite) -> DB -
   The root (`treg_26-2`) = panel/experiment; the date = version.
 - Major change (compensation, gates across samples) -> save a new dated
   `.wsp` + write the changelog entry.
-- Every version gets a dated QC report. You decide when QC passes.
-- Export = manual, records `qc_passed`. Root not in DB -> added; root already
-  in DB -> **asks you whether to overwrite**. Writes an import log row, then
-  takes a DB snapshot.
-- Stain volumes / organ weights stay **out** of the DB: the export script uses
+- One prep script per panel: read `.wsp`, select populations, calculate,
+  save `.rds`, render the QC report. Rerun after each gate change.
+- Prep and report show **all** samples. Exclusions go in the meta workbook's
+  `exclusions` sheet (whole mouse down to one `.fcs`, with a reason); the
+  report only flags them.
+- `final <- TRUE` = QC passed: exports the saved `.rds`, applies exclusions and
+  stores them in the DB. Root not in DB -> added; root already in DB ->
+  **asks you whether to overwrite**. Writes an import log row, then takes a
+  DB snapshot.
+- Stain volumes / organ weights stay **out** of the DB: the prep script uses
   them to calculate values. DB gets raw counts, frequencies **and** calculated
   values (per g, % of CD45+, ratios, ...).
 - DB holds one version per root, never more. The log keeps the history.
@@ -35,26 +41,25 @@ FlowJo -> dated .wsp + changelog -> QC report -> export (log, overwrite) -> DB -
 - [ ] **1. Workspace versioning** -- filename convention, per-experiment
       changelog `.md`, `facs_` function that diffs two `.wsp` versions
       (compensation + gates) and drafts the changelog entry
-- [ ] **2. QC report skeleton** -- `facs-qc-template.rmd` (params: `.wsp`
-      path), dated render next to the workspace. QC checks added later.
-- [ ] **3. Export to DB** -- per-panel R export script template, run
-      interactively (read `.wsp` +
-      meta, calculate with `facs_calc_*()`) + package export function: gated
-      on `qc_passed`, check root exists -> add or ask to overwrite (one
-      transaction), `import_log`, warn if newer `.wsp` version exists
+- [ ] **2+3. Prep / QC loop + final export** -- design:
+      `2026-11-12-facs-prep-qc-export-design.md`. Exclusion matching, prep
+      `.rds` save/load, `facs-qc-template` + `report_` wrapper, `db_` export
+      (overwrite prompt, one transaction, `import_log`, new
+      `import_exclusions` table), prep script template; rework the 26-1
+      scripts into `facs_prep_26-1_<panel>.R`. QC checks added later.
 - [ ] **4. Analysis queries** -- `db_query_facs()` with experiment /
       population / metric selection, metadata joined, ready for `analysis_`/`plot_`
 
-Order: 0 -> 1 -> 2 -> 3 -> 4 (1 and 2 don't need the DB and can run earlier).
+Order: 0 -> 1 -> 2+3 -> 4 (1 doesn't need the DB and can run earlier).
 Each stage gets its own design + plan when started.
 
 ## Open issues
 
 - [ ] **Population-name harmonization** (parked): same population, different
-      gate names across experiments -- fix in export script or via a lookup
+      gate names across experiments -- fix in prep script or via a lookup
       table in the DB? Needed for cross-experiment comparisons in Stage 4.
 - [ ] **Calculations per panel** -- which reference populations / ratios;
-      you define them in each panel's export script.
+      you define them in each panel's prep script.
 - [ ] **QC checks** -- user to supply functions/analyses for the template.
 - [ ] **Version comparison** -- manual, on demand only; format undecided.
 - [ ] **Old `MPOmRNA.db` migration** (db-setup step 7).
@@ -63,10 +68,15 @@ Each stage gets its own design + plan when started.
 ## Calls made without you (check when convenient)
 
 - DB setup plan absorbed as Stage 0.
-- QC reports saved next to the workspace (`.../facs/qc/<date>_qc.html`).
+- Prep result in `<exp>/processed/facs/<wsp>_prep.rds`, QC report in
+  `<exp>/qc/facs/<wsp>_qc.html` (one per `.wsp` version, overwritten on rerun).
+- `final <- TRUE` exports the saved `.rds` without re-reading; refuses if it's
+  older than the `.wsp`. No separate QC prompt.
+- Exclusion rows need a reason; an applicable row matching no file stops the
+  export (only a warning in the report).
 - Export requires subjects/samples already registered (errors, doesn't create).
-- Export = a copyable per-panel R script template (run interactively) + one
-  package export function; the script decides which calculations run.
+- Prep script = a copyable per-panel R template (run interactively) + package
+  helpers; the script decides which calculations run.
 - Calculated values stored as extra `metric` rows with one naming convention.
 - Volume/weight fixes go through the same re-export.
 - Schema changes done before the first real import (no migration).
