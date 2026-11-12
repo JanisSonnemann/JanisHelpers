@@ -1,0 +1,5 @@
+name: FACS QC report
+description: >
+  QC report for one FlowJo workspace version, rendered from the prep result
+  saved by facs_prep_save(). Render with report_knit_facs_qc().
+create_dir: FALSE

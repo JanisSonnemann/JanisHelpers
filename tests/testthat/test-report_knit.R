@@ -74,3 +74,42 @@ test_that("report_knit_wide injects an html_document format object", {
 
   expect_true(inherits(captured$output_format, "rmarkdown_output_format"))
 })
+
+# -- report_knit_facs_qc ------------------------------------------------------
+
+test_that("report_knit_facs_qc renders into qc/ and flags exclusions", {
+  skip_if_not(rmarkdown::pandoc_available())
+  d <- local_prep_dirs()
+  files <- tibble::tibble(file_name = c("a.fcs", "b.fcs"),
+                          mouse_ID = c("25-7-1", "25-7-2"), tissue = "spleen")
+  prep <- suppressMessages(
+    facs_prep_save(fake_prep_data(files), d$wsp_path, "overview", d$panel_dir)
+  )
+  ex <- tibble::tibble(
+    mouse_ID = c("25-7-2", "25-7-9"), reason = c("clots", "typo-mouse")
+  )
+  out <- report_knit_facs_qc(prep, exclusions = ex)
+  expect_equal(
+    normalizePath(out),
+    normalizePath(file.path(d$panel_dir, "qc", "overview_25-7_20261101_qc.html"))
+  )
+  html <- paste(readLines(out, warn = FALSE), collapse = "\n")
+  expect_match(html, "b.fcs")
+  expect_match(html, "clots")
+  expect_match(html, "match no file")
+  expect_match(html, "typo-mouse")
+})
+
+test_that("report_knit_facs_qc renders without exclusions and shows clashes", {
+  skip_if_not(rmarkdown::pandoc_available())
+  d <- local_prep_dirs()
+  files <- tibble::tibble(file_name = c("a.fcs", "b.fcs"),
+                          mouse_ID = "25-7-1", tissue = "spleen")
+  prep <- suppressWarnings(suppressMessages(
+    facs_prep_save(fake_prep_data(files), d$wsp_path, "overview", d$panel_dir)
+  ))
+  out <- report_knit_facs_qc(prep)
+  html <- paste(readLines(out, warn = FALSE), collapse = "\n")
+  expect_match(html, "share one mouse_ID")
+  expect_match(html, "QC checks")
+})

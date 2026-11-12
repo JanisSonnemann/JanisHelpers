@@ -94,3 +94,46 @@ report_knit_wide <- function(input, ...) {
     ...
   )
 }
+
+
+#' Render the FACS QC report for one prep result
+#'
+#' Renders the `facs-qc-template` from a prep result saved by
+#' [facs_prep_save()] into the `qc/` folder beside its `processed/` folder:
+#' `<panel_dir>/qc/<wsp name>_qc.html` (one per workspace version, overwritten
+#' on rerun). The report lists every file, flags files hit by the exclusions
+#' sheet, warns about keyword clashes and exclusion rows that match no file,
+#' and has placeholder sections for QC checks.
+#'
+#' @param prep_path Path to the prep `.rds` returned by [facs_prep_save()].
+#' @param exclusions Optional tibble -- the `exclusions` sheet of the meta
+#'   workbook (e.g. `meta_read(path)$exclusions`), see
+#'   [facs_match_exclusions()]. `NULL` = no exclusions.
+#' @returns The path of the rendered `.html` file.
+#' @examples
+#' \dontrun{
+#' prep_path <- facs_prep_save(data, wsp, "overview", panel_dir)
+#' report_knit_facs_qc(prep_path, meta_read(meta_path)$exclusions)
+#' }
+#' @export
+report_knit_facs_qc <- function(prep_path, exclusions = NULL) {
+  prep_path <- normalizePath(prep_path, mustWork = TRUE)
+  qc_dir <- file.path(dirname(dirname(prep_path)), "qc")
+  dir.create(qc_dir, showWarnings = FALSE)
+  # Intermediates go to a temp dir: knitting on OneDrive is slow and flaky.
+  work_dir <- tempfile("facs_qc_")
+  dir.create(work_dir)
+  on.exit(unlink(work_dir, recursive = TRUE), add = TRUE)
+
+  rmarkdown::render(
+    system.file("rmarkdown", "templates", "facs-qc-template", "skeleton",
+                "skeleton.Rmd", package = "JanisHelpers"),
+    output_dir = qc_dir,
+    output_file = sub("_prep\\.rds$", "_qc.html", basename(prep_path)),
+    params = list(prep = prep_path, exclusions = exclusions),
+    intermediates_dir = work_dir,
+    knit_root_dir = work_dir,
+    envir = new.env(),
+    quiet = TRUE
+  )
+}

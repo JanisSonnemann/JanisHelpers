@@ -1,0 +1,88 @@
+---
+title: "FACS QC report"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+params:
+  prep: ""
+  exclusions: NULL
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+prep <- readRDS(params$prep)
+info <- prep$info
+data <- prep$data
+matched <- JanisHelpers::facs_match_exclusions(data, params$exclusions, info$assay)
+clashes <- JanisHelpers::facs_check_file_clashes(data)
+```
+
+| | |
+|---|---|
+| Workspace | `r basename(info$wsp_path)` |
+| Root / version | `r info$wsp_root` / `r format(info$wsp_version)` |
+| Panel (assay) | `r info$assay` |
+| Prep result created | `r format(info$created_at, "%Y-%m-%d %H:%M")` |
+| JanisHelpers | `r info$package_version` |
+
+All samples are shown. Rows on the exclusions sheet are only flagged here;
+they are dropped at the final export.
+
+## Files
+
+```{r files}
+files <- data |>
+  dplyr::summarise(
+    n_populations = dplyr::n_distinct(population_full_path),
+    .by = c(file_name, mouse_ID, tissue, condition)
+  ) |>
+  dplyr::left_join(
+    dplyr::rename(matched$excluded_files, excluded = reason),
+    by = "file_name"
+  ) |>
+  dplyr::mutate(excluded = dplyr::coalesce(excluded, "")) |>
+  dplyr::arrange(mouse_ID, tissue, condition)
+knitr::kable(files)
+```
+
+## Keyword clashes
+
+```{r clashes, results = "asis"}
+if (nrow(clashes) == 0) {
+  cat("None -- every mouse_ID x tissue x condition comes from one file.\n")
+} else {
+  cat("**Warning: these files share one mouse_ID x tissue x condition.**",
+      "Fix the keywords in FlowJo; the final export refuses until then.\n\n")
+  print(knitr::kable(clashes))
+}
+```
+
+## Exclusions
+
+```{r exclusions, results = "asis"}
+if (nrow(matched$applicable) == 0) {
+  cat("No exclusions apply to this panel.\n")
+} else {
+  print(knitr::kable(matched$applicable))
+}
+if (nrow(matched$unmatched) > 0) {
+  cat("\n\n### Warning: these rows match no file\n\n",
+      "Check for typos -- the final export stops on them.\n\n")
+  print(knitr::kable(matched$unmatched))
+}
+```
+
+## QC checks
+
+### Gating
+
+<!-- add checks -->
+
+### Counts
+
+<!-- add checks -->
+
+### Outliers
+
+<!-- add checks -->
