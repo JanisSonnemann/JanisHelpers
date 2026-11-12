@@ -19,8 +19,8 @@ beforehand by joining a plate-label -> mouse table (e.g. with
 registered via \code{\link[=db_write_assay]{db_write_assay()}} with \code{domain = "elisa"}).}
 
 \item{source_file}{Character scalar, required -- the results file, as a
-path relative to the lab database's \verb{raw/} folder (e.g.
-\code{"25-7/elisa/Results_MPO.xlsx"}). Stored on every row and in the log.}
+path relative to the project's \verb{data/} folder (e.g.
+\code{"25-7_exp/raw/ELISA/Results_MPO.xlsx"}). Stored on every row and in the log.}
 }
 \value{
 Invisibly, the number of rows inserted. Every call also writes one

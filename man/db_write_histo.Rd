@@ -15,8 +15,8 @@ db_write_histo(con, data, assay_name = NA_character_, source_file)
 stain/scoring protocol.}
 
 \item{source_file}{Character scalar, required -- the scores file, as a
-path relative to the lab database's \verb{raw/} folder (e.g.
-\code{"25-7/histo/scores.xlsx"}). Stored on every row and in the log.}
+path relative to the project's \verb{data/} folder (e.g.
+\code{"25-7_exp/raw/histology/scores.xlsx"}). Stored on every row and in the log.}
 }
 \value{
 Invisibly, the number of rows inserted. Every call also writes one

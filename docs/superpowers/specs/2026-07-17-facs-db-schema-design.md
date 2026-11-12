@@ -199,13 +199,13 @@ CREATE TABLE import_log (
   domain_id            INTEGER NOT NULL REFERENCES domains(domain_id),
   experiment_code      VARCHAR,     -- ", "-joined if an ELISA plate spans experiments
   import_unit          VARCHAR NOT NULL,   -- FACS: wsp root; ELISA/histo: file name
-  source_file          VARCHAR NOT NULL,   -- path relative to raw/
+  source_file          VARCHAR NOT NULL,   -- path relative to the project data/ folder
   source_version       DATE,        -- FACS: date from <root>_<YYYYMMDD>.wsp
   qc_report            VARCHAR,     -- FACS only
   qc_passed            BOOLEAN,     -- FACS only
   rows_written         INTEGER NOT NULL,
   package_version      VARCHAR NOT NULL,
-  supersedes_import_id INTEGER REFERENCES import_log(import_id),
+  supersedes_import_id INTEGER,  -- no self-FK: EXPORT DATABASE rejects it; write_import_log_() checks
   imported_at          TIMESTAMP NOT NULL DEFAULT current_timestamp
 );
 ```

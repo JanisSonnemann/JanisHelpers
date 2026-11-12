@@ -36,8 +36,8 @@ registered via \code{\link[=db_write_assay]{db_write_assay()}} with \code{domain
 \code{"treg_25-7"}). One root = one experiment x one panel.}
 
 \item{source_file}{Character scalar, required -- the FlowJo workspace the
-measurements came from, as a path relative to the lab database's \verb{raw/}
-folder (e.g. \code{"25-7/facs/treg_25-7_20261112.wsp"}). Recorded on every
+measurements came from, as a path relative to the project's \verb{data/}
+folder (e.g. \code{"25-7_exp/raw/FACS/treg_25-7_20261112.wsp"}). Recorded on every
 measurement row as provenance. The FCS filename is deliberately not used:
 it doesn't identify which workspace version (gates, compensation)
 produced the numbers.}

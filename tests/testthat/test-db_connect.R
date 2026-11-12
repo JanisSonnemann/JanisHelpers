@@ -49,6 +49,18 @@ test_that("db_connect errors on a file created by the old schema", {
   expect_error(db_connect(path), "older schema")
 })
 
+test_that("a database with data can be snapshotted with EXPORT DATABASE", {
+  con <- local_test_db()
+  seed_minimal_fixture(con)
+  out <- tempfile("snapshot")
+  withr::defer(unlink(out, recursive = TRUE))
+
+  DBI::dbExecute(con, sprintf("EXPORT DATABASE '%s' (FORMAT PARQUET)", out))
+
+  expect_true(file.exists(file.path(out, "schema.sql")))
+  expect_true(file.exists(file.path(out, "import_log.parquet")))
+})
+
 test_that("a root's measurements and stains can be replaced in one transaction", {
   # Mirrors what the Stage 3 export will do in ONE transaction (DuckDB does
   # not nest transactions, so it can't wrap db_write_facs() calls): delete

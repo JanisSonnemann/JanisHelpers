@@ -222,8 +222,8 @@ lookup_assay_id_ <- function(con, assay_name, domain) {
 #'   `.wsp` filename without its `_YYYYMMDD` version suffix, e.g.
 #'   `"treg_25-7"`). One root = one experiment x one panel.
 #' @param source_file Character scalar, required -- the FlowJo workspace the
-#'   measurements came from, as a path relative to the lab database's `raw/`
-#'   folder (e.g. `"25-7/facs/treg_25-7_20261112.wsp"`). Recorded on every
+#'   measurements came from, as a path relative to the project's `data/`
+#'   folder (e.g. `"25-7_exp/raw/FACS/treg_25-7_20261112.wsp"`). Recorded on every
 #'   measurement row as provenance. The FCS filename is deliberately not used:
 #'   it doesn't identify which workspace version (gates, compensation)
 #'   produced the numbers.
@@ -238,7 +238,7 @@ db_write_facs <- function(con, data, mouse_id, tissue, assay_name, wsp_root,
   )
   check_string_arg_(
     if (missing(source_file)) NULL else source_file, "source_file",
-    "the .wsp path relative to raw/ (e.g. \"25-7/facs/treg_25-7_20261112.wsp\")"
+    "the .wsp path relative to data/ (e.g. \"25-7_exp/raw/FACS/treg_25-7_20261112.wsp\")"
   )
   check_facs_data_(data)
 
@@ -312,8 +312,8 @@ db_write_facs <- function(con, data, mouse_id, tissue, assay_name, wsp_root,
 #' @param assay_name Character scalar identifying the assay/panel (already
 #'   registered via [db_write_assay()] with `domain = "elisa"`).
 #' @param source_file Character scalar, required -- the results file, as a
-#'   path relative to the lab database's `raw/` folder (e.g.
-#'   `"25-7/elisa/Results_MPO.xlsx"`). Stored on every row and in the log.
+#'   path relative to the project's `data/` folder (e.g.
+#'   `"25-7_exp/raw/ELISA/Results_MPO.xlsx"`). Stored on every row and in the log.
 #' @returns Invisibly, the number of rows inserted. Every call also writes one
 #'   `import_log` row (in the same transaction as the data), even when 0 rows
 #'   are inserted because the plate was already imported.
@@ -321,7 +321,7 @@ db_write_facs <- function(con, data, mouse_id, tissue, assay_name, wsp_root,
 db_write_elisa <- function(con, data, assay_name, source_file) {
   check_string_arg_(
     if (missing(source_file)) NULL else source_file, "source_file",
-    "the results file path relative to raw/ (e.g. \"25-7/elisa/Results_MPO.xlsx\")"
+    "the results file path relative to data/ (e.g. \"25-7_exp/raw/ELISA/Results_MPO.xlsx\")"
   )
   check_mouse_tissue_cols_(data, "db_write_elisa")
   if (anyNA(data$sample_id) || anyNA(data$replicate)) {
@@ -392,15 +392,15 @@ db_write_elisa <- function(con, data, assay_name, source_file) {
 #' @param assay_name Character scalar, optional -- identifies the
 #'   stain/scoring protocol.
 #' @param source_file Character scalar, required -- the scores file, as a
-#'   path relative to the lab database's `raw/` folder (e.g.
-#'   `"25-7/histo/scores.xlsx"`). Stored on every row and in the log.
+#'   path relative to the project's `data/` folder (e.g.
+#'   `"25-7_exp/raw/histology/scores.xlsx"`). Stored on every row and in the log.
 #' @returns Invisibly, the number of rows inserted. Every call also writes one
 #'   `import_log` row (in the same transaction as the data).
 #' @export
 db_write_histo <- function(con, data, assay_name = NA_character_, source_file) {
   check_string_arg_(
     if (missing(source_file)) NULL else source_file, "source_file",
-    "the scores file path relative to raw/ (e.g. \"25-7/histo/scores.xlsx\")"
+    "the scores file path relative to data/ (e.g. \"25-7_exp/raw/histology/scores.xlsx\")"
   )
   check_mouse_tissue_cols_(data, "db_write_histo")
   assay_id <- if (!is.na(assay_name)) lookup_assay_id_(con, assay_name, domain = "histo") else NA_integer_

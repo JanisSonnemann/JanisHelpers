@@ -50,3 +50,17 @@ test_that("write_import_log_ links supersedes_import_id", {
   )$supersedes_import_id
   expect_equal(linked, first)
 })
+
+test_that("write_import_log_ errors on a supersedes_import_id that doesn't exist", {
+  con <- local_test_db()
+  expect_error(
+    write_import_log_(
+      con, domain = "facs", experiment_code = "25-7",
+      import_unit = "overview_25-7", rows_written = 1L,
+      source_file = "25-7/facs/overview_25-7_20261120.wsp",
+      supersedes_import_id = 99L
+    ),
+    "supersedes_import_id 99"
+  )
+  expect_equal(DBI::dbGetQuery(con, "SELECT COUNT(*) AS n FROM import_log")$n, 0)
+})

@@ -173,7 +173,10 @@ create_schema_ <- function(con) {
       qc_passed            BOOLEAN,
       rows_written         INTEGER NOT NULL,
       package_version      VARCHAR NOT NULL,
-      supersedes_import_id INTEGER REFERENCES import_log(import_id),
+      -- no REFERENCES import_log(import_id): DuckDB's EXPORT DATABASE (the
+      -- snapshot) rejects self-referencing foreign keys. write_import_log_()
+      -- checks the referenced row exists instead.
+      supersedes_import_id INTEGER,
       imported_at          TIMESTAMP NOT NULL DEFAULT current_timestamp
     )
   ")

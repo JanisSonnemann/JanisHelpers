@@ -36,6 +36,21 @@ write_import_log_ <- function(con, domain, experiment_code, import_unit,
   if (length(domain_id) != 1) {
     stop("Unknown domain '", domain, "'.", call. = FALSE)
   }
+  # Stands in for a self-referencing foreign key, which DuckDB's
+  # EXPORT DATABASE can't handle.
+  if (!is.na(supersedes_import_id)) {
+    found <- DBI::dbGetQuery(
+      con, "SELECT COUNT(*) AS n FROM import_log WHERE import_id = ?",
+      params = list(as.integer(supersedes_import_id))
+    )$n
+    if (found == 0) {
+      stop(
+        "supersedes_import_id ", supersedes_import_id,
+        " doesn't match any import_log row.",
+        call. = FALSE
+      )
+    }
+  }
 
   DBI::dbGetQuery(con, "
     INSERT INTO import_log (
