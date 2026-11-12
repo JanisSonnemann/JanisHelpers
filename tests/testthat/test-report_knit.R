@@ -100,6 +100,19 @@ test_that("report_knit_facs_qc renders into qc/ and flags exclusions", {
   expect_match(html, "typo-mouse")
 })
 
+test_that("report_knit_facs_qc lists exclusion rows for other panels", {
+  skip_if_not(rmarkdown::pandoc_available())
+  d <- local_prep_dirs()
+  files <- tibble::tibble(file_name = "a.fcs", mouse_ID = "25-7-1", tissue = "spleen")
+  prep <- suppressMessages(
+    facs_prep_save(fake_prep_data(files), d$wsp_path, "overview", d$panel_dir)
+  )
+  ex <- tibble::tibble(mouse_ID = "25-7-1", panel = "Overvew", reason = "typo-panel")
+  html <- paste(readLines(report_knit_facs_qc(prep, ex), warn = FALSE), collapse = "\n")
+  expect_match(html, "other panels")
+  expect_match(html, "Overvew")
+})
+
 test_that("report_knit_facs_qc renders without exclusions and shows clashes", {
   skip_if_not(rmarkdown::pandoc_available())
   d <- local_prep_dirs()

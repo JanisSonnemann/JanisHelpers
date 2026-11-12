@@ -95,7 +95,7 @@ facs_match_exclusions <- function(data, exclusions, panel) {
 
   applicable <- dplyr::mutate(ex, n_files_matched = lengths(hits))
   excluded_files <- tibble::tibble(
-    file_name = unlist(hits),
+    file_name = as.character(unlist(hits)),
     reason = rep(ex$reason, lengths(hits))
   ) |>
     dplyr::summarise(reason = paste(unique(reason), collapse = "; "), .by = file_name)

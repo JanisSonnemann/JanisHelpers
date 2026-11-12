@@ -42,7 +42,9 @@ format_rows_ <- function(x) {
 #' @param data_dir The project's `data/` folder; `source_file` and
 #'   `qc_report` are stored relative to it.
 #' @param overwrite `NULL` (default) asks interactively when the root already
-#'   exists; `TRUE` / `FALSE` answers without asking.
+#'   exists (default answer "no"; errors in a non-interactive session);
+#'   `TRUE` / `FALSE` answers without asking. Exclusion rows naming a panel
+#'   that is neither this one nor a registered FACS assay stop the export.
 #' @returns Invisibly, the new `import_id`, or `NULL` if the overwrite was
 #'   declined.
 #' @examples
@@ -67,6 +69,25 @@ db_export_facs <- function(con, prep, exclusions = NULL, data_dir = "data",
       "written.\n", format_rows_(clashes),
       call. = FALSE
     )
+  }
+
+  # A mistyped panel (e.g. "Treg" for assay "treg") would be ignored by every
+  # export, so unknown panel names stop here.
+  if (!is.null(exclusions) && "panel" %in% names(exclusions)) {
+    known <- c(info$assay, DBI::dbGetQuery(con, "
+      SELECT a.assay_name FROM assays a
+      JOIN domains d ON d.domain_id = a.domain_id
+      WHERE d.domain_name = 'facs'")$assay_name)
+    panels <- unique(stats::na.omit(as.character(exclusions$panel)))
+    unknown <- setdiff(panels[panels != ""], known)
+    if (length(unknown) > 0) {
+      stop(
+        "The exclusions sheet names unknown panel(s): ",
+        paste0("'", unknown, "'", collapse = ", "), ". Known FACS panels: ",
+        paste(unique(known), collapse = ", "), ". Nothing was written.",
+        call. = FALSE
+      )
+    }
   }
 
   matched <- facs_match_exclusions(prep$data, exclusions, info$assay)
@@ -106,11 +127,18 @@ db_export_facs <- function(con, prep, exclusions = NULL, data_dir = "data",
     WHERE fs.wsp_root = ?", params = list(root))
   if (nrow(existing) > 0) {
     if (is.null(overwrite)) {
+      if (!interactive()) {
+        stop(
+          "Root '", root, "' is already in the database and this session ",
+          "can't ask -- pass overwrite = TRUE or FALSE.",
+          call. = FALSE
+        )
+      }
       overwrite <- utils::askYesNo(paste0(
         "Root '", root, "' is already in the database (from ",
         paste(stats::na.omit(existing$source_file), collapse = ", "),
         "). Overwrite?"
-      ))
+      ), default = FALSE)
     }
     if (!isTRUE(overwrite)) {
       message("Not exported -- nothing changed.")

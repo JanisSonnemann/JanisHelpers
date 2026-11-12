@@ -66,6 +66,16 @@ if (nrow(matched$applicable) == 0) {
 } else {
   print(knitr::kable(matched$applicable))
 }
+ex <- params$exclusions
+if (!is.null(ex) && nrow(ex) > 0 && "panel" %in% names(ex)) {
+  other <- ex[!is.na(ex$panel) & as.character(ex$panel) != info$assay, ]
+  if (nrow(other) > 0) {
+    cat("\n\n### Rows for other panels (ignored here)\n\n",
+        "Check the panel name if one of these was meant for '", info$assay,
+        "'.\n\n", sep = "")
+    print(knitr::kable(other))
+  }
+}
 if (nrow(matched$unmatched) > 0) {
   cat("\n\n### Warning: these rows match no file\n\n",
       "Check for typos -- the final export stops on them.\n\n")

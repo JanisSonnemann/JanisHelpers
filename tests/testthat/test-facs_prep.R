@@ -115,6 +115,14 @@ test_that("facs_prep_load stops when the rds or report is missing", {
   expect_error(facs_prep_load(d$wsp_path, d$panel_dir), "final <- FALSE")
 })
 
+test_that("facs_prep_load stops when the report is older than the rds", {
+  # e.g. prep saved, then rendering the report failed: the old report stays
+  d <- local_prep_dirs()
+  prep <- local_loaded_prep(d, two_files)
+  Sys.setFileTime(prep$paths$qc, Sys.time() - 600)
+  expect_error(facs_prep_load(d$wsp_path, d$panel_dir), "report")
+})
+
 test_that("facs_prep_load stops when the wsp is newer than the rds", {
   d <- local_prep_dirs()
   local_loaded_prep(d, two_files)

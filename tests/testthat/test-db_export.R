@@ -181,3 +181,28 @@ test_that("warns when a newer dated wsp of the root exists on disk", {
     "newer"
   )
 })
+
+test_that("overwrite = NULL outside an interactive session refuses to overwrite", {
+  con <- local_test_db(); seed_export_fixture(con)
+  d <- local_prep_dirs()
+  prep1 <- suppressMessages(local_loaded_prep(d, two_mice))
+  suppressMessages(db_export_facs(con, prep1, data_dir = d$data_dir))
+  prep2 <- second_version(d)
+  expect_error(db_export_facs(con, prep2, data_dir = d$data_dir), "overwrite")
+  expect_equal(n_rows(con, "import_log"), 1)
+})
+
+test_that("an exclusion row naming an unknown panel stops the export", {
+  con <- local_test_db(); seed_export_fixture(con)
+  d <- local_prep_dirs()
+  prep <- suppressMessages(local_loaded_prep(d, two_mice))
+  ex <- tibble::tibble(mouse_ID = "25-7-2", panel = "Overview", reason = "case typo")
+  expect_error(db_export_facs(con, prep, ex, data_dir = d$data_dir), "Overview")
+  expect_equal(n_rows(con, "import_log"), 0)
+  # a registered other FACS panel is fine (row ignored here)
+  db_write_assay(con, "treg", domain = "facs")
+  ex$panel <- "treg"
+  expect_no_error(suppressMessages(
+    db_export_facs(con, prep, ex, data_dir = d$data_dir)
+  ))
+})

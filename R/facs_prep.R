@@ -159,6 +159,13 @@ facs_prep_load <- function(wsp_path, panel_dir) {
       )
     }
   }
+  if (file.mtime(paths$qc) < file.mtime(paths$prep)) {
+    stop(
+      "The QC report is older than the prep result (did rendering fail?) -- ",
+      "rerun the prep script with final <- FALSE and check the report.",
+      call. = FALSE
+    )
+  }
   if (file.mtime(wsp_path) > file.mtime(paths$prep)) {
     stop(
       "'", basename(wsp_path), "' is newer than its prep result -- rerun the ",
