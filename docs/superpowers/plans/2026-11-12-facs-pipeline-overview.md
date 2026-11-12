@@ -42,7 +42,8 @@ FlowJo -> dated .wsp + changelog -> prep script (calc, QC report; repeat)
       changelog `.md`, `facs_` function that diffs two `.wsp` versions
       (compensation + gates) and drafts the changelog entry
 - [ ] **2+3. Prep / QC loop + final export** -- design:
-      `2026-11-12-facs-prep-qc-export-design.md`. Exclusion matching, prep
+      `2026-11-12-facs-prep-qc-export-design.md`, plan:
+      `2026-11-12-facs-prep-qc-export.md`. Exclusion matching, prep
       `.rds` save/load, `facs-qc-template` + `report_` wrapper, `db_` export
       (overwrite prompt, one transaction, `import_log`, new
       `import_exclusions` table), prep script template; rework the 26-1
