@@ -30,8 +30,11 @@ switch (`final <- TRUE`).
 - [x] Prep script template, `.rds` save/load, exclusion matching,
       `db_export_facs()` (overwrite prompt, one transaction, logging).
       Merged at `e15ed9b`. Design / plan: `2026-11-12-facs-prep-qc-export*`.
-- [ ] **QC checks in the report** -- the template is a skeleton; you supply
-      the checks / plots that decide "QC passed".
+- [x] **QC checks in the report** (done 2026-11-13, branch `facs-qc-checks`)
+      -- completeness, gating hierarchy, raw counts, MFI; robust-z outlier
+      labels, per-tissue batch plots, ranked flag table. Design / plan:
+      `2026-11-13-facs-qc-checks*`. Rerun the 26-1 prep scripts with the new
+      QC settings (`group_col`, `batch_col`, `expected_mice`, ...).
 
 ### 2. Workspace versioning
 

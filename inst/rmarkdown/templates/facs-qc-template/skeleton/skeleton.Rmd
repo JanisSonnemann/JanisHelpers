@@ -10,7 +10,10 @@ params:
 ---
 
 ```{r setup, include = FALSE}
-knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+# Plain-resolution figures: retina PNGs of tall facet grids make the
+# self-contained HTML tens of MB.
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE,
+                      fig.retina = 1, dpi = 96)
 prep <- readRDS(params$prep)
 info <- prep$info
 data <- prep$data

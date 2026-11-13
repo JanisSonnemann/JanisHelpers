@@ -210,9 +210,12 @@ plausible real gating issue, i.e. the method catches what it should.
 
 ## Left to the builder
 
-- Exact MAD floor. **Starting values: 0.2 on the logit scale, 0.1 on the
-  log10 scale** (from the prototype above); confirm on overview + Treg after
-  the 50-event rule and document the final values.
+- MAD floor: **final values 0.2 on the logit scale, 0.1 on the log10 scale**
+  (default `mad_floor` of `qc_score_()`). Built version on 26-1 (2026-11-13):
+  Treg 69 flagged values (0.3 / 0.15: 43), top mouse 26-1-2 either way;
+  overview 169 (0.3 / 0.15: 128), top mice the same set. No flags from
+  populations under 50 events. Kept the lower floor -- the ranking keeps the
+  table readable and a screen should rather over-flag.
 - How MFI metrics are recognised by default: metric names starting with
   `median_` (confirmed on the Treg prep).
 - Plot sizing (`fig.height` scaling with number of facets).
