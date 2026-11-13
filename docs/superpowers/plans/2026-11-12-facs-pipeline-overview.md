@@ -1,96 +1,73 @@
 # FACS pipeline -- overview & progress
 
 Full design: `docs/superpowers/specs/2026-11-12-facs-pipeline-workflow-design.md`
-Branch / worktree: `worktree-facs-pipeline-workflow`
+(restructured 2026-11-13: stages reordered, descriptions cut to goals)
 
 **Goal:** one database with only final, QC-approved FACS data for every
 experiment. Analysis starts with a query, not with re-reading workspaces.
 
 ```
 FlowJo -> dated .wsp + changelog -> prep script (calc, QC report; repeat)
-       -> final <- TRUE: apply exclusions, export (log, overwrite) -> DB -> analysis
+       -> final <- TRUE: apply exclusions, export -> DB -> analysis
 ```
 
 ## Key rules
 
-- Workspace name = `<root>_<YYYYMMDD>.wsp`, e.g. `treg_26-2_20261112.wsp`.
-  The root (`treg_26-2`) = panel/experiment; the date = version.
-- Major change (compensation, gates across samples) -> save a new dated
-  `.wsp` + write the changelog entry.
-- One prep script per panel: read `.wsp`, select populations, calculate,
-  save `.rds`, render the QC report. Rerun after each gate change.
-- Prep and report show **all** samples. Exclusions go in the meta workbook's
-  `exclusions` sheet (whole mouse down to one `.fcs`, with a reason); the
-  report only flags them.
-- `final <- TRUE` = QC passed: exports the saved `.rds`, applies exclusions and
-  stores them in the DB. Root not in DB -> added; root already in DB ->
-  **asks you whether to overwrite**. Writes an import log row, then takes a
-  DB snapshot.
-- Stain volumes / organ weights stay **out** of the DB: the prep script uses
-  them to calculate values. DB gets raw counts, frequencies **and** calculated
-  values (per g, % of CD45+, ratios, ...).
-- DB holds one version per root, never more. The log keeps the history.
-- Workspaces carry `mouse_ID`, `tissue`, `panel` keywords -> used for mapping.
+- Workspace name = `<root>_<YYYYMMDD>.wsp` (root = experiment x panel,
+  date = version). DB holds one version per root; `import_log` keeps history.
+- One prep script per panel shows **all** samples; exclusions live in the meta
+  workbook's `exclusions` sheet and are applied only at export.
+- Volumes / organ weights are calculation inputs, not stored. DB gets raw
+  counts, frequencies and calculated values.
 
 ## Stages
 
-- [ ] **0. Finish DB setup** -- steps 2-7 of `2026-11-12-db-setup.md`
-      (trim CLAUDE.md, `.wsp` provenance fix, merge `db_` branch, first import).
-      Before the first import: schema changes from Stage 3 (drop volume
-      columns + `sample_digestions`, add `wsp_root`, add `import_log`).
-- [ ] **1. Workspace versioning** -- filename convention, per-experiment
-      changelog `.md`, `facs_` function that diffs two `.wsp` versions
-      (compensation + gates) and drafts the changelog entry
-- [x] **2+3. Prep / QC loop + final export** (done 2026-11-13, merged to
-      master at `e15ed9b`; installed in the MPO_mRNA renv) -- design:
-      `2026-11-12-facs-prep-qc-export-design.md`, plan:
-      `2026-11-12-facs-prep-qc-export.md`. Exclusion matching, prep
-      `.rds` save/load, `facs-qc-template` + `report_` wrapper, `db_` export
-      (overwrite prompt, one transaction, `import_log`, new
-      `import_exclusions` table), prep script template; rework the 26-1
-      scripts into `facs_prep_26-1_<panel>.R`. QC checks added later.
-- [ ] **4. Analysis queries** -- `db_query_facs()` with experiment /
-      population / metric selection, metadata joined, ready for `analysis_`/`plot_`
+### 1. Prep / QC loop + final export -- built, QC checks missing
 
-### 26-1 status (2026-11-13)
+**Goal:** turn a FlowJo workspace into QC-approved data in the DB with one
+switch (`final <- TRUE`).
 
-- Old `db_import_26-1_{overview,treg,mpo-restim}.R` scripts deleted; the
-  `facs_prep_26-1_<panel>.R` scripts replace them.
-- Treg keyword fixed in FlowJo (`26-1-8_spleen_A09.fcs` had `mouse_ID = 26-1-16`).
-- Spleen and bone marrow need no absolute counts: their `facs_volumes` rows
-  stay blank and `count_per_g` is `NA` for them by design (not a gap).
-- Left before the first import: Treg `.wsp` name, Treg / MPO-Restim
-  population selections, then each script with `final <- TRUE`.
+- [x] Prep script template, `.rds` save/load, exclusion matching,
+      `db_export_facs()` (overwrite prompt, one transaction, logging).
+      Merged at `e15ed9b`. Design / plan: `2026-11-12-facs-prep-qc-export*`.
+- [ ] **QC checks in the report** -- the template is a skeleton; you supply
+      the checks / plots that decide "QC passed".
 
-Order: 0 -> 1 -> 2+3 -> 4 (1 doesn't need the DB and can run earlier).
+### 2. Workspace versioning
+
+**Goal:** every gate or compensation change is traceable -- which `.wsp`
+version is in the DB and what changed between versions.
+
+- [ ] Fix the naming convention and where `.wsp` versions live
+      (suggested: `raw/<experiment_code>/facs/`).
+- [ ] Per-experiment changelog `.md`.
+- [ ] Decide how much to automate: changelog template only, or a `facs_`
+      function that diffs two `.wsp` versions and drafts the entry.
+
+### 3. First data in the DB
+
+**Goal:** a real experiment (26-1) in the DB through the full pipeline, plus
+the old data brought over. (Schema, writers and snapshots already built --
+`2026-11-12-db-setup.md` steps 1-5.)
+
+- [ ] 26-1 import: Treg `.wsp` name, Treg / MPO-Restim population selections,
+      then each `facs_prep_26-1_<panel>.R` with `final <- TRUE`.
+- [ ] ELISA for 26-1 (hand-made wide sheet; needs plate sample -> mouse map).
+- [ ] Migrate old `MPOmRNA.db` (SQLite) into the new schema.
+
+### 4. Analysis
+
+**Goal:** analysis scripts start from a DB query and feed `analysis_` /
+`plot_` directly, also across experiments.
+
+- [ ] `db_query_facs()` with experiment / population / metric selection and
+      metadata joined (currently returns the whole lazy table).
+- [ ] Population-name harmonization across experiments (prep script vs.
+      lookup table in the DB) -- needed for cross-experiment comparisons.
+
 Each stage gets its own design + plan when started.
 
-## Open issues
+## Open questions
 
-- [ ] **Population-name harmonization** (parked): same population, different
-      gate names across experiments -- fix in prep script or via a lookup
-      table in the DB? Needed for cross-experiment comparisons in Stage 4.
-- [ ] **Calculations per panel** -- which reference populations / ratios;
-      you define them in each panel's prep script.
-- [ ] **QC checks** -- user to supply functions/analyses for the template.
-- [ ] **Version comparison** -- manual, on demand only; format undecided.
-- [ ] **Old `MPOmRNA.db` migration** (db-setup step 7).
-- [ ] Where `.wsp` versions live (suggested: `raw/<experiment_code>/facs/`).
-
-## Calls made without you (check when convenient)
-
-- DB setup plan absorbed as Stage 0.
-- Prep result and QC report go into new `processed/` and `qc/` folders in the
-  panel's raw `.fcs` folder, e.g. `raw/FACS/overview/{processed,qc}/` (your
-  call; one per `.wsp` version, overwritten on rerun).
-- `final <- TRUE` exports the saved `.rds` without re-reading; refuses if it's
-  older than the `.wsp`. No separate QC prompt.
-- Exclusion rows need a reason; an applicable row matching no file stops the
-  export (only a warning in the report).
-- Export requires subjects/samples already registered (errors, doesn't create).
-- Prep script = a copyable per-panel R template (run interactively) + package
-  helpers; the script decides which calculations run.
-- Calculated values stored as extra `metric` rows with one naming convention.
-- Volume/weight fixes go through the same re-export.
-- Schema changes done before the first real import (no migration).
-- No hard QC-report <-> `.wsp` match check; only a newer-version warning.
+- Calculations per panel (reference populations, ratios) -- defined by you in
+  each prep script.
