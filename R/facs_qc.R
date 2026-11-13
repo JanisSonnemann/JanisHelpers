@@ -115,6 +115,53 @@ qc_score_ <- function(data, settings, excluded_files = character(),
     dplyr::select(!c(floor, .ref, .n, .med, .mad))
 }
 
+# Batch values as display labels: dates (Date / POSIXct) as "YYYY-MM-DD".
+qc_batch_label_ <- function(x) {
+  if (inherits(x, c("Date", "POSIXt"))) format(x, "%Y-%m-%d") else as.character(x)
+}
+
+# Expected mouse x tissue x condition vs. present. NULL without expected mice.
+qc_completeness_ <- function(data, settings) {
+  if (is.null(settings$expected_mice)) {
+    return(NULL)
+  }
+  expected <- tidyr::expand_grid(
+    mouse_ID = settings$expected_mice,
+    tissue = settings$expected_tissues,
+    condition = sort(unique(data$condition))
+  )
+  present <- dplyr::distinct(data, mouse_ID, tissue, condition)
+  keys <- c("mouse_ID", "tissue", "condition")
+  list(
+    n_expected = nrow(expected),
+    n_present = nrow(dplyr::semi_join(expected, present, by = keys)),
+    missing = expected |>
+      dplyr::anti_join(present, by = keys) |>
+      dplyr::arrange(mouse_ID, tissue, condition)
+  )
+}
+
+# One row per flagged value; mice ranked by the number of distinct
+# tissue x condition x check combinations flagged.
+qc_flag_table_ <- function(scored, settings) {
+  label_of <- function(col) {
+    if (is.null(col)) NA_character_ else qc_batch_label_(scored[[col]])
+  }
+  scored |>
+    dplyr::mutate(group = label_of(settings$group_col),
+                  batch = label_of(settings$batch_col)) |>
+    dplyr::filter(flag) |>
+    dplyr::mutate(
+      score = dplyr::n_distinct(tissue, condition, check),
+      .by = mouse_ID
+    ) |>
+    dplyr::arrange(dplyr::desc(score), mouse_ID, dplyr::desc(abs(z))) |>
+    dplyr::transmute(
+      mouse_ID, score, tissue, condition, group, batch,
+      population = as.character(population), metric, value, z, excluded
+    )
+}
+
 # QC settings of a prep result: the stored `info$qc`, or defaults for a prep
 # saved before QC settings existed (no group / batch column, no expected mice).
 qc_settings_ <- function(prep) {

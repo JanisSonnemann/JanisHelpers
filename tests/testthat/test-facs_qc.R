@@ -114,6 +114,82 @@ test_that("qc_score_ does not score without a group column", {
   expect_false(any(r$flag))
 })
 
+test_that("qc_completeness_ lists missing mouse x tissue", {
+  d <- fake_qc_data()
+  d <- d[d$mouse_ID == "m-1", ]
+  res <- qc_completeness_(d, fake_qc_settings(d, expected_mice = c("m-1", "m-99")))
+  expect_equal(res$missing$mouse_ID, "m-99")
+  expect_equal(res$missing$tissue, "spleen")
+  expect_equal(res$n_expected, 2L)
+  expect_equal(res$n_present, 1L)
+})
+
+test_that("qc_completeness_ counts a missing condition well as missing", {
+  d <- dplyr::bind_rows(
+    dplyr::mutate(fake_qc_data(), condition = "unstim"),
+    dplyr::mutate(fake_qc_data(), condition = "MPO",
+                  file_name = sub(".fcs", "_mpo.fcs", file_name, fixed = TRUE))
+  )
+  d <- d[!(d$mouse_ID == "m-1" & d$condition == "MPO"), ]
+  res <- qc_completeness_(d, fake_qc_settings(d, expected_mice = c("m-1", "m-2")))
+  expect_equal(nrow(res$missing), 1L)
+  expect_equal(res$missing$mouse_ID, "m-1")
+  expect_equal(res$missing$condition, "MPO")
+  expect_equal(res$n_expected, 4L)
+})
+
+test_that("qc_completeness_ returns NULL without expected_mice", {
+  d <- fake_qc_data()
+  expect_null(qc_completeness_(d, fake_qc_settings(d)))
+})
+
+fake_scored <- function(day = as.POSIXct("2026-06-15", tz = "UTC")) {
+  tibble::tibble(
+    mouse_ID = c(rep("m-1", 6), "m-2", "m-2", "m-3"),
+    tissue = c(rep("spleen", 7), "lung", "spleen"),
+    condition = "none",
+    grp = "A",
+    day = day,
+    population = c("a", "b", "c", "a", "b", "c", "a", "a", "a"),
+    metric = c(rep("fraction_of_parent", 3), rep("count", 3),
+               "fraction_of_parent", "fraction_of_parent", "count"),
+    check = c(rep("hierarchy", 3), rep("counts", 3), "hierarchy", "hierarchy",
+              "counts"),
+    value = 1,
+    z = c(4, -5, 6, 4, 4, 4, 9, -4, 1),
+    flag = c(rep(TRUE, 8), FALSE),
+    excluded = c(rep(FALSE, 6), TRUE, TRUE, FALSE)
+  )
+}
+
+test_that("qc_flag_table_ counts a cascading gate once per sample and check", {
+  s <- list(group_col = "grp", batch_col = "day")
+  tbl <- qc_flag_table_(fake_scored(), s)
+  expect_equal(nrow(tbl), 8L)
+  expect_equal(unique(tbl$score[tbl$mouse_ID == "m-1"]), 2L)
+  expect_equal(unique(tbl$score[tbl$mouse_ID == "m-2"]), 2L)
+  expect_false("m-3" %in% tbl$mouse_ID)
+  expect_equal(names(tbl), c("mouse_ID", "score", "tissue", "condition", "group",
+                             "batch", "population", "metric", "value", "z",
+                             "excluded"))
+  # m-1 before m-2 (same score, mouse_ID order); within a mouse by |z| desc
+  expect_equal(tbl$mouse_ID[1], "m-1")
+  expect_equal(tbl$z[1], 6)
+  expect_true(all(tbl$excluded[tbl$mouse_ID == "m-2"]))
+})
+
+test_that("qc_flag_table_ formats a POSIXct batch as a date", {
+  tbl <- qc_flag_table_(fake_scored(), list(group_col = "grp", batch_col = "day"))
+  expect_equal(unique(tbl$batch), "2026-06-15")
+})
+
+test_that("qc_flag_table_ returns zero rows when nothing is flagged", {
+  sc <- fake_scored()
+  sc$flag <- FALSE
+  tbl <- qc_flag_table_(sc, list(group_col = "grp", batch_col = NULL))
+  expect_equal(nrow(tbl), 0L)
+})
+
 test_that("qc_score_ only scores MFI for qc_mfi_populations and positive values", {
   d <- fake_qc_data()
   r0 <- qc_score_(d, fake_qc_settings(d, qc_mfi_populations = character()))
