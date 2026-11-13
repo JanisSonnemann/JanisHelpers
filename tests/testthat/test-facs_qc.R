@@ -168,6 +168,7 @@ fake_scored <- function(day = as.POSIXct("2026-06-15", tz = "UTC")) {
     grp = "A",
     day = day,
     population = c("a", "b", "c", "a", "b", "c", "a", "a", "a"),
+    population_full_path = paste0("root/", population),
     metric = c(rep("fraction_of_parent", 3), rep("count", 3),
                "fraction_of_parent", "fraction_of_parent", "count"),
     check = c(rep("hierarchy", 3), rep("counts", 3), "hierarchy", "hierarchy",
@@ -264,6 +265,35 @@ test_that("qc plots work without ggrepel", {
   p <- qc_plot_individuals_(qc_score_(d, s), s, "hierarchy")
   expect_true(inherits(label_layer_(p)$geom, "GeomText"))
   expect_no_error(ggplot2::ggplot_build(p))
+})
+
+dup_leaf_data_ <- function() {
+  d <- fake_qc_data()
+  # a second gate also named "T" under another parent, with 3x the events
+  other <- d[d$population_full_path == "root/live/T", ]
+  other$population_full_path <- "root/other/T"
+  other$value[other$metric == "count"] <- 3 * other$value[other$metric == "count"]
+  dplyr::bind_rows(d, other)
+}
+
+test_that("qc plots keep gates with the same leaf name apart", {
+  d <- dup_leaf_data_()
+  s <- fake_qc_settings(d)
+  p <- qc_plot_individuals_(qc_score_(d, s), s, "counts")
+  rows <- unique(as.character(p$data$.row))
+  expect_true(all(c("live/T", "other/T") %in% rows))
+  expect_true("live" %in% rows)
+  b <- qc_plot_batch_(qc_score_(d, s), s, "counts", tissue = "spleen")
+  expect_true(all(c("live/T", "other/T") %in% unique(as.character(b$data$.row))))
+})
+
+test_that("qc_flag_table_ names the full gate when leaf names repeat", {
+  d <- dup_leaf_data_()
+  s <- fake_qc_settings(d)
+  tbl <- qc_flag_table_(qc_score_(d, s), s)
+  expect_true(all(tbl$population[tbl$mouse_ID == "m-3"] %in%
+                    c("live/T", "other/T", "live", "rare")))
+  expect_true("live/T" %in% tbl$population)
 })
 
 test_that("qc_fig_height_ grows with facet rows", {

@@ -118,6 +118,19 @@ qc_score_ <- function(data, settings, excluded_files = character(),
     dplyr::select(!c(floor, .p, .ref, .n, .med, .mad))
 }
 
+# Display label per row: the leaf population name, or "parent/leaf" when the
+# leaf name occurs under more than one parent (facs_read_wsp() keeps such
+# gates as one factor level). Ordered by population level, then path.
+qc_pop_label_ <- function(population, full_path) {
+  leaf <- as.character(population)
+  paths_per_leaf <- tapply(full_path, leaf, function(x) length(unique(x)))
+  dup <- leaf %in% names(paths_per_leaf)[paths_per_leaf > 1]
+  parent <- basename(dirname(full_path))
+  label <- ifelse(dup, paste0(parent, "/", leaf), leaf)
+  lev_order <- if (is.factor(population)) as.integer(population) else match(leaf, unique(leaf))
+  factor(label, levels = unique(label[order(lev_order, full_path)]))
+}
+
 # Batch values as display labels: dates (Date / POSIXct) as "YYYY-MM-DD".
 qc_batch_label_ <- function(x) {
   if (inherits(x, c("Date", "POSIXt"))) format(x, "%Y-%m-%d") else as.character(x)
@@ -152,7 +165,8 @@ qc_flag_table_ <- function(scored, settings) {
   }
   scored |>
     dplyr::mutate(group = label_of(settings$group_col),
-                  batch = label_of(settings$batch_col)) |>
+                  batch = label_of(settings$batch_col),
+                  population = qc_pop_label_(population, population_full_path)) |>
     dplyr::filter(flag) |>
     dplyr::mutate(
       score = dplyr::n_distinct(tissue, condition, check),
@@ -189,7 +203,14 @@ qc_plot_rows_ <- function(scored, settings, check, condition, population) {
     return(NULL)
   }
   group_col <- settings$group_col
-  d$.row <- if (check == "mfi") sub("^median_", "", d$metric) else d$population
+  pop_label <- qc_pop_label_(d$population, d$population_full_path)
+  d$.row <- if (check != "mfi") {
+    pop_label
+  } else if (length(unique(d$population_full_path)) > 1) {
+    paste0(pop_label, ": ", sub("^median_", "", d$metric))
+  } else {
+    sub("^median_", "", d$metric)
+  }
   d$.group <- if (is.null(group_col)) "all" else qc_batch_label_(d[[group_col]])
   d$.y <- if (check == "counts") d$value + 1 else d$value
   d
