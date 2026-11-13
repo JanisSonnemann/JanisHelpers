@@ -22,6 +22,49 @@ test_that("facs_prep_save writes rds with data + info and returns its path", {
   expect_setequal(unique(prep$data$file_name), c("a.fcs", "b.fcs"))
 })
 
+# -- QC settings ---------------------------------------------------------------
+
+meta_files <- two_files |>
+  dplyr::mutate(grp = c("A", "B"), day = as.Date(c("2026-06-15", "2026-06-16")))
+
+test_that("facs_prep_save stores resolved qc settings in info", {
+  d <- local_prep_dirs()
+  path <- suppressMessages(facs_prep_save(
+    fake_prep_data(meta_files), d$wsp_path, "overview", d$panel_dir,
+    group_col = "grp", batch_col = "day",
+    expected_mice = c("25-7-1", "25-7-2")
+  ))
+  qc <- readRDS(path)$info$qc
+  expect_equal(qc$group_col, "grp")
+  expect_equal(qc$batch_col, "day")
+  expect_equal(qc$expected_mice, c("25-7-1", "25-7-2"))
+  expect_equal(qc$qc_populations, c("live_CD45+", "CD4+"))
+  expect_equal(qc$expected_tissues, "spleen")
+  expect_equal(qc$qc_mfi_populations, character())
+  expect_equal(qc$qc_metrics, character())
+})
+
+test_that("facs_prep_save errors on unknown qc columns or populations", {
+  d <- local_prep_dirs()
+  data <- fake_prep_data(meta_files)
+  save <- function(...) {
+    suppressMessages(facs_prep_save(data, d$wsp_path, "overview", d$panel_dir, ...))
+  }
+  expect_error(save(group_col = "nope"), "nope")
+  expect_error(save(batch_col = "nope_day"), "nope_day")
+  expect_error(save(qc_populations = "B cells"), "B cells")
+  expect_error(save(qc_mfi_populations = "Treg"), "Treg")
+})
+
+test_that("facs_prep_save keeps extra meta columns in data", {
+  d <- local_prep_dirs()
+  path <- suppressMessages(facs_prep_save(
+    fake_prep_data(meta_files), d$wsp_path, "overview", d$panel_dir,
+    group_col = "grp"
+  ))
+  expect_true(all(c("grp", "day") %in% names(readRDS(path)$data)))
+})
+
 test_that("facs_prep_save drops files without mouse_ID or tissue", {
   d <- local_prep_dirs()
   files <- tibble::tibble(

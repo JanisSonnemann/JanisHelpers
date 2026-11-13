@@ -9,7 +9,14 @@ facs_prep_save(
   wsp_path,
   assay,
   panel_dir,
-  condition_keyword = NA_character_
+  condition_keyword = NA_character_,
+  group_col = NULL,
+  batch_col = NULL,
+  expected_mice = NULL,
+  expected_tissues = NULL,
+  qc_populations = NULL,
+  qc_mfi_populations = character(),
+  qc_metrics = NULL
 )
 }
 \arguments{
@@ -30,12 +37,36 @@ facs_prep_save(
 per mouse x tissue that differ in one variable, the keyword column holding
 it (e.g. \code{"restimulation"}). \code{NA} (default) = one well, condition
 \code{"none"}.}
+
+\item{group_col}{Character scalar or \code{NULL} -- name of the treatment-group
+column in \code{data} (joined from the meta workbook, e.g. \code{"group"}). The QC
+report scores outliers within groups; \code{NULL} = no scoring.}
+
+\item{batch_col}{Character scalar or \code{NULL} -- name of the batch column in
+\code{data} (e.g. \code{"death_date"}, the staining / acquisition day). \code{NULL} = no
+batch plots.}
+
+\item{expected_mice}{Character vector or \code{NULL} -- mouse IDs this panel
+should contain (meta mice minus dropouts), for the completeness check.}
+
+\item{expected_tissues}{Character vector or \code{NULL} -- tissues this panel
+should contain. \code{NULL} = the tissues in \code{data}.}
+
+\item{qc_populations}{Character vector or \code{NULL} -- populations shown in
+the hierarchy and count checks. \code{NULL} = all.}
+
+\item{qc_mfi_populations}{Character vector -- populations whose MFIs
+(\verb{median_*} metrics) are checked. Default none.}
+
+\item{qc_metrics}{Character vector or \code{NULL} -- MFI metrics checked.
+\code{NULL} = all \verb{median_*} metrics.}
 }
 \value{
 Invisibly, the path of the written \code{.rds}. It holds a list with
 \code{data} (the tibble plus a \code{condition} column) and \code{info} (\code{wsp_path},
 \code{wsp_root}, \code{wsp_version}, \code{assay}, \code{condition_keyword}, \code{panel_dir},
-\code{created_at}, \code{package_version}).
+\code{created_at}, \code{package_version}, and \code{qc} -- the QC settings above with
+defaults filled in).
 }
 \description{
 Step one of the prep / QC loop: after reading a workspace with

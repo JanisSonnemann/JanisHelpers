@@ -69,10 +69,27 @@ facs_check_file_clashes <- function(data) {
 #'   per mouse x tissue that differ in one variable, the keyword column holding
 #'   it (e.g. `"restimulation"`). `NA` (default) = one well, condition
 #'   `"none"`.
+#' @param group_col Character scalar or `NULL` -- name of the treatment-group
+#'   column in `data` (joined from the meta workbook, e.g. `"group"`). The QC
+#'   report scores outliers within groups; `NULL` = no scoring.
+#' @param batch_col Character scalar or `NULL` -- name of the batch column in
+#'   `data` (e.g. `"death_date"`, the staining / acquisition day). `NULL` = no
+#'   batch plots.
+#' @param expected_mice Character vector or `NULL` -- mouse IDs this panel
+#'   should contain (meta mice minus dropouts), for the completeness check.
+#' @param expected_tissues Character vector or `NULL` -- tissues this panel
+#'   should contain. `NULL` = the tissues in `data`.
+#' @param qc_populations Character vector or `NULL` -- populations shown in
+#'   the hierarchy and count checks. `NULL` = all.
+#' @param qc_mfi_populations Character vector -- populations whose MFIs
+#'   (`median_*` metrics) are checked. Default none.
+#' @param qc_metrics Character vector or `NULL` -- MFI metrics checked.
+#'   `NULL` = all `median_*` metrics.
 #' @returns Invisibly, the path of the written `.rds`. It holds a list with
 #'   `data` (the tibble plus a `condition` column) and `info` (`wsp_path`,
 #'   `wsp_root`, `wsp_version`, `assay`, `condition_keyword`, `panel_dir`,
-#'   `created_at`, `package_version`).
+#'   `created_at`, `package_version`, and `qc` -- the QC settings above with
+#'   defaults filled in).
 #' @examples
 #' \dontrun{
 #' wsp <- "data/26-1_exp/raw/FACS/overview-26-1_20260806.wsp"
@@ -82,7 +99,12 @@ facs_check_file_clashes <- function(data) {
 #' }
 #' @export
 facs_prep_save <- function(data, wsp_path, assay, panel_dir,
-                           condition_keyword = NA_character_) {
+                           condition_keyword = NA_character_,
+                           group_col = NULL, batch_col = NULL,
+                           expected_mice = NULL, expected_tissues = NULL,
+                           qc_populations = NULL,
+                           qc_mfi_populations = character(),
+                           qc_metrics = NULL) {
   kw <- condition_keyword
   needed <- c("file_name", "population_full_path", "population", "metric",
               "value", "mouse_ID", "tissue", if (!is.na(kw)) kw)
@@ -100,6 +122,13 @@ facs_prep_save <- function(data, wsp_path, assay, panel_dir,
   if (anyNA(data$condition)) {
     stop("Some files have no '", kw, "' keyword value.", call. = FALSE)
   }
+
+  qc <- qc_resolve_(data, list(
+    group_col = group_col, batch_col = batch_col,
+    expected_mice = expected_mice, expected_tissues = expected_tissues,
+    qc_populations = qc_populations, qc_mfi_populations = qc_mfi_populations,
+    qc_metrics = qc_metrics
+  ))
 
   clashes <- facs_check_file_clashes(data)
   if (nrow(clashes) > 0) {
@@ -121,7 +150,8 @@ facs_prep_save <- function(data, wsp_path, assay, panel_dir,
       condition_keyword = kw,
       panel_dir = panel_dir,
       created_at = Sys.time(),
-      package_version = as.character(utils::packageVersion("JanisHelpers"))
+      package_version = as.character(utils::packageVersion("JanisHelpers")),
+      qc = qc
     )
   )
   path <- facs_prep_paths_(wsp_path, panel_dir)$prep
