@@ -39,6 +39,23 @@ test_that("qc_score_ flags the planted outlier only", {
   expect_setequal(unique(r$check), c("hierarchy", "counts", "mfi"))
 })
 
+test_that("qc_score_ runs without warnings", {
+  d <- fake_qc_data()
+  expect_no_warning(qc_score_(d, fake_qc_settings(d)))
+  expect_no_warning(qc_score_(d, fake_qc_settings(d), excluded_files = "m-3_spleen.fcs"))
+})
+
+test_that("qc_score_ uses the MAD of the reference rows only", {
+  d <- fake_qc_data()
+  s <- fake_qc_settings(d)
+  r <- qc_score_(d, s, excluded_files = "m-3_spleen.fcs",
+                 mad_floor = c(logit = 0, log10 = 0))
+  box <- r[r$grp == "A" & r$population == "live" & r$metric == "count", ]
+  ref <- box$t[!box$excluded]
+  expected <- (box$t - stats::median(ref)) / stats::mad(ref)
+  expect_equal(box$z, expected)
+})
+
 test_that("qc_score_ does not score populations under 50 events", {
   d <- fake_qc_data()
   r <- qc_score_(d, fake_qc_settings(d))
@@ -188,6 +205,70 @@ test_that("qc_flag_table_ returns zero rows when nothing is flagged", {
   sc$flag <- FALSE
   tbl <- qc_flag_table_(sc, list(group_col = "grp", batch_col = NULL))
   expect_equal(nrow(tbl), 0L)
+})
+
+# -- plots ----------------------------------------------------------------------
+
+label_layer_ <- function(p) {
+  Filter(function(l) inherits(l$geom, c("GeomText", "GeomTextRepel")), p$layers)[[1]]
+}
+
+test_that("qc_plot_individuals_ labels only flagged mice", {
+  d <- fake_qc_data()
+  s <- fake_qc_settings(d)
+  p <- qc_plot_individuals_(qc_score_(d, s), s, "hierarchy")
+  expect_s3_class(p, "ggplot")
+  labs <- ggplot2::ggplot_build(p)$data[[which(vapply(
+    p$layers, function(l) inherits(l$geom, c("GeomText", "GeomTextRepel")), logical(1)
+  ))]]$label
+  expect_equal(unique(labs[labs != ""]), "m-3")
+  expect_s3_class(p$facet, "FacetGrid")
+})
+
+test_that("qc_plot_individuals_ shows one population's markers for MFI", {
+  d <- fake_qc_data()
+  s <- fake_qc_settings(d)
+  p <- qc_plot_individuals_(qc_score_(d, s), s, "mfi", population = "T")
+  expect_s3_class(p, "ggplot")
+  expect_equal(unique(as.character(p$data$population)), "T")
+})
+
+test_that("qc_plot_batch_ facets by group and uses batch on x", {
+  d <- fake_qc_data()
+  s <- fake_qc_settings(d)
+  p <- qc_plot_batch_(qc_score_(d, s), s, "counts", tissue = "spleen")
+  expect_s3_class(p, "ggplot")
+  expect_s3_class(p$facet, "FacetGrid")
+  x <- p$data$.batch
+  expect_true(is.factor(x))
+  expect_equal(nlevels(x), 2L)
+  expect_match(levels(x), "^\\d{4}-\\d{2}-\\d{2}$")
+  expect_length(Filter(function(l) inherits(l$geom, c("GeomText", "GeomTextRepel")),
+                       p$layers), 0)
+})
+
+test_that("qc plots return NULL without data", {
+  d <- fake_qc_data()
+  s0 <- fake_qc_settings(d, qc_mfi_populations = character())
+  expect_null(qc_plot_individuals_(qc_score_(d, s0), s0, "mfi"))
+  s1 <- fake_qc_settings(d, batch_col = NULL)
+  expect_null(qc_plot_batch_(qc_score_(d, s1), s1, "counts", tissue = "spleen"))
+  s <- fake_qc_settings(d)
+  expect_null(qc_plot_batch_(qc_score_(d, s), s, "counts", tissue = "lung"))
+})
+
+test_that("qc plots work without ggrepel", {
+  local_mocked_bindings(qc_has_ggrepel_ = function() FALSE)
+  d <- fake_qc_data()
+  s <- fake_qc_settings(d)
+  p <- qc_plot_individuals_(qc_score_(d, s), s, "hierarchy")
+  expect_true(inherits(label_layer_(p)$geom, "GeomText"))
+  expect_no_error(ggplot2::ggplot_build(p))
+})
+
+test_that("qc_fig_height_ grows with facet rows", {
+  expect_equal(qc_fig_height_(1), 3)
+  expect_equal(qc_fig_height_(10), 17)
 })
 
 test_that("qc_score_ only scores MFI for qc_mfi_populations and positive values", {

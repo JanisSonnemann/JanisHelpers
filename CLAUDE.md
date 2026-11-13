@@ -85,7 +85,7 @@ Roxygen docs (`?fn`) are the reference for arguments and return shapes; this is 
 ## Dependency philosophy
 
 - **`Imports`**: every package called inside an exported function body must be listed here. All calls must be namespaced `pkg::fn()`.
-- **`Suggests`**: packages only needed in examples, vignettes, or tests. Currently `testthat` and `withr` (the latter used for `withr::defer()` cleanup in `db_` domain tests).
+- **`Suggests`**: packages only needed in examples, vignettes, or tests -- or used optionally behind `requireNamespace()`. Currently `ggrepel` (QC report outlier labels; plain `geom_text` without it), `testthat` and `withr` (the latter used for `withr::defer()` cleanup in `db_` domain tests).
 - **Non-CRAN packages** (`fcexpr`): list in `Imports` as normal; document the install requirement in README. Do not add `remotes::` calls inside function bodies.
 
 Current `Imports`: `CytoML`, `DBI`, `dbplyr`, `diffcyt`, `dplyr`, `duckdb`, `fcexpr`, `flowCore`, `FlowSOM`, `flowWorkspace`, `ggplot2`, `glue`, `gt`, `gtsummary`, `janitor`, `parallel`, `purrr`, `readxl`, `rmarkdown`, `rstatix`, `stats`, `stringr`, `SummarizedExperiment`, `tibble`, `tidyr`, `tools`, `utils`, `uwot`, `xml2`, `xfun` (order matches `DESCRIPTION`'s `Imports:` block).

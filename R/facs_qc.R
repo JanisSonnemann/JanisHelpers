@@ -78,11 +78,14 @@ qc_score_ <- function(data, settings, excluded_files = character(),
     dplyr::left_join(counts, by = c("file_name", "population_full_path")) |>
     dplyr::mutate(
       excluded = file_name %in% excluded_files,
+      # pseudo-count fraction, only where it is defined (case_when evaluates
+      # every branch on every row, so guard before qlogis)
+      .p = dplyr::if_else(check == "hierarchy" & value > 0,
+                          (n_events + 0.5) / (n_events / value + 1), NA_real_),
       t = dplyr::case_when(
-        check == "hierarchy" & value > 0 ~
-          stats::qlogis((n_events + 0.5) / (n_events / value + 1)),
-        check == "counts" ~ log10(value + 1),
-        check == "mfi" & value > 0 ~ log10(value),
+        check == "hierarchy" ~ stats::qlogis(.p),
+        check == "counts" ~ log10(pmax(value, 0) + 1),
+        check == "mfi" & value > 0 ~ log10(pmax(value, 1e-12)),
         .default = NA_real_
       ),
       t = dplyr::if_else(is.na(n_events) | n_events < min_events, NA_real_, t),
@@ -94,7 +97,7 @@ qc_score_ <- function(data, settings, excluded_files = character(),
   if (is.null(group_col)) {
     return(rows |>
       dplyr::mutate(z = NA_real_, flag = FALSE) |>
-      dplyr::select(!floor))
+      dplyr::select(!c(floor, .p)))
   }
 
   rows |>
@@ -106,13 +109,13 @@ qc_score_ <- function(data, settings, excluded_files = character(),
       .ref = !is.na(t) & !excluded,
       .n = sum(.ref),
       .med = stats::median(t[.ref]),
-      .mad = 1.4826 * stats::median(abs(t[.ref] - .med)),
+      .mad = 1.4826 * stats::median(abs(t[.ref] - .med[.ref])),
       z = dplyr::if_else(.n >= min_n & !is.na(t),
                          (t - .med) / pmax(.mad, floor), NA_real_)
     ) |>
     dplyr::ungroup() |>
     dplyr::mutate(flag = !is.na(z) & abs(z) > z_cut) |>
-    dplyr::select(!c(floor, .ref, .n, .med, .mad))
+    dplyr::select(!c(floor, .p, .ref, .n, .med, .mad))
 }
 
 # Batch values as display labels: dates (Date / POSIXct) as "YYYY-MM-DD".
@@ -160,6 +163,108 @@ qc_flag_table_ <- function(scored, settings) {
       mouse_ID, score, tissue, condition, group, batch,
       population = as.character(population), metric, value, z, excluded
     )
+}
+
+# Figure height (inches) for a plot with `n_rows` facet rows.
+qc_fig_height_ <- function(n_rows) {
+  max(3, 1.6 * n_rows + 1)
+}
+
+qc_has_ggrepel_ <- function() {
+  requireNamespace("ggrepel", quietly = TRUE)
+}
+
+# Rows of one check (and condition / MFI population) prepared for plotting:
+# `.row` = facet row (population, or marker for MFI), `.group` = group label,
+# `.y` = plotted value (counts + 1 and positive MFIs only, for the log axis).
+qc_plot_rows_ <- function(scored, settings, check, condition, population) {
+  d <- scored[scored$check == check, ]
+  if (!is.null(condition)) d <- d[d$condition == condition, ]
+  if (check == "mfi") {
+    if (is.null(population)) population <- settings$qc_mfi_populations[1]
+    d <- d[!is.na(d$value) & d$value > 0 &
+             as.character(d$population) %in% population, ]
+  }
+  if (nrow(d) == 0) {
+    return(NULL)
+  }
+  group_col <- settings$group_col
+  d$.row <- if (check == "mfi") sub("^median_", "", d$metric) else d$population
+  d$.group <- if (is.null(group_col)) "all" else qc_batch_label_(d[[group_col]])
+  d$.y <- if (check == "counts") d$value + 1 else d$value
+  d
+}
+
+qc_y_scale_ <- function(check) {
+  if (check == "hierarchy") {
+    ggplot2::scale_y_continuous(labels = function(x) paste0(round(100 * x), "%"))
+  } else {
+    ggplot2::scale_y_log10()
+  }
+}
+
+# Individuals plot: x = group, boxplot + jittered points, mouse_ID labels on
+# flagged values; facets population (MFI: marker) x tissue. NULL if no rows.
+qc_plot_individuals_ <- function(scored, settings, check, condition = NULL,
+                                 population = NULL) {
+  d <- qc_plot_rows_(scored, settings, check, condition, population)
+  if (is.null(d)) {
+    return(NULL)
+  }
+  # Label every row ("" if not flagged) so the labels share the points' jitter.
+  d$.label <- dplyr::if_else(d$flag, d$mouse_ID, "")
+  pos <- ggplot2::position_jitter(width = 0.15, height = 0, seed = 1)
+  label_layer <- if (qc_has_ggrepel_()) {
+    ggrepel::geom_text_repel(
+      ggplot2::aes(label = .label), position = pos, size = 3, colour = "red3",
+      min.segment.length = 0, max.overlaps = Inf, show.legend = FALSE
+    )
+  } else {
+    ggplot2::geom_text(
+      ggplot2::aes(label = .label), position = pos, size = 3, colour = "red3",
+      hjust = -0.2, show.legend = FALSE
+    )
+  }
+  ggplot2::ggplot(d, ggplot2::aes(x = .group, y = .y, fill = .group)) +
+    ggplot2::geom_boxplot(outlier.shape = NA, alpha = 0.5) +
+    ggplot2::geom_point(position = pos, alpha = 0.7, size = 1.5) +
+    label_layer +
+    qc_y_scale_(check) +
+    ggplot2::facet_grid(rows = ggplot2::vars(.row), cols = ggplot2::vars(tissue),
+                        scales = "free_y") +
+    ggplot2::labs(x = NULL, y = NULL, fill = settings$group_col) +
+    ggplot2::theme_bw() +
+    ggplot2::theme(strip.text.y = ggplot2::element_text(angle = 0))
+}
+
+# Batch plot (layout C) for one tissue: x = batch, coloured by batch; facets
+# population (MFI: marker) x group. NULL without batch column or rows.
+qc_plot_batch_ <- function(scored, settings, check, tissue, condition = NULL,
+                           population = NULL) {
+  batch_col <- settings$batch_col
+  if (is.null(batch_col)) {
+    return(NULL)
+  }
+  d <- qc_plot_rows_(scored, settings, check, condition, population)
+  if (is.null(d)) {
+    return(NULL)
+  }
+  d <- d[d$tissue == tissue, ]
+  if (nrow(d) == 0) {
+    return(NULL)
+  }
+  d$.batch <- factor(qc_batch_label_(d[[batch_col]]))
+  pos <- ggplot2::position_jitter(width = 0.15, height = 0, seed = 1)
+  ggplot2::ggplot(d, ggplot2::aes(x = .batch, y = .y, fill = .batch)) +
+    ggplot2::geom_boxplot(outlier.shape = NA, alpha = 0.5) +
+    ggplot2::geom_point(ggplot2::aes(colour = .batch), position = pos, size = 1.5) +
+    qc_y_scale_(check) +
+    ggplot2::facet_grid(rows = ggplot2::vars(.row), cols = ggplot2::vars(.group),
+                        scales = "free_y") +
+    ggplot2::labs(x = NULL, y = NULL, fill = batch_col, colour = batch_col) +
+    ggplot2::theme_bw() +
+    ggplot2::theme(strip.text.y = ggplot2::element_text(angle = 0),
+                   axis.text.x = ggplot2::element_text(angle = 30, hjust = 1))
 }
 
 # QC settings of a prep result: the stored `info$qc`, or defaults for a prep

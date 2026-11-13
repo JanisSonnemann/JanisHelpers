@@ -42,6 +42,7 @@ Imports:
     xml2,
     xfun
 Suggests:
+    ggrepel,
     testthat (>= 3.0.0),
     withr
 Remotes:
