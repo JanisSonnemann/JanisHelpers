@@ -57,7 +57,7 @@ root in one transaction, writes `import_log` + new `import_exclusions` rows.
   - Internal `facs_prep_paths_(wsp_path, panel_dir) -> list(prep, qc)`: `file.path(panel_dir, "processed", paste0(base, "_prep.rds"))` and `file.path(panel_dir, "qc", paste0(base, "_qc.html"))`, `base = tools::file_path_sans_ext(basename(wsp_path))`.
   - Test helpers (in `helper-prep.R`): `local_prep_dirs(env)` -> list(`data_dir`, `panel_dir`, `wsp_path`) in a `withr::local_tempdir()`, with an empty file `<data_dir>/25-7_exp/raw/FACS/overview_25-7_20261101.wsp` and `panel_dir = <data_dir>/25-7_exp/raw/FACS/overview`; `fake_prep_data(files)` -> long tibble for a tibble `files` of `file_name, mouse_ID, tissue` (2 populations x metrics `count`, `pct_of_live_CD45+`, plus columns `population_full_path`, `population` (factor), `metric`, `value`).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```r
 test_that("facs_prep_save writes rds with data + info and returns its path", {
@@ -111,18 +111,18 @@ test_that("facs_prep_load stops when the wsp is newer than the rds", {
 })
 ```
 
-- [ ] **Step 2: Run tests, verify they fail**
+- [x] **Step 2: Run tests, verify they fail**
 
 Run: `Rscript -e 'devtools::load_all(); testthat::test_file("tests/testthat/test-facs_prep.R")'`
 Expected: FAIL, `could not find function "facs_prep_save"`.
 
-- [ ] **Step 3: Implement `R/facs_prep.R`**
+- [x] **Step 3: Implement `R/facs_prep.R`**
 
 Required columns for `data`: `file_name, population_full_path, population, metric, value, mouse_ID, tissue` (+ `condition_keyword` column when not `NA`); error naming missing ones. `wsp_root` = basename without `_YYYYMMDD.wsp` (regex `^(.+)_([0-9]{8})\.wsp$`), version via `as.Date(x, "%Y%m%d")`. `dir.create(recursive = TRUE)` for `processed/`. `package_version = as.character(utils::packageVersion("JanisHelpers"))`. Clash warning prints the clash tibble in its message and tells the user to fix keywords in FlowJo. Load messages: missing rds/report -> "Run the prep script with final <- FALSE first"; stale -> "<wsp> is newer than its prep result -- rerun with final <- FALSE". Roxygen with `\dontrun{}` examples.
 
-- [ ] **Step 4: Run tests, verify they pass** (same command, all PASS)
+- [x] **Step 4: Run tests, verify they pass** (same command, all PASS)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add R/facs_prep.R tests/testthat/test-facs_prep.R tests/testthat/helper-prep.R
@@ -145,7 +145,7 @@ git commit -m "feat(facs): save/load prep results and check file clashes"
   - `unmatched`: the `applicable` rows with `n_files_matched == 0`.
   - `exclusions = NULL` or 0 rows -> all three empty tibbles with those columns.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```r
 files <- tibble::tibble(
@@ -182,15 +182,15 @@ test_that("missing mouse_ID/reason column or empty reason errors", {
 })
 ```
 
-- [ ] **Step 2: Run, verify fail** — `testthat::test_file("tests/testthat/test-facs_exclude.R")`, FAIL "could not find function".
+- [x] **Step 2: Run, verify fail** — `testthat::test_file("tests/testthat/test-facs_exclude.R")`, FAIL "could not find function".
 
-- [ ] **Step 3: Implement `facs_match_exclusions(data, exclusions, panel)` in `R/facs_exclude.R`**
+- [x] **Step 3: Implement `facs_match_exclusions(data, exclusions, panel)` in `R/facs_exclude.R`**
 
 Add absent optional columns (`tissue, panel, condition, file_name, date`) as `NA`, coerce the five match columns + `reason` to character, `date` via `as.Date()`. Applicable = `is.na(panel) | panel == !!panel`. For each applicable row, a file matches when every non-`NA` match column equals the file's value (exact, no case folding). Error if `mouse_ID` or `reason` column is missing, or any applicable row has `NA`/empty `mouse_ID` or `reason`.
 
-- [ ] **Step 4: Run, verify pass**
+- [x] **Step 4: Run, verify pass**
 
-- [ ] **Step 5: Commit** — `git commit -m "feat(facs): match exclusion sheet rows to prep files"`
+- [x] **Step 5: Commit** — `git commit -m "feat(facs): match exclusion sheet rows to prep files"`
 
 ---
 
@@ -206,7 +206,7 @@ Add absent optional columns (`tissue, panel, condition, file_name, date`) as `NA
 - Consumes: `facs_prep_save()` output path, `facs_check_file_clashes()`, `facs_match_exclusions()`, `meta_read()`.
 - Produces: `report_knit_facs_qc(prep_path, meta_path = NULL) -> character` absolute path of the rendered html at `<panel_dir>/qc/<base>_qc.html` (`base` = prep basename minus `_prep.rds`). Creates `qc/`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```r
 test_that("report_knit_facs_qc renders next to the prep file and flags exclusions", {
@@ -229,16 +229,16 @@ test_that("report_knit_facs_qc renders next to the prep file and flags exclusion
 
 Also a test without `meta_path` (renders, no exclusion section error). If `writexl` isn't installed, the exclusion test is skipped; don't add it to `Suggests`.
 
-- [ ] **Step 2: Run, verify fail**
+- [x] **Step 2: Run, verify fail**
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Template `params: prep: ""` and `meta: ""`; sections, in order: header (wsp, assay, prep `created_at`, package version); **Files** table (one row per file: `file_name, mouse_ID, tissue, condition`, number of populations, `excluded` reason or blank) via `knitr::kable`; **Keyword clashes** (warning text + table, or "none"); **Exclusions** (applicable rows; unmatched rows shown under a visible "Warning: these rows match no file" heading); **QC checks** placeholder headings ("Gating", "Counts", "Outliers") each with a `<!-- add checks -->` note. All package calls `JanisHelpers::`. `template.yaml`: `name: FACS QC report`, `description`, `create_dir: false`.
 `report_knit_facs_qc()`: `rmarkdown::render(system.file(...skeleton.Rmd), output_dir = qc_dir, output_file = basename(html), params = list(prep = normalizePath(prep_path), meta = meta_path or ""), intermediates_dir = tempdir(), envir = new.env(), quiet = TRUE)` (intermediates outside OneDrive). Return its value.
 
-- [ ] **Step 4: Run, verify pass**
+- [x] **Step 4: Run, verify pass**
 
-- [ ] **Step 5: Commit** — `git commit -m "feat(report): facs QC report skeleton rendered from prep result"`
+- [x] **Step 5: Commit** — `git commit -m "feat(report): facs QC report skeleton rendered from prep result"`
 
 ---
 
@@ -265,11 +265,11 @@ Template `params: prep: ""` and `meta: ""`; sections, in order: header (wsp, ass
   )
   ```
 
-- [ ] **Step 1: Failing tests** — extend "db_connect creates all tables" to expect `import_exclusions`; extend the EXPORT DATABASE test to insert one `import_log` row (via `JanisHelpers:::write_import_log_()`) + one `import_exclusions` row and expect `import_exclusions.parquet`.
-- [ ] **Step 2: Run, verify fail** — `testthat::test_file("tests/testthat/test-db_connect.R")`
-- [ ] **Step 3: Add sequence + `CREATE TABLE IF NOT EXISTS`** (comment: FK to another table, fine for snapshots); mention the table in `db_connect()` roxygen.
-- [ ] **Step 4: Run, verify pass** (whole `test-db_connect.R`)
-- [ ] **Step 5: Commit** — `git commit -m "feat(db): import_exclusions table"`
+- [x] **Step 1: Failing tests** — extend "db_connect creates all tables" to expect `import_exclusions`; extend the EXPORT DATABASE test to insert one `import_log` row (via `JanisHelpers:::write_import_log_()`) + one `import_exclusions` row and expect `import_exclusions.parquet`.
+- [x] **Step 2: Run, verify fail** — `testthat::test_file("tests/testthat/test-db_connect.R")`
+- [x] **Step 3: Add sequence + `CREATE TABLE IF NOT EXISTS`** (comment: FK to another table, fine for snapshots); mention the table in `db_connect()` roxygen.
+- [x] **Step 4: Run, verify pass** (whole `test-db_connect.R`)
+- [x] **Step 5: Commit** — `git commit -m "feat(db): import_exclusions table"`
 
 ---
 
@@ -286,7 +286,7 @@ Template `params: prep: ""` and `meta: ""`; sections, in order: header (wsp, ass
   - Internal `insert_facs_stain_(con, sample_id, assay_id, data, wsp_root, source_file, condition, condition_keyword, stain_date = NA) -> integer` rows inserted; **opens no transaction**; `data` has snake-case `population_full_path, population, metric, value`. `db_write_facs()` keeps its signature/behaviour and calls it inside its own `dbWithTransaction()`.
   - `db_export_facs(con, prep, exclusions = NULL, data_dir = "data", overwrite = NULL) -> invisible(integer)` the new `import_id`, or `invisible(NULL)` when the user declines.
 
-- [ ] **Step 1: Failing tests** (fixture: `local_test_db()`, experiment `25-7`, subjects `25-7-1`, `25-7-2`; prep from `local_prep_dirs()` + `fake_prep_data()` saved and an empty qc html written, then `facs_prep_load()`; `data_dir = d$data_dir`)
+- [x] **Step 1: Failing tests** (fixture: `local_test_db()`, experiment `25-7`, subjects `25-7-1`, `25-7-2`; prep from `local_prep_dirs()` + `fake_prep_data()` saved and an empty qc html written, then `facs_prep_load()`; `data_dir = d$data_dir`)
 
 ```r
 test_that("exports all files, logs the import with relative paths", {
@@ -332,11 +332,11 @@ test_that("warns when a newer dated wsp of the root exists on disk", {
 })
 ```
 
-- [ ] **Step 2: Run, verify fail** — `testthat::test_file("tests/testthat/test-db_export.R")`
+- [x] **Step 2: Run, verify fail** — `testthat::test_file("tests/testthat/test-db_export.R")`
 
-- [ ] **Step 3: Refactor `db_write_facs()`** onto `insert_facs_stain_()`; run `test-db_write_measurements.R` — all PASS unchanged.
+- [x] **Step 3: Refactor `db_write_facs()`** onto `insert_facs_stain_()`; run `test-db_write_measurements.R` — all PASS unchanged.
 
-- [ ] **Step 4: Implement `db_export_facs()` in `R/db_export.R`**
+- [x] **Step 4: Implement `db_export_facs()` in `R/db_export.R`**
 
 Order (all checks before any write):
 1. `prep` must have `paths` (came from `facs_prep_load()`), else error.
@@ -351,9 +351,9 @@ Order (all checks before any write):
 
 Roxygen: `@param overwrite` "NULL asks interactively; TRUE/FALSE skips the prompt". Update `db_write_facs()` roxygen: "Stage 3 export" -> `[db_export_facs()]`.
 
-- [ ] **Step 5: Run, verify pass** — `test-db_export.R` and `test-db_write_measurements.R`.
+- [x] **Step 5: Run, verify pass** — `test-db_export.R` and `test-db_write_measurements.R`.
 
-- [ ] **Step 6: Commit** — `git commit -m "feat(db): db_export_facs replaces a root with QC'd prep data and logs exclusions"`
+- [x] **Step 6: Commit** — `git commit -m "feat(db): db_export_facs replaces a root with QC'd prep data and logs exclusions"`
 
 ---
 
@@ -365,11 +365,11 @@ Roxygen: `@param overwrite` "NULL asks interactively; TRUE/FALSE skips the promp
 - Modify: `docs/superpowers/specs/2026-07-17-facs-db-schema-design.md` (add `import_exclusions`)
 - Test: `tests/testthat/test-facs_prep.R` (append)
 
-- [ ] **Step 1: Failing test** — `expect_no_error(parse(system.file("scripts", "facs_prep_template.R", package = "JanisHelpers")))` and `expect_true(nzchar(...))`.
-- [ ] **Step 2: Write the template.** Config block: `final <- FALSE`, `wsp`, `panel_dir` (folder name under `raw/FACS/`), `assay`, `condition_keyword <- NA`, `meta_path`, `data_dir <- "data"`. Then `if (!final)`: `facs_read_wsp(wsp_path, keywords = c("mouse_ID", "tissue"))$data` -> population selection vector (placeholder) -> `facs_calc_*()` (placeholder) -> `facs_prep_save()` -> `report_knit_facs_qc()`. `else`: `prep <- facs_prep_load()`, `exclusions <- meta_read(meta_path)$exclusions` (`NULL` if no sheet), `con <- db_open_...` placeholder, `db_export_facs()`, snapshot placeholder. Comments explain the loop in 3-4 lines.
-- [ ] **Step 3: Docs** — CLAUDE.md bullets + templates row; schema spec section for `import_exclusions` (columns as Task 4, why kept on overwrite).
-- [ ] **Step 4: Verify** — `Rscript -e 'devtools::document(); devtools::test()'` all PASS; `Rscript -e 'devtools::check()'` -> 0 errors, 0 warnings, only known NOTEs.
-- [ ] **Step 5: Commit** — `git commit -m "docs: prep script template, CLAUDE.md and schema spec for prep/QC/export"`
+- [x] **Step 1: Failing test** — `expect_no_error(parse(system.file("scripts", "facs_prep_template.R", package = "JanisHelpers")))` and `expect_true(nzchar(...))`.
+- [x] **Step 2: Write the template.** Config block: `final <- FALSE`, `wsp`, `panel_dir` (folder name under `raw/FACS/`), `assay`, `condition_keyword <- NA`, `meta_path`, `data_dir <- "data"`. Then `if (!final)`: `facs_read_wsp(wsp_path, keywords = c("mouse_ID", "tissue"))$data` -> population selection vector (placeholder) -> `facs_calc_*()` (placeholder) -> `facs_prep_save()` -> `report_knit_facs_qc()`. `else`: `prep <- facs_prep_load()`, `exclusions <- meta_read(meta_path)$exclusions` (`NULL` if no sheet), `con <- db_open_...` placeholder, `db_export_facs()`, snapshot placeholder. Comments explain the loop in 3-4 lines.
+- [x] **Step 3: Docs** — CLAUDE.md bullets + templates row; schema spec section for `import_exclusions` (columns as Task 4, why kept on overwrite).
+- [x] **Step 4: Verify** — `Rscript -e 'devtools::document(); devtools::test()'` all PASS; `Rscript -e 'devtools::check()'` -> 0 errors, 0 warnings, only known NOTEs.
+- [x] **Step 5: Commit** — `git commit -m "docs: prep script template, CLAUDE.md and schema spec for prep/QC/export"`
 
 ---
 
@@ -377,8 +377,8 @@ Roxygen: `@param overwrite` "NULL asks interactively; TRUE/FALSE skips the promp
 
 Project dir: `~/Library/CloudStorage/OneDrive-Charité-UniversitätsmedizinBerlin/Shared Documents/MPO_mRNA/data/26-1_BMT-mRNA-V4/src/`. Don't commit there (ask the user). Git/IO on OneDrive is slow; use long timeouts.
 
-- [ ] **Step 1:** `db_import_26-1_common.R`: delete `db_import_facs_wsp()`; keep config, `db_open_26_1()`, `db_snapshot_close()`; add `meta_path`.
-- [ ] **Step 2:** Create `facs_prep_26-1_overview.R` from the template, carrying over the user's population selection and calculations from `db_import_26-1_overview.R`: `wsp_path` built from `wsp` (was undefined `ov_path`), `dplyr::mutate`, meta for `facs_calc_count_per_g()` from `meta_clean(meta_read(meta_path))` — confirm the sheet/column names with the user if `meta$calculations` doesn't exist — and drop the `exclude` filter. `panel_dir <- "overview"`, `assay <- "overview"`.
-- [ ] **Step 3:** Same for `treg` (`panel_dir <- "Treg"`) and `mpo-restim` (`panel_dir <- "MPO-Restim"`, `condition_keyword <- "restimulation"`), with empty selection/calculation placeholders for the user. Remove the old `db_import_26-1_<panel>.R` files.
-- [ ] **Step 4:** Tell the user to add the `exclusions` sheet to `meta_26-1.xlsx` in Excel (header row `mouse_ID | tissue | panel | condition | file_name | reason | date`) — not written programmatically, to avoid damaging the workbook's formatting.
-- [ ] **Step 5:** Dry run of overview with `final <- FALSE` against the real `.wsp` (needs JanisHelpers installed in the project's renv — report if missing rather than installing).
+- [x] **Step 1:** `db_import_26-1_common.R`: delete `db_import_facs_wsp()`; keep config, `db_open_26_1()`, `db_snapshot_close()`; add `meta_path`.
+- [x] **Step 2:** Create `facs_prep_26-1_overview.R` from the template, carrying over the user's population selection and calculations from `db_import_26-1_overview.R`: `wsp_path` built from `wsp` (was undefined `ov_path`), `dplyr::mutate`, meta for `facs_calc_count_per_g()` from `meta_clean(meta_read(meta_path))` — confirm the sheet/column names with the user if `meta$calculations` doesn't exist — and drop the `exclude` filter. `panel_dir <- "overview"`, `assay <- "overview"`.
+- [x] **Step 3:** (old scripts deleted by the user) Same for `treg` (`panel_dir <- "Treg"`) and `mpo-restim` (`panel_dir <- "MPO-Restim"`, `condition_keyword <- "restimulation"`), with empty selection/calculation placeholders for the user. Remove the old `db_import_26-1_<panel>.R` files.
+- [x] **Step 4:** Tell the user to add the `exclusions` sheet to `meta_26-1.xlsx` in Excel (header row `mouse_ID | tissue | panel | condition | file_name | reason | date`) — not written programmatically, to avoid damaging the workbook's formatting.
+- [x] **Step 5:** Dry run of overview with `final <- FALSE` against the real `.wsp` (needs JanisHelpers installed in the project's renv — report if missing rather than installing).

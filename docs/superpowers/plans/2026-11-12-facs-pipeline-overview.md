@@ -41,7 +41,8 @@ FlowJo -> dated .wsp + changelog -> prep script (calc, QC report; repeat)
 - [ ] **1. Workspace versioning** -- filename convention, per-experiment
       changelog `.md`, `facs_` function that diffs two `.wsp` versions
       (compensation + gates) and drafts the changelog entry
-- [ ] **2+3. Prep / QC loop + final export** -- design:
+- [x] **2+3. Prep / QC loop + final export** (done 2026-11-13, merged to
+      master at `e15ed9b`; installed in the MPO_mRNA renv) -- design:
       `2026-11-12-facs-prep-qc-export-design.md`, plan:
       `2026-11-12-facs-prep-qc-export.md`. Exclusion matching, prep
       `.rds` save/load, `facs-qc-template` + `report_` wrapper, `db_` export
@@ -50,6 +51,16 @@ FlowJo -> dated .wsp + changelog -> prep script (calc, QC report; repeat)
       scripts into `facs_prep_26-1_<panel>.R`. QC checks added later.
 - [ ] **4. Analysis queries** -- `db_query_facs()` with experiment /
       population / metric selection, metadata joined, ready for `analysis_`/`plot_`
+
+### 26-1 status (2026-11-13)
+
+- Old `db_import_26-1_{overview,treg,mpo-restim}.R` scripts deleted; the
+  `facs_prep_26-1_<panel>.R` scripts replace them.
+- Treg keyword fixed in FlowJo (`26-1-8_spleen_A09.fcs` had `mouse_ID = 26-1-16`).
+- Spleen and bone marrow need no absolute counts: their `facs_volumes` rows
+  stay blank and `count_per_g` is `NA` for them by design (not a gap).
+- Left before the first import: Treg `.wsp` name, Treg / MPO-Restim
+  population selections, then each script with `final <- TRUE`.
 
 Order: 0 -> 1 -> 2+3 -> 4 (1 doesn't need the DB and can run earlier).
 Each stage gets its own design + plan when started.
