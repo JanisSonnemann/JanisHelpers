@@ -207,3 +207,119 @@ facs_prep_load <- function(wsp_path, panel_dir) {
   prep$paths <- paths
   prep
 }
+
+#' Run one step of the FACS prep / QC loop for a panel
+#'
+#' The one call in a panel's prep script. With `final = FALSE` it reads the
+#' workspace, applies the panel's `prepare()` (population selection and
+#' `facs_calc_*()`), joins the group / batch columns from `mice`, saves the
+#' prep result ([facs_prep_save()]) and renders the QC report
+#' ([report_knit_facs_qc()]). All samples are kept; exclusions are only
+#' flagged. With `final = TRUE` (QC passed) it loads the saved prep result
+#' ([facs_prep_load()]), exports it to the database ([db_export_facs()]),
+#' dropping and recording the exclusions, and writes a snapshot
+#' ([db_snapshot()]).
+#'
+#' Experiment-specific setup stays in the project: paths, opening the
+#' database and registering the experiment and subjects (their columns depend
+#' on the meta workbook), and which mice a panel is expected to contain.
+#'
+#' @param final `FALSE` = prep + QC report; `TRUE` = export to the database.
+#' @param wsp_path Path to the workspace, named `<root>_YYYYMMDD.wsp`.
+#' @param panel_dir Path to the panel's folder of raw `.fcs` files;
+#'   `processed/` and `qc/` are created inside it.
+#' @param assay Character scalar, the panel's assay name in the database.
+#' @param prepare Function taking and returning the long `data` tibble of
+#'   [facs_read_wsp()] -- population selection and calculations for this
+#'   panel. Default: unchanged.
+#' @param mice Optional tibble with `mouse_ID` and the `group_col` /
+#'   `batch_col` columns (e.g. the meta workbook's `meta` sheet); those two
+#'   columns are joined into `data` with [meta_annotate()].
+#' @param exclusions Optional tibble -- the meta workbook's `exclusions`
+#'   sheet (see [facs_match_exclusions()]). `NULL` = nothing excluded.
+#' @param con A `DBI` connection from [db_connect()], with the experiment and
+#'   subjects registered. Required when `final = TRUE`; left open.
+#' @param condition_keyword Character scalar -- for panels with several wells
+#'   per mouse x tissue that differ in one variable, the FlowJo keyword
+#'   holding it (e.g. `"restimulation"`). `NA` (default) = one well.
+#' @param wsp_group Optional FlowJo sample group to read (passed to
+#'   [facs_read_wsp()] as `group`). `NULL` = all samples.
+#' @param group_col,batch_col Character scalars or `NULL` -- treatment-group
+#'   and batch columns for the QC report, see [facs_prep_save()].
+#' @param ... Further QC settings passed to [facs_prep_save()]
+#'   (`expected_mice`, `expected_tissues`, `qc_populations`,
+#'   `qc_mfi_populations`, `qc_metrics`). Used only when `final = FALSE`.
+#' @param data_dir The project's `data/` folder; provenance paths are stored
+#'   relative to it (see [db_export_facs()]).
+#' @param snapshot_root Folder for dated database snapshots after an export.
+#'   `NULL` (default) = no snapshot.
+#' @param overwrite Passed to [db_export_facs()]: `NULL` asks before
+#'   replacing a stored root.
+#' @returns Invisibly: with `final = FALSE` the path of the QC report; with
+#'   `final = TRUE` the new `import_id`, or `NULL` if the overwrite was
+#'   declined.
+#' @examples
+#' \dontrun{
+#' facs_dir <- "data/26-1_exp/raw/FACS"
+#' meta <- meta_read("data/26-1_exp/meta/meta_26-1.xlsx")
+#' facs_prep_run(
+#'   final = FALSE,
+#'   wsp_path = file.path(facs_dir, "overview-26-1_20260806.wsp"),
+#'   panel_dir = file.path(facs_dir, "overview"),
+#'   assay = "overview",
+#'   prepare = function(data) facs_calc_pct_of(data, ref_pop = "live_CD45+"),
+#'   mice = meta$meta, exclusions = meta$exclusions,
+#'   group_col = "group", batch_col = "death_date"
+#' )
+#' }
+#' @export
+facs_prep_run <- function(final, wsp_path, panel_dir, assay,
+                          prepare = identity, mice = NULL, exclusions = NULL,
+                          con = NULL, condition_keyword = NA_character_,
+                          wsp_group = NULL, group_col = NULL, batch_col = NULL,
+                          ..., data_dir = "data", snapshot_root = NULL,
+                          overwrite = NULL) {
+  if (!is.logical(final) || length(final) != 1L || is.na(final)) {
+    stop("`final` must be TRUE or FALSE.", call. = FALSE)
+  }
+  if (!file.exists(wsp_path)) {
+    stop("Workspace not found: ", wsp_path, call. = FALSE)
+  }
+
+  if (final) {
+    if (is.null(con)) {
+      stop("`con` is required for the final export (final = TRUE).",
+           call. = FALSE)
+    }
+    prep <- facs_prep_load(wsp_path, panel_dir)
+    id <- db_export_facs(con, prep, exclusions, data_dir = data_dir,
+                         overwrite = overwrite)
+    if (!is.null(id) && !is.null(snapshot_root)) db_snapshot(con, snapshot_root)
+    return(invisible(id))
+  }
+
+  keywords <- c("mouse_ID", "tissue",
+                if (!is.na(condition_keyword)) condition_keyword)
+  data <- facs_read_wsp(wsp_path, group = wsp_group, keywords = keywords)$data |>
+    prepare()
+
+  cols <- c(group_col, batch_col)
+  if (!is.null(mice) && length(cols) > 0L) {
+    data <- meta_annotate(
+      data,
+      mice |>
+        dplyr::filter(!is.na(mouse_ID)) |>
+        dplyr::select(mouse_ID, dplyr::all_of(unique(cols))),
+      by = "mouse_ID"
+    )
+  }
+
+  prep_path <- facs_prep_save(
+    data, wsp_path, assay, panel_dir,
+    condition_keyword = condition_keyword,
+    group_col = group_col, batch_col = batch_col, ...
+  )
+  report <- report_knit_facs_qc(prep_path, exclusions)
+  message("QC report: ", report)
+  invisible(report)
+}
