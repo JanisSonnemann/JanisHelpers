@@ -53,6 +53,68 @@ qc_resolve_ <- function(data, qc = list()) {
   )
 }
 
+# Robust-z outlier scoring for the three plot checks. Returns the rows of
+# `data` that belong to a check, plus `check`, `n_events`, `t` (transformed
+# value, NA if unscorable), `excluded`, `z` (NA when not scored) and `flag`.
+# Scored within group x tissue x condition x population x metric; excluded
+# files and unscorable values don't feed the box median / MAD.
+qc_score_ <- function(data, settings, excluded_files = character(),
+                      min_n = 4, min_events = 50, z_cut = 3.5,
+                      mad_floor = c(logit = 0.2, log10 = 0.1)) {
+  pops <- settings$qc_populations
+  counts <- data |>
+    dplyr::filter(metric == "count") |>
+    dplyr::distinct(file_name, population_full_path, n_events = value)
+
+  rows <- data |>
+    dplyr::mutate(check = dplyr::case_when(
+      metric == "fraction_of_parent" & population %in% pops ~ "hierarchy",
+      metric == "count" & population %in% pops ~ "counts",
+      metric %in% settings$qc_metrics &
+        population %in% settings$qc_mfi_populations ~ "mfi",
+      .default = NA_character_
+    )) |>
+    dplyr::filter(!is.na(check)) |>
+    dplyr::left_join(counts, by = c("file_name", "population_full_path")) |>
+    dplyr::mutate(
+      excluded = file_name %in% excluded_files,
+      t = dplyr::case_when(
+        check == "hierarchy" & value > 0 ~
+          stats::qlogis((n_events + 0.5) / (n_events / value + 1)),
+        check == "counts" ~ log10(value + 1),
+        check == "mfi" & value > 0 ~ log10(value),
+        .default = NA_real_
+      ),
+      t = dplyr::if_else(is.na(n_events) | n_events < min_events, NA_real_, t),
+      floor = dplyr::if_else(check == "hierarchy", mad_floor[["logit"]],
+                             mad_floor[["log10"]])
+    )
+
+  group_col <- settings$group_col
+  if (is.null(group_col)) {
+    return(rows |>
+      dplyr::mutate(z = NA_real_, flag = FALSE) |>
+      dplyr::select(!floor))
+  }
+
+  rows |>
+    dplyr::mutate(t = dplyr::if_else(is.na(.data[[group_col]]), NA_real_, t)) |>
+    dplyr::group_by(dplyr::across(dplyr::all_of(
+      c(group_col, "tissue", "condition", "population_full_path", "metric")
+    ))) |>
+    dplyr::mutate(
+      .ref = !is.na(t) & !excluded,
+      .n = sum(.ref),
+      .med = stats::median(t[.ref]),
+      .mad = 1.4826 * stats::median(abs(t[.ref] - .med)),
+      z = dplyr::if_else(.n >= min_n & !is.na(t),
+                         (t - .med) / pmax(.mad, floor), NA_real_)
+    ) |>
+    dplyr::ungroup() |>
+    dplyr::mutate(flag = !is.na(z) & abs(z) > z_cut) |>
+    dplyr::select(!c(floor, .ref, .n, .med, .mad))
+}
+
 # QC settings of a prep result: the stored `info$qc`, or defaults for a prep
 # saved before QC settings existed (no group / batch column, no expected mice).
 qc_settings_ <- function(prep) {
