@@ -113,6 +113,65 @@ test_that("report_knit_facs_qc lists exclusion rows for other panels", {
   expect_match(html, "Overvew")
 })
 
+render_qc_html_ <- function(prep_path, exclusions = NULL) {
+  paste(readLines(report_knit_facs_qc(prep_path, exclusions), warn = FALSE),
+        collapse = "\n")
+}
+
+test_that("report_knit_facs_qc renders QC checks with flags", {
+  skip_if_not(rmarkdown::pandoc_available())
+  d <- local_prep_dirs()
+  qd <- fake_qc_data()
+  prep <- suppressMessages(facs_prep_save(
+    qd, d$wsp_path, "overview", d$panel_dir,
+    group_col = "grp", batch_col = "day",
+    expected_mice = c(unique(qd$mouse_ID), "m-99"),
+    qc_mfi_populations = "T"
+  ))
+  html <- render_qc_html_(prep, tibble::tibble(mouse_ID = "m-5", reason = "clots"))
+  for (section in c("Completeness", "Gating hierarchy", "Raw counts", "MFI",
+                    "Flagged samples", "Batch")) {
+    expect_match(html, section)
+  }
+  expect_match(html, "m-3")
+  expect_match(html, "m-99")
+  expect_match(html, "<img")
+})
+
+test_that("report_knit_facs_qc renders an old prep without qc settings", {
+  skip_if_not(rmarkdown::pandoc_available())
+  d <- local_prep_dirs()
+  path <- suppressMessages(
+    facs_prep_save(fake_qc_data(), d$wsp_path, "overview", d$panel_dir)
+  )
+  prep <- readRDS(path)
+  prep$info$qc <- NULL
+  saveRDS(prep, path)
+  html <- render_qc_html_(path)
+  expect_match(html, "rerun the prep script")
+  expect_match(html, "Expected mice not set")
+})
+
+test_that("report_knit_facs_qc notes when no MFI populations are selected", {
+  skip_if_not(rmarkdown::pandoc_available())
+  d <- local_prep_dirs()
+  prep <- suppressMessages(facs_prep_save(
+    fake_qc_data(), d$wsp_path, "overview", d$panel_dir,
+    group_col = "grp", batch_col = "day"
+  ))
+  expect_match(render_qc_html_(prep), "No MFI populations selected")
+})
+
+test_that("report_knit_facs_qc renders the QC plots without warnings", {
+  skip_if_not(rmarkdown::pandoc_available())
+  d <- local_prep_dirs()
+  prep <- suppressMessages(facs_prep_save(
+    fake_qc_data(), d$wsp_path, "overview", d$panel_dir,
+    group_col = "grp", batch_col = "day", qc_mfi_populations = "T"
+  ))
+  expect_no_warning(report_knit_facs_qc(prep))
+})
+
 test_that("report_knit_facs_qc renders without exclusions and shows clashes", {
   skip_if_not(rmarkdown::pandoc_available())
   d <- local_prep_dirs()

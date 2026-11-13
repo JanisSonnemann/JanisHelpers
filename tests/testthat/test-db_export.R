@@ -47,6 +47,15 @@ test_that("exports all files, logs the import with relative paths", {
   expect_equal(log$rows_written, 8)
 })
 
+test_that("db_export_facs ignores extra meta columns in prep data", {
+  con <- local_test_db(); seed_export_fixture(con)
+  d <- local_prep_dirs()
+  with_meta <- dplyr::mutate(two_mice, grp = "A", day = as.Date("2026-06-15"))
+  prep <- suppressMessages(local_loaded_prep(d, with_meta))
+  suppressMessages(db_export_facs(con, prep, data_dir = d$data_dir))
+  expect_equal(n_rows(con, "facs_measurements"), nrow(prep$data))
+})
+
 test_that("applies exclusions and records them with the import", {
   con <- local_test_db(); seed_export_fixture(con)
   d <- local_prep_dirs()

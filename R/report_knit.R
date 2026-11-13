@@ -103,7 +103,10 @@ report_knit_wide <- function(input, ...) {
 #' `<panel_dir>/qc/<wsp name>_qc.html` (one per workspace version, overwritten
 #' on rerun). The report lists every file, flags files hit by the exclusions
 #' sheet, warns about keyword clashes and exclusion rows that match no file,
-#' and has placeholder sections for QC checks.
+#' and runs the QC checks configured in the prep result (`info$qc`, see
+#' [facs_prep_save()]): completeness, gating hierarchy, raw counts and MFI,
+#' each with an individuals plot (robust-z outliers labelled) and one batch
+#' plot per tissue, plus a ranked table of flagged samples.
 #'
 #' @param prep_path Path to the prep `.rds` returned by [facs_prep_save()].
 #' @param exclusions Optional tibble -- the `exclusions` sheet of the meta

@@ -16,6 +16,59 @@ info <- prep$info
 data <- prep$data
 matched <- JanisHelpers::facs_match_exclusions(data, params$exclusions, info$assay)
 clashes <- JanisHelpers::facs_check_file_clashes(data)
+
+settings <- JanisHelpers:::qc_settings_(prep)
+scored <- JanisHelpers:::qc_score_(data, settings,
+                                   excluded_files = matched$excluded_files$file_name)
+all_pops <- JanisHelpers:::qc_resolve_(data)$qc_populations
+describe_sel <- function(sel, all) {
+  if (length(sel) == 0) "none"
+  else if (setequal(sel, all)) paste0("all (", length(all), ")")
+  else paste(sel, collapse = ", ")
+}
+or_unset <- function(x) if (is.null(x)) "not set" else paste0("`", x, "`")
+conditions <- sort(unique(data$condition))
+tissues <- intersect(settings$expected_tissues, unique(data$tissue))
+
+# Print a ggplot (or nothing for NULL) with a height that fits its facet rows.
+emit_plot <- function(p) {
+  if (is.null(p)) return(invisible(NULL))
+  h <- JanisHelpers:::qc_fig_height_(length(unique(p$data$.row)))
+  env <- new.env()
+  env$p <- p
+  # knit_child() switches to the template's folder; switch back afterwards.
+  wd <- getwd()
+  on.exit(setwd(wd), add = TRUE)
+  cat(knitr::knit_child(
+    text = c(sprintf("```{r, fig.height = %s, fig.width = 10}", h), "print(p)", "```"),
+    envir = env, quiet = TRUE
+  ), "\n\n")
+}
+note <- function(...) cat("\n\n*", ..., "*\n\n", sep = "")
+condition_heading <- function(cond, level = "####") {
+  if (length(conditions) > 1 || cond != "none") {
+    cat("\n\n", level, " Condition: ", cond, "\n\n", sep = "")
+  }
+}
+
+# One plot check: individuals plot, then one batch plot per tissue.
+emit_check <- function(check, population = NULL) {
+  for (cond in conditions) {
+    condition_heading(cond)
+    emit_plot(JanisHelpers:::qc_plot_individuals_(scored, settings, check,
+                                                  condition = cond,
+                                                  population = population))
+    if (is.null(settings$batch_col)) next
+    for (tis in tissues) {
+      p <- JanisHelpers:::qc_plot_batch_(scored, settings, check, tissue = tis,
+                                         condition = cond, population = population)
+      if (!is.null(p)) {
+        cat("\n\n##### Batch -- ", tis, "\n\n", sep = "")
+        emit_plot(p)
+      }
+    }
+  }
+}
 ```
 
 | | |
@@ -25,6 +78,9 @@ clashes <- JanisHelpers::facs_check_file_clashes(data)
 | Panel (assay) | `r info$assay` |
 | Prep result created | `r format(info$created_at, "%Y-%m-%d %H:%M")` |
 | JanisHelpers | `r info$package_version` |
+| Group / batch column | `r or_unset(settings$group_col)` / `r or_unset(settings$batch_col)` |
+| QC populations | `r describe_sel(settings$qc_populations, all_pops)` |
+| MFI populations / markers | `r describe_sel(settings$qc_mfi_populations, all_pops)` / `r describe_sel(settings$qc_metrics, settings$qc_metrics)` |
 
 All samples are shown. Rows on the exclusions sheet are only flagged here;
 they are dropped at the final export.
@@ -85,14 +141,80 @@ if (nrow(matched$unmatched) > 0) {
 
 ## QC checks
 
-### Gating
+Outlier labels: robust z (median / MAD, logit scale for fractions, log10 for
+counts and MFIs) above 3.5 within group x tissue x population. Not scored:
+populations under 50 events, boxes with fewer than 4 samples, MFIs <= 0.
+Excluded samples are scored but don't feed the box median / MAD.
 
-<!-- add checks -->
+```{r no-group, results = "asis"}
+if (is.null(settings$group_col)) {
+  note("Group column not set -- rerun the prep script with `group_col` to score outliers.")
+}
+```
 
-### Counts
+### Completeness
 
-<!-- add checks -->
+```{r completeness, results = "asis"}
+comp <- JanisHelpers:::qc_completeness_(data, settings)
+if (is.null(comp)) {
+  note("Expected mice not set -- rerun the prep script with `expected_mice`.")
+} else {
+  cat(comp$n_expected, " expected samples, ", comp$n_present, " present.\n\n", sep = "")
+  if (nrow(comp$missing) == 0) {
+    cat("None missing.\n")
+  } else {
+    print(knitr::kable(comp$missing, caption = "Missing samples"))
+  }
+}
+```
 
-### Outliers
+### Gating hierarchy
 
-<!-- add checks -->
+Fraction of parent.
+
+```{r hierarchy, results = "asis"}
+emit_check("hierarchy")
+```
+
+### Raw counts
+
+```{r counts, results = "asis"}
+emit_check("counts")
+```
+
+### MFI
+
+```{r mfi, results = "asis"}
+if (length(settings$qc_mfi_populations) == 0) {
+  note("No MFI populations selected (`qc_mfi_populations` in the prep script).")
+} else {
+  for (pop in settings$qc_mfi_populations) {
+    cat("\n\n#### ", pop, "\n\n", sep = "")
+    if (!any(scored$check == "mfi" & as.character(scored$population) == pop)) {
+      note("No MFI values for this population.")
+      next
+    }
+    emit_check("mfi", population = pop)
+  }
+}
+```
+
+### Flagged samples
+
+```{r flags, results = "asis"}
+if (is.null(settings$group_col)) {
+  note("Not scored -- group column not set.")
+} else {
+  flags <- JanisHelpers:::qc_flag_table_(scored, settings)
+  if (nrow(flags) == 0) {
+    cat("No samples flagged.\n")
+  } else {
+    cat("Score = number of distinct tissue x condition x check combinations",
+        "flagged for the mouse; every flagged value is listed.\n\n")
+    flags$value <- signif(flags$value, 3)
+    flags$z <- round(flags$z, 1)
+    flags$excluded <- ifelse(flags$excluded, "excluded", "")
+    print(knitr::kable(flags))
+  }
+}
+```

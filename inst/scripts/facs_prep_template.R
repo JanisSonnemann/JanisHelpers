@@ -28,6 +28,13 @@ condition_keyword <- NA_character_              # e.g. "restimulation" for multi
 meta_path <- file.path(data_dir, exp_dir, "meta", "meta_26-1.xlsx")
 db_path   <- "~/databases/MPO_mRNA/MPO_mRNA.duckdb"
 
+# QC report settings (columns joined from the meta workbook's `meta` sheet).
+group_col  <- "group"                           # treatment group: outliers scored within groups
+batch_col  <- "death_date"                      # staining / acquisition day for the batch plots
+qc_populations     <- NULL                      # NULL = all selected populations
+qc_mfi_populations <- character()               # e.g. "Treg_FoxP3+_CD25hi"; empty = no MFI check
+qc_metrics         <- NULL                      # NULL = all median_* MFIs
+
 facs_dir   <- file.path(data_dir, exp_dir, "raw", "FACS")
 wsp_path   <- file.path(facs_dir, wsp)
 panel_path <- file.path(facs_dir, panel_dir)
@@ -52,8 +59,25 @@ if (!final) {
   data <- data |>
     facs_calc_pct_of(ref_pop = "live_CD45+")
 
-  prep_path <- facs_prep_save(data, wsp_path, assay, panel_path,
-                              condition_keyword = condition_keyword)
+  # Group and batch columns for the QC report.
+  mice <- meta$meta |> dplyr::filter(!is.na(mouse_ID))
+  data <- meta_annotate(
+    data, dplyr::select(mice, mouse_ID, dplyr::all_of(c(group_col, batch_col))),
+    by = "mouse_ID"
+  )
+  # Mice this panel should contain: all mice minus dropouts. The dropout
+  # column (`early` here) is experiment-specific -- adapt.
+  expected_mice <- mice$mouse_ID[is.na(mice$early)]
+
+  prep_path <- facs_prep_save(
+    data, wsp_path, assay, panel_path,
+    condition_keyword = condition_keyword,
+    group_col = group_col, batch_col = batch_col,
+    expected_mice = expected_mice,
+    qc_populations = qc_populations,
+    qc_mfi_populations = qc_mfi_populations,
+    qc_metrics = qc_metrics
+  )
   report_knit_facs_qc(prep_path, exclusions)
 } else {
   # ---- final export -------------------------------------------------------------

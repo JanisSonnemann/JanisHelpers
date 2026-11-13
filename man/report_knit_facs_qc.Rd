@@ -22,7 +22,10 @@ Renders the \code{facs-qc-template} from a prep result saved by
 \verb{<panel_dir>/qc/<wsp name>_qc.html} (one per workspace version, overwritten
 on rerun). The report lists every file, flags files hit by the exclusions
 sheet, warns about keyword clashes and exclusion rows that match no file,
-and has placeholder sections for QC checks.
+and runs the QC checks configured in the prep result (\code{info$qc}, see
+\code{\link[=facs_prep_save]{facs_prep_save()}}): completeness, gating hierarchy, raw counts and MFI,
+each with an individuals plot (robust-z outliers labelled) and one batch
+plot per tissue, plus a ranked table of flagged samples.
 }
 \examples{
 \dontrun{
