@@ -65,7 +65,11 @@ facs_prep_run(
   group_col     = "group",
   batch_col     = "death_date",
   expected_mice = mice$mouse_ID[is.na(mice$early)],
-  qc_mfi_populations = character(),             # e.g. "Treg_FoxP3+_CD25hi"
+  # Which populations / MFIs the QC checks cover (labels after prepare()).
+  expected_tissues   = NULL,                    # NULL = tissues in the data
+  qc_populations     = NULL,                    # hierarchy + count checks; NULL = all selected
+  qc_mfi_populations = character(),             # MFI check, e.g. "Treg_FoxP3+_CD25hi"; empty = none
+  qc_metrics         = NULL,                    # e.g. "median_CD25"; NULL = all median_*
   snapshot_root = file.path("data", "z_snapshots")
 )
 if (!is.null(con)) DBI::dbDisconnect(con, shutdown = TRUE)
