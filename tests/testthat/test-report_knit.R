@@ -129,7 +129,8 @@ test_that("report_knit_facs_qc renders QC checks with flags", {
     qc_mfi_populations = "T"
   ))
   html <- render_qc_html_(prep, tibble::tibble(mouse_ID = "m-5", reason = "clots"))
-  for (section in c("Completeness", "Gating hierarchy", "Raw counts", "MFI",
+  for (section in c("Completeness", "Fraction of parent", "Raw counts",
+                    "Batch effects", "MFI",
                     "Flagged samples", "Batch")) {
     expect_match(html, section)
   }

@@ -3,6 +3,7 @@ title: "FACS QC report"
 output:
   html_document:
     toc: true
+    toc_depth: 4
     toc_float: true
 params:
   prep: ""
@@ -48,29 +49,46 @@ emit_plot <- function(p) {
   ), "\n\n")
 }
 note <- function(...) cat("\n\n*", ..., "*\n\n", sep = "")
+# Returns whether a heading was written (one "none" condition gets none).
 condition_heading <- function(cond, level = "####") {
-  if (length(conditions) > 1 || cond != "none") {
-    cat("\n\n", level, " Condition: ", cond, "\n\n", sep = "")
-  }
+  shown <- length(conditions) > 1 || cond != "none"
+  if (shown) cat("\n\n", level, " Condition: ", cond, "\n\n", sep = "")
+  invisible(shown)
 }
 
-# One plot check: individuals plot, then one batch plot per tissue.
-emit_check <- function(check, population = NULL) {
+# Individuals plot of one check, per condition.
+emit_individuals <- function(check, population = NULL, level = "####") {
   for (cond in conditions) {
-    condition_heading(cond)
+    condition_heading(cond, level)
     emit_plot(JanisHelpers:::qc_plot_individuals_(scored, settings, check,
                                                   condition = cond,
                                                   population = population))
-    if (is.null(settings$batch_col)) next
+  }
+}
+
+# Batch plots of one check: one per condition x tissue.
+emit_batch <- function(check, population = NULL, level = "#####") {
+  if (is.null(settings$batch_col)) {
+    note("Batch column not set -- rerun the prep script with `batch_col`.")
+    return(invisible(NULL))
+  }
+  for (cond in conditions) {
+    tissue_level <- if (condition_heading(cond, level)) paste0(level, "#") else level
     for (tis in tissues) {
       p <- JanisHelpers:::qc_plot_batch_(scored, settings, check, tissue = tis,
                                          condition = cond, population = population)
       if (!is.null(p)) {
-        cat("\n\n##### Batch -- ", tis, "\n\n", sep = "")
+        cat("\n\n", tissue_level, " Batch -- ", tis, "\n\n", sep = "")
         emit_plot(p)
       }
     }
   }
+}
+
+# Both: individuals, then batch plots (MFI).
+emit_check <- function(check, population = NULL) {
+  emit_individuals(check, population, level = "#####")
+  emit_batch(check, population, level = "#####")
 }
 ```
 
@@ -173,18 +191,32 @@ if (is.null(comp)) {
 }
 ```
 
-### Gating hierarchy
+### Fraction of parent
 
-Fraction of parent.
+Gating hierarchy: each population as a fraction of its parent.
 
 ```{r hierarchy, results = "asis"}
-emit_check("hierarchy")
+emit_individuals("hierarchy")
 ```
 
 ### Raw counts
 
 ```{r counts, results = "asis"}
-emit_check("counts")
+emit_individuals("counts")
+```
+
+### Batch effects
+
+#### Fraction of parent
+
+```{r batch-hierarchy, results = "asis"}
+emit_batch("hierarchy")
+```
+
+#### Raw counts
+
+```{r batch-counts, results = "asis"}
+emit_batch("counts")
 ```
 
 ### MFI

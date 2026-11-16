@@ -149,6 +149,11 @@ group (cols), x = batch, boxes and points coloured by batch. Days are compared
 **within** each group, so unbalanced groups can't fake an effect. No labels,
 no test.
 
+Report sections (all in the TOC, `toc_depth: 4`): "Fraction of parent" (6)
+and "Raw counts" (7) hold only the individuals plots; their batch plots sit
+together under "Batch effects" -> "Fraction of parent" / "Raw counts". MFI (8)
+keeps its batch plots under each population.
+
 ### Flagged samples table (end of the report)
 
 Every flagged value: `mouse_ID`, flag score for that mouse, tissue,
