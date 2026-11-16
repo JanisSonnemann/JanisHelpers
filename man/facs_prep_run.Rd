@@ -59,7 +59,8 @@ and batch columns for the QC report, see \code{\link[=facs_prep_save]{facs_prep_
 
 \item{...}{Further QC settings passed to \code{\link[=facs_prep_save]{facs_prep_save()}}
 (\code{expected_mice}, \code{expected_tissues}, \code{qc_populations},
-\code{qc_mfi_populations}, \code{qc_metrics}). Used only when \code{final = FALSE}.}
+\code{qc_mfi_populations}, \code{qc_metrics}, \code{min_events}). Used only when
+\code{final = FALSE}.}
 
 \item{data_dir}{The project's \verb{data/} folder; provenance paths are stored
 relative to it (see \code{\link[=db_export_facs]{db_export_facs()}}).}

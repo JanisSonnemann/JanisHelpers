@@ -42,6 +42,17 @@ test_that("facs_prep_save stores resolved qc settings in info", {
   expect_equal(qc$expected_tissues, "spleen")
   expect_equal(qc$qc_mfi_populations, character())
   expect_equal(qc$qc_metrics, character())
+  expect_equal(qc$min_events, 50)
+})
+
+test_that("facs_prep_save stores a custom min_events", {
+  d <- local_prep_dirs()
+  path <- suppressMessages(facs_prep_save(
+    fake_prep_data(meta_files), d$wsp_path, "overview", d$panel_dir,
+    min_events = 20
+  ))
+  qc <- readRDS(path)$info$qc
+  expect_equal(qc$min_events, 20)
 })
 
 test_that("facs_prep_save errors on unknown qc columns or populations", {
@@ -54,6 +65,7 @@ test_that("facs_prep_save errors on unknown qc columns or populations", {
   expect_error(save(batch_col = "nope_day"), "nope_day")
   expect_error(save(qc_populations = "B cells"), "B cells")
   expect_error(save(qc_mfi_populations = "Treg"), "Treg")
+  expect_error(save(min_events = -1), "min_events")
 })
 
 test_that("facs_prep_save keeps extra meta columns in data", {

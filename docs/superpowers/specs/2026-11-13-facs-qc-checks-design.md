@@ -223,3 +223,22 @@ plausible real gating issue, i.e. the method catches what it should.
   existing calls working where sensible.
 - Whether `db_export_facs()` needs to drop the joined meta columns before
   writing (check it tolerates extra columns).
+
+## Revision 2026-11-16: whisker outliers replace the robust z-score
+
+Visibly distinct points went unlabelled (26-1, NK1.1+_TCRb- fraction of
+parent: 26-1-13 lung-whole at 18 % vs. a 5 % median had logit z = 2.5). The
+logit-scale z disagreed with what the linear-% plot shows. Replaced by the
+boxplot's own rule so labels match the plot exactly:
+
+- A value is flagged when its point lies outside the whiskers: beyond
+  1.5 x IQR from the quartiles (type-7 quantiles, as `ggplot2::stat_boxplot`),
+  on the plot's axis -- fraction as is, `log10(count + 1)`, `log10(MFI)`.
+- The box is computed from all plotted points of group x tissue x condition x
+  population x metric, excluded samples and low-event populations included
+  (as drawn). Populations under `min_events` (default 50, now a
+  `facs_prep_save()` setting stored in `info$qc`) are never labelled.
+- Dropped: z-score, 3.5 cut-off, MAD floor, pseudo-counts, the 4-sample
+  minimum, excluded samples left out of the reference. The flag table shows
+  `box_median` and `side` (low / high) instead of `z`.
+- 26-1 overview (2026-11-16): 137 hierarchy + 87 count flags (hierarchy was 55 with z > 3.5).

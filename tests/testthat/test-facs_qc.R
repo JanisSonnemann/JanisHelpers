@@ -16,6 +16,14 @@ test_that("qc_settings_ fills defaults for a prep saved without qc settings", {
   expect_equal(s$qc_populations, c("live_CD45+", "CD4+"))
   expect_equal(s$qc_mfi_populations, character())
   expect_equal(s$qc_metrics, character())
+  expect_equal(s$min_events, 50)
+})
+
+test_that("qc_resolve_ validates min_events", {
+  d <- fake_qc_data()
+  expect_error(qc_resolve_(d, list(min_events = -5)), "min_events")
+  expect_error(qc_resolve_(d, list(min_events = "50")), "min_events")
+  expect_equal(qc_resolve_(d, list(min_events = 0))$min_events, 0)
 })
 
 test_that("qc_resolve_ errors on an unknown MFI metric", {
@@ -27,16 +35,31 @@ test_that("qc_settings_ returns stored settings when present", {
                  expected_tissues = "spleen", qc_populations = "CD4+",
                  qc_mfi_populations = character(), qc_metrics = character())
   prep <- list(data = fake_prep_data(qc_files), info = list(qc = stored))
+  # older stored settings get the min_events default
+  expect_equal(qc_settings_(prep), c(stored, list(min_events = 50)))
+  stored$min_events <- 20
+  prep$info$qc <- stored
   expect_equal(qc_settings_(prep), stored)
 })
 
 # -- scoring --------------------------------------------------------------------
+
+# Outliers by ggplot2's own boxplot statistics, for comparison.
+ggplot_outliers_ <- function(y) {
+  st <- ggplot2::StatBoxplot$compute_group(data.frame(x = 1, y = y),
+                                           scales = list(x = NULL))
+  st$outliers[[1]]
+}
 
 test_that("qc_score_ flags the planted outlier only", {
   d <- fake_qc_data()
   r <- qc_score_(d, fake_qc_settings(d))
   expect_equal(unique(r$mouse_ID[r$flag]), "m-3")
   expect_setequal(unique(r$check), c("hierarchy", "counts", "mfi"))
+  t_frac <- r[r$mouse_ID == "m-3" & r$population == "T" &
+                r$metric == "fraction_of_parent", ]
+  expect_true(t_frac$flag)
+  expect_equal(t_frac$side, "low")
 })
 
 test_that("qc_score_ runs without warnings", {
@@ -45,32 +68,51 @@ test_that("qc_score_ runs without warnings", {
   expect_no_warning(qc_score_(d, fake_qc_settings(d), excluded_files = "m-3_spleen.fcs"))
 })
 
-test_that("qc_score_ uses the MAD of the reference rows only", {
+test_that("qc_score_ flags exactly the points ggplot2 draws outside the whiskers", {
   d <- fake_qc_data()
-  s <- fake_qc_settings(d)
-  r <- qc_score_(d, s, excluded_files = "m-3_spleen.fcs",
-                 mad_floor = c(logit = 0, log10 = 0))
-  box <- r[r$grp == "A" & r$population == "live" & r$metric == "count", ]
-  ref <- box$t[!box$excluded]
-  expected <- (box$t - stats::median(ref)) / stats::mad(ref)
-  expect_equal(box$z, expected)
+  # spread group A's T fractions so the box has a real IQR, plus a high value
+  a_t <- d$grp == "A" & d$population == "T" & d$metric == "fraction_of_parent"
+  d$value[a_t] <- c(0.10, 0.12, 0.15, 0.18, 0.20, 0.22, 0.25, 0.60)
+  r <- qc_score_(d, fake_qc_settings(d))
+  box <- r[r$grp == "A" & r$population == "T" & r$metric == "fraction_of_parent", ]
+  expect_equal(sort(box$value[box$flag]), sort(ggplot_outliers_(box$value)))
+  expect_equal(box$side[box$value == 0.60], "high")
+  expect_equal(box$box_median, rep(stats::median(box$value), nrow(box)))
+  # counts on the log axis: same rule on log10(count + 1)
+  cnt <- r[r$grp == "A" & r$population == "T" & r$metric == "count", ]
+  expect_equal(sort(log10(cnt$value[cnt$flag] + 1)),
+               sort(ggplot_outliers_(log10(cnt$value + 1))))
 })
 
-test_that("qc_score_ does not score populations under 50 events", {
+test_that("qc_score_ uses the fraction itself, not a transformed scale", {
+  d <- fake_qc_data()
+  # 26-1-13-like box: seven mice at 3-8 %, one at 18 %
+  a_t <- d$grp == "A" & d$population == "T" & d$metric == "fraction_of_parent"
+  d$value[a_t] <- c(0.030, 0.036, 0.038, 0.039, 0.061, 0.077, 0.082, 0.181)
+  r <- qc_score_(d, fake_qc_settings(d))
+  box <- r[r$grp == "A" & r$population == "T" & r$metric == "fraction_of_parent", ]
+  expect_equal(box$mouse_ID[box$flag], box$mouse_ID[box$value == 0.181])
+})
+
+test_that("qc_score_ does not flag populations under min_events", {
   d <- fake_qc_data()
   r <- qc_score_(d, fake_qc_settings(d))
   rare <- r[r$population == "rare", ]
   expect_gt(nrow(rare), 0)
-  expect_true(all(is.na(rare$z)))
   expect_false(any(rare$flag))
+  # with min_events = 0 the planted outlier's rare fraction is labelled
+  r0 <- qc_score_(d, fake_qc_settings(d, min_events = 0))
+  rare0 <- r0[r0$population == "rare" & r0$metric == "fraction_of_parent", ]
+  expect_true(rare0$flag[rare0$mouse_ID == "m-3"])
 })
 
-test_that("qc_score_ gives finite z when a box has zero spread", {
+test_that("qc_score_ handles a box with zero spread", {
   d <- fake_qc_data()
   d$value[d$population == "live" & d$metric == "count"] <- 1e5
   r <- qc_score_(d, fake_qc_settings(d))
-  z <- r$z[r$population == "live" & r$metric == "count"]
-  expect_true(all(is.finite(z)))
+  live <- r[r$population == "live" & r$metric == "count", ]
+  expect_false(any(live$flag))
+  expect_false(anyNA(r$flag))
 })
 
 test_that("qc_score_ keeps fraction 0 / 1 and count 0 finite", {
@@ -81,54 +123,26 @@ test_that("qc_score_ keeps fraction 0 / 1 and count 0 finite", {
             d$metric %in% c("count", "fraction_of_parent")] <- 0
   r <- qc_score_(d, fake_qc_settings(d))
   expect_false(any(is.infinite(r$t) | is.nan(r$t)))
-  expect_false(any(is.infinite(r$z) | is.nan(r$z)))
   expect_false(anyNA(r$flag))
 })
 
-test_that("qc_score_ skips boxes under 4 samples", {
-  d <- fake_qc_data(n_per_group = 3)
-  r <- qc_score_(d, fake_qc_settings(d))
-  expect_true(all(is.na(r$z)))
-})
-
-test_that("qc_score_ leaves excluded files out of the reference but scores them", {
+test_that("qc_score_ draws the box from all plotted points, excluded ones too", {
   d <- fake_qc_data()
   r <- qc_score_(d, fake_qc_settings(d), excluded_files = "m-3_spleen.fcs")
   out <- r[r$mouse_ID == "m-3", ]
   expect_true(all(out$excluded))
   expect_false(any(r$excluded[r$mouse_ID != "m-3"]))
   expect_true(any(out$flag))
-  expect_false(any(r$flag[r$mouse_ID != "m-3"]))
+  r_all <- qc_score_(d, fake_qc_settings(d))
+  expect_equal(r$flag, r_all$flag)
 })
 
-test_that("qc_score_ excluded files do not shift the box median", {
-  d <- fake_qc_data()
-  # a second outlier in group A; excluding it must not change m-1's z
-  d$value[d$mouse_ID == "m-5" & d$population == "T" &
-            d$metric == "fraction_of_parent"] <- 0.9
-  s <- fake_qc_settings(d)
-  z_of <- function(r) {
-    r$z[r$mouse_ID == "m-1" & r$population == "T" & r$metric == "fraction_of_parent"]
-  }
-  r_ex <- qc_score_(d, s, excluded_files = "m-5_spleen.fcs")
-  r_drop <- qc_score_(d[d$mouse_ID != "m-5", ], s)
-  expect_equal(z_of(r_ex), z_of(r_drop))
-})
-
-test_that("qc_score_ ignores mice with NA group", {
-  d <- fake_qc_data()
-  d$grp[d$mouse_ID == "m-1"] <- NA
-  r <- qc_score_(d, fake_qc_settings(d))
-  expect_true(all(is.na(r$z[r$mouse_ID == "m-1"])))
-  expect_false(any(r$flag[r$mouse_ID == "m-1"]))
-})
-
-test_that("qc_score_ does not score without a group column", {
+test_that("qc_score_ does not flag without a group column", {
   d <- fake_qc_data()
   r <- qc_score_(d, fake_qc_settings(d, group_col = NULL))
   expect_gt(nrow(r), 0)
-  expect_true(all(is.na(r$z)))
   expect_false(any(r$flag))
+  expect_true(all(is.na(r$side)))
 })
 
 test_that("qc_completeness_ lists missing mouse x tissue", {
@@ -174,7 +188,8 @@ fake_scored <- function(day = as.POSIXct("2026-06-15", tz = "UTC")) {
     check = c(rep("hierarchy", 3), rep("counts", 3), "hierarchy", "hierarchy",
               "counts"),
     value = 1,
-    z = c(4, -5, 6, 4, 4, 4, 9, -4, 1),
+    box_median = 2,
+    side = c("low", "high", "low", "low", "high", "low", "high", "low", NA),
     flag = c(rep(TRUE, 8), FALSE),
     excluded = c(rep(FALSE, 6), TRUE, TRUE, FALSE)
   )
@@ -188,11 +203,11 @@ test_that("qc_flag_table_ counts a cascading gate once per sample and check", {
   expect_equal(unique(tbl$score[tbl$mouse_ID == "m-2"]), 2L)
   expect_false("m-3" %in% tbl$mouse_ID)
   expect_equal(names(tbl), c("mouse_ID", "score", "tissue", "condition", "group",
-                             "batch", "population", "metric", "value", "z",
+                             "batch", "population", "metric", "value",
+                             "box_median", "side",
                              "excluded"))
-  # m-1 before m-2 (same score, mouse_ID order); within a mouse by |z| desc
+  # m-1 before m-2 (same score, mouse_ID order)
   expect_equal(tbl$mouse_ID[1], "m-1")
-  expect_equal(tbl$z[1], 6)
   expect_true(all(tbl$excluded[tbl$mouse_ID == "m-2"]))
 })
 
@@ -309,5 +324,5 @@ test_that("qc_score_ only scores MFI for qc_mfi_populations and positive values"
   r <- qc_score_(d, fake_qc_settings(d))
   neg <- r[r$mouse_ID == "m-1" & r$metric == "median_CD25", ]
   expect_true(is.na(neg$t))
-  expect_true(is.na(neg$z))
+  expect_false(neg$flag)
 })

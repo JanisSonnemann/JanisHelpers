@@ -4,8 +4,21 @@
 
 qc_setting_names_ <- c(
   "group_col", "batch_col", "expected_mice", "expected_tissues",
-  "qc_populations", "qc_mfi_populations", "qc_metrics"
+  "qc_populations", "qc_mfi_populations", "qc_metrics", "min_events"
 )
+
+# Default for `min_events` (also filled into older stored settings).
+qc_min_events_default_ <- 50
+
+qc_resolve_min_events_ <- function(x) {
+  if (is.null(x)) {
+    return(qc_min_events_default_)
+  }
+  if (!is.numeric(x) || length(x) != 1 || is.na(x) || x < 0) {
+    stop("`min_events` must be a single non-negative number.", call. = FALSE)
+  }
+  x
+}
 
 # Validate a partial QC settings list against `data` and fill the defaults.
 # Errors name every unknown column / population / metric.
@@ -49,18 +62,23 @@ qc_resolve_ <- function(data, qc = list()) {
     },
     qc_populations = if (is.null(qc$qc_populations)) all_pops else as.character(qc$qc_populations),
     qc_mfi_populations = if (is.null(qc$qc_mfi_populations)) character() else as.character(qc$qc_mfi_populations),
-    qc_metrics = if (is.null(qc$qc_metrics)) all_mfi else as.character(qc$qc_metrics)
+    qc_metrics = if (is.null(qc$qc_metrics)) all_mfi else as.character(qc$qc_metrics),
+    min_events = qc_resolve_min_events_(qc$min_events)
   )
 }
 
-# Robust-z outlier scoring for the three plot checks. Returns the rows of
-# `data` that belong to a check, plus `check`, `n_events`, `t` (transformed
-# value, NA if unscorable), `excluded`, `z` (NA when not scored) and `flag`.
-# Scored within group x tissue x condition x population x metric; excluded
-# files and unscorable values don't feed the box median / MAD.
-qc_score_ <- function(data, settings, excluded_files = character(),
-                      min_n = 4, min_events = 50, z_cut = 3.5,
-                      mad_floor = c(logit = 0.2, log10 = 0.1)) {
+# Boxplot-whisker outliers for the three plot checks. Returns the rows of
+# `data` that belong to a check, plus `check`, `n_events`, `t` (the value on
+# the plot's axis: fraction as is, log10(count + 1), log10(MFI); NA if not
+# plotted), `excluded`, `box_median` (on the value scale), `side`
+# ("low" / "high" / NA) and `flag`.
+# Same rule and same points as the boxplot (Tukey: beyond 1.5 x IQR from the
+# quartiles, per group x tissue x condition x population x metric), so a
+# value is flagged exactly when its point lies outside the whiskers. Points
+# from populations under `settings$min_events` events still feed the box but
+# are never flagged.
+qc_score_ <- function(data, settings, excluded_files = character()) {
+  min_events <- qc_resolve_min_events_(settings$min_events)
   pops <- settings$qc_populations
   counts <- data |>
     dplyr::filter(metric == "count") |>
@@ -78,44 +96,42 @@ qc_score_ <- function(data, settings, excluded_files = character(),
     dplyr::left_join(counts, by = c("file_name", "population_full_path")) |>
     dplyr::mutate(
       excluded = file_name %in% excluded_files,
-      # pseudo-count fraction, only where it is defined (case_when evaluates
-      # every branch on every row, so guard before qlogis)
-      .p = dplyr::if_else(check == "hierarchy" & value > 0,
-                          (n_events + 0.5) / (n_events / value + 1), NA_real_),
       t = dplyr::case_when(
-        check == "hierarchy" ~ stats::qlogis(.p),
+        check == "hierarchy" ~ value,
         check == "counts" ~ log10(pmax(value, 0) + 1),
         check == "mfi" & value > 0 ~ log10(pmax(value, 1e-12)),
         .default = NA_real_
-      ),
-      t = dplyr::if_else(is.na(n_events) | n_events < min_events, NA_real_, t),
-      floor = dplyr::if_else(check == "hierarchy", mad_floor[["logit"]],
-                             mad_floor[["log10"]])
+      )
     )
 
   group_col <- settings$group_col
   if (is.null(group_col)) {
-    return(rows |>
-      dplyr::mutate(z = NA_real_, flag = FALSE) |>
-      dplyr::select(!c(floor, .p)))
+    return(dplyr::mutate(rows, box_median = NA_real_, side = NA_character_,
+                         flag = FALSE))
   }
 
   rows |>
-    dplyr::mutate(t = dplyr::if_else(is.na(.data[[group_col]]), NA_real_, t)) |>
     dplyr::group_by(dplyr::across(dplyr::all_of(
       c(group_col, "tissue", "condition", "population_full_path", "metric")
     ))) |>
     dplyr::mutate(
-      .ref = !is.na(t) & !excluded,
-      .n = sum(.ref),
-      .med = stats::median(t[.ref]),
-      .mad = 1.4826 * stats::median(abs(t[.ref] - .med[.ref])),
-      z = dplyr::if_else(.n >= min_n & !is.na(t),
-                         (t - .med) / pmax(.mad, floor), NA_real_)
+      .q1 = stats::quantile(t, 0.25, na.rm = TRUE, names = FALSE),
+      .q3 = stats::quantile(t, 0.75, na.rm = TRUE, names = FALSE),
+      box_median = stats::median(value[!is.na(t)])
     ) |>
     dplyr::ungroup() |>
-    dplyr::mutate(flag = !is.na(z) & abs(z) > z_cut) |>
-    dplyr::select(!c(floor, .p, .ref, .n, .med, .mad))
+    dplyr::mutate(
+      .iqr = .q3 - .q1,
+      side = dplyr::case_when(
+        t < .q1 - 1.5 * .iqr ~ "low",
+        t > .q3 + 1.5 * .iqr ~ "high",
+        .default = NA_character_
+      ),
+      side = dplyr::if_else(!is.na(n_events) & n_events >= min_events,
+                            side, NA_character_),
+      flag = !is.na(side)
+    ) |>
+    dplyr::select(!c(.q1, .q3, .iqr))
 }
 
 # Display label per row: the leaf population name, or "parent/leaf" when the
@@ -172,10 +188,12 @@ qc_flag_table_ <- function(scored, settings) {
       score = dplyr::n_distinct(tissue, condition, check),
       .by = mouse_ID
     ) |>
-    dplyr::arrange(dplyr::desc(score), mouse_ID, dplyr::desc(abs(z))) |>
+    dplyr::arrange(dplyr::desc(score), mouse_ID, tissue, condition, check,
+                   population) |>
     dplyr::transmute(
       mouse_ID, score, tissue, condition, group, batch,
-      population = as.character(population), metric, value, z, excluded
+      population = as.character(population), metric, value, box_median, side,
+      excluded
     )
 }
 
@@ -288,11 +306,14 @@ qc_plot_batch_ <- function(scored, settings, check, tissue, condition = NULL,
                    axis.text.x = ggplot2::element_text(angle = 30, hjust = 1))
 }
 
-# QC settings of a prep result: the stored `info$qc`, or defaults for a prep
-# saved before QC settings existed (no group / batch column, no expected mice).
+# QC settings of a prep result: the stored `info$qc` (`min_events` filled in
+# for preps saved before it was a setting), or defaults for a prep saved
+# before QC settings existed (no group / batch column, no expected mice).
 qc_settings_ <- function(prep) {
-  if (!is.null(prep$info$qc)) {
-    return(prep$info$qc)
+  qc <- prep$info$qc
+  if (!is.null(qc)) {
+    if (is.null(qc$min_events)) qc$min_events <- qc_min_events_default_
+    return(qc)
   }
   qc_resolve_(prep$data)
 }

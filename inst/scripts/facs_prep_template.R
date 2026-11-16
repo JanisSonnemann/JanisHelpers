@@ -70,6 +70,7 @@ facs_prep_run(
   qc_populations     = NULL,                    # hierarchy + count checks; NULL = all selected
   qc_mfi_populations = character(),             # MFI check, e.g. "Treg_FoxP3+_CD25hi"; empty = none
   qc_metrics         = NULL,                    # e.g. "median_CD25"; NULL = all median_*
+  min_events         = 50,                      # points outside the whiskers are labelled unless under this many events
   snapshot_root = file.path("data", "z_snapshots")
 )
 if (!is.null(con)) DBI::dbDisconnect(con, shutdown = TRUE)

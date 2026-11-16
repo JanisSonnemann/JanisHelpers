@@ -84,6 +84,7 @@ emit_check <- function(check, population = NULL) {
 | Group / batch column | `r or_unset(settings$group_col)` / `r or_unset(settings$batch_col)` |
 | QC populations | `r describe_sel(settings$qc_populations, all_pops)` |
 | MFI populations / markers | `r describe_sel(settings$qc_mfi_populations, all_pops)` / `r describe_sel(settings$qc_metrics, settings$qc_metrics)` |
+| Outlier labels | outside the boxplot whiskers; populations with at least `r settings$min_events` events |
 
 All samples are shown. Rows on the exclusions sheet are only flagged here;
 they are dropped at the final export.
@@ -144,10 +145,11 @@ if (nrow(matched$unmatched) > 0) {
 
 ## QC checks
 
-Outlier labels: robust z (median / MAD, logit scale for fractions, log10 for
-counts and MFIs) above 3.5 within group x tissue x population. Not scored:
-populations under 50 events, boxes with fewer than 4 samples, MFIs <= 0.
-Excluded samples are scored but don't feed the box median / MAD.
+Outlier labels: every point outside its boxplot's whiskers (more than
+1.5 x IQR beyond the quartiles, on the plot's axis), within group x tissue x
+population. Not labelled: populations under `r settings$min_events` events
+(they still count towards the box). Excluded samples are drawn and count
+towards the box like the others; the flag table marks them.
 
 ```{r no-group, results = "asis"}
 if (is.null(settings$group_col)) {
@@ -215,9 +217,10 @@ if (is.null(settings$group_col)) {
     cat("Score = number of distinct tissue x condition x check combinations",
         "flagged for the mouse; every flagged value is listed.\n\n")
     flags$value <- signif(flags$value, 3)
-    flags$z <- round(flags$z, 1)
+    flags$box_median <- signif(flags$box_median, 3)
     flags$excluded <- ifelse(flags$excluded, "excluded", "")
     print(knitr::kable(flags))
   }
 }
 ```
+

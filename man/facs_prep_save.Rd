@@ -16,7 +16,8 @@ facs_prep_save(
   expected_tissues = NULL,
   qc_populations = NULL,
   qc_mfi_populations = character(),
-  qc_metrics = NULL
+  qc_metrics = NULL,
+  min_events = 50
 )
 }
 \arguments{
@@ -60,6 +61,10 @@ the hierarchy and count checks. \code{NULL} = all.}
 
 \item{qc_metrics}{Character vector or \code{NULL} -- MFI metrics checked.
 \code{NULL} = all \verb{median_*} metrics.}
+
+\item{min_events}{Non-negative number -- points outside the boxplot
+whiskers are labelled as outliers unless their population has fewer
+events than this. Default 50.}
 }
 \value{
 Invisibly, the path of the written \code{.rds}. It holds a list with

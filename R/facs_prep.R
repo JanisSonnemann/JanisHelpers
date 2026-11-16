@@ -85,6 +85,9 @@ facs_check_file_clashes <- function(data) {
 #'   (`median_*` metrics) are checked. Default none.
 #' @param qc_metrics Character vector or `NULL` -- MFI metrics checked.
 #'   `NULL` = all `median_*` metrics.
+#' @param min_events Non-negative number -- points outside the boxplot
+#'   whiskers are labelled as outliers unless their population has fewer
+#'   events than this. Default 50.
 #' @returns Invisibly, the path of the written `.rds`. It holds a list with
 #'   `data` (the tibble plus a `condition` column) and `info` (`wsp_path`,
 #'   `wsp_root`, `wsp_version`, `assay`, `condition_keyword`, `panel_dir`,
@@ -104,7 +107,7 @@ facs_prep_save <- function(data, wsp_path, assay, panel_dir,
                            expected_mice = NULL, expected_tissues = NULL,
                            qc_populations = NULL,
                            qc_mfi_populations = character(),
-                           qc_metrics = NULL) {
+                           qc_metrics = NULL, min_events = 50) {
   kw <- condition_keyword
   needed <- c("file_name", "population_full_path", "population", "metric",
               "value", "mouse_ID", "tissue", if (!is.na(kw)) kw)
@@ -127,7 +130,7 @@ facs_prep_save <- function(data, wsp_path, assay, panel_dir,
     group_col = group_col, batch_col = batch_col,
     expected_mice = expected_mice, expected_tissues = expected_tissues,
     qc_populations = qc_populations, qc_mfi_populations = qc_mfi_populations,
-    qc_metrics = qc_metrics
+    qc_metrics = qc_metrics, min_events = min_events
   ))
 
   clashes <- facs_check_file_clashes(data)
@@ -248,7 +251,8 @@ facs_prep_load <- function(wsp_path, panel_dir) {
 #'   and batch columns for the QC report, see [facs_prep_save()].
 #' @param ... Further QC settings passed to [facs_prep_save()]
 #'   (`expected_mice`, `expected_tissues`, `qc_populations`,
-#'   `qc_mfi_populations`, `qc_metrics`). Used only when `final = FALSE`.
+#'   `qc_mfi_populations`, `qc_metrics`, `min_events`). Used only when
+#'   `final = FALSE`.
 #' @param data_dir The project's `data/` folder; provenance paths are stored
 #'   relative to it (see [db_export_facs()]).
 #' @param snapshot_root Folder for dated database snapshots after an export.
