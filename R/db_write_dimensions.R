@@ -163,3 +163,73 @@ db_write_assay <- function(con, assay_name, domain, description = NA_character_)
   )
   invisible(n)
 }
+
+#' Register an experiment and its mice from the meta workbook
+#'
+#' Registers the experiment ([db_write_experiment()]) and its subjects
+#' ([db_write_subjects()]) from the `meta` sheet of a meta workbook built from
+#' the standard template (`meta_template.xlsm`), as read by [meta_read()].
+#' Rows without `mouse_ID` are skipped. Idempotent. For workbooks that don't
+#' follow the template, shape the subjects yourself and call
+#' [db_write_subjects()].
+#'
+#' Column mapping (sheet -> `subjects`): `mouse_ID` -> `mouse_id`, `id` ->
+#' `mdc_id`, `cage`, `line` -> `mouse_strain`, `generation`, `sex`, `group`
+#' -> `treatment_group`, `dob`, `start_date`, `bmt_date`, `death_date` ->
+#' `end_date`.
+#'
+#' @param con A `DBI` connection from [db_connect()].
+#' @param meta The list returned by [meta_read()] (its `meta` element is
+#'   used), or the `meta` sheet itself.
+#' @param experiment_code Character scalar, e.g. `"26-1"`.
+#' @param experiment_name,project Character scalars, optional.
+#' @returns Invisibly, `con` -- so it can follow [db_connect()] in a pipe.
+#' @examples
+#' \dontrun{
+#' meta <- meta_read("data/26-1_exp/meta/meta_26-1.xlsx")
+#' con <- db_connect("~/databases/lab.duckdb") |>
+#'   db_write_meta(meta, "26-1", "BMT-mRNA-V4", project = "MPO_mRNA")
+#' }
+#' @export
+db_write_meta <- function(con, meta, experiment_code,
+                          experiment_name = NA_character_,
+                          project = NA_character_) {
+  sheet <- if (is.data.frame(meta)) meta else meta$meta
+  if (!is.data.frame(sheet)) {
+    stop("`meta` must be meta_read() output or its `meta` sheet.", call. = FALSE)
+  }
+  needed <- c("mouse_ID", "id", "cage", "line", "generation", "sex", "group",
+              "dob", "start_date", "bmt_date", "death_date")
+  missing_cols <- setdiff(needed, names(sheet))
+  if (length(missing_cols) > 0) {
+    stop(
+      "The meta sheet is missing template column(s): ",
+      paste(missing_cols, collapse = ", "),
+      " -- fix the workbook or use db_write_subjects() directly.",
+      call. = FALSE
+    )
+  }
+
+  subjects <- sheet |>
+    dplyr::filter(!is.na(mouse_ID)) |>
+    dplyr::transmute(
+      mouse_id        = as.character(mouse_ID),
+      experiment_code = experiment_code,
+      mdc_id          = as.character(id),
+      cage            = as.character(cage),
+      mouse_strain    = as.character(line),
+      generation      = as.character(generation),
+      sex             = as.character(sex),
+      treatment_group = as.character(group),
+      dob             = as.Date(dob),
+      start_date      = as.Date(start_date),
+      bmt_date        = as.Date(bmt_date),
+      end_date        = as.Date(death_date)
+    )
+
+  db_write_experiment(con, experiment_code, experiment_name, project = project)
+  n <- db_write_subjects(con, subjects)
+  message("Experiment ", experiment_code, ": ", n, " new of ",
+          nrow(subjects), " mice registered.")
+  invisible(con)
+}

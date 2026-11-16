@@ -137,3 +137,59 @@ test_that("db_write_assay errors clearly on an unknown domain", {
     "Unknown domain"
   )
 })
+
+# ---- db_write_meta ------------------------------------------------------------
+
+test_that("db_write_meta registers experiment + subjects from the meta sheet", {
+  con <- local_test_db()
+  meta <- meta_read(testthat::test_path("../fixtures/meta_minimal.xlsx"))
+
+  out <- suppressMessages(
+    db_write_meta(con, meta, "26-1", "BMT-mRNA-V4", project = "MPO_mRNA")
+  )
+
+  expect_identical(out, con)
+  exp <- DBI::dbGetQuery(con, "SELECT * FROM experiments")
+  expect_equal(exp$experiment_code, "26-1")
+  expect_equal(exp$experiment_name, "BMT-mRNA-V4")
+  expect_equal(exp$project, "MPO_mRNA")
+  s <- DBI::dbGetQuery(con, "SELECT * FROM subjects WHERE mouse_id = '26-1-1'")
+  expect_equal(s$mdc_id, "LFS0-21559")
+  expect_equal(s$cage, "ELFS0-00286")
+  expect_equal(s$mouse_strain, "B6-Mpo")
+  expect_equal(s$generation, "F3")
+  expect_equal(s$sex, "m")
+  expect_equal(s$treatment_group, "irrel")
+  expect_equal(s$dob, as.Date("2025-11-26"))
+  expect_equal(s$start_date, as.Date("2026-03-30"))
+  expect_equal(s$bmt_date, as.Date("2026-05-01"))
+  expect_equal(s$end_date, as.Date("2026-06-15"))
+  expect_equal(DBI::dbGetQuery(con, "SELECT COUNT(*) AS n FROM subjects")$n, 4)
+})
+
+test_that("db_write_meta also takes the meta sheet itself and skips rows without mouse_ID", {
+  con <- local_test_db()
+  sheet <- meta_read(testthat::test_path("../fixtures/meta_minimal.xlsx"))$meta
+  sheet$mouse_ID[2] <- NA
+
+  suppressMessages(db_write_meta(con, sheet, "26-1"))
+
+  expect_equal(DBI::dbGetQuery(con, "SELECT COUNT(*) AS n FROM subjects")$n, 3)
+})
+
+test_that("db_write_meta is idempotent", {
+  con <- local_test_db()
+  meta <- meta_read(testthat::test_path("../fixtures/meta_minimal.xlsx"))
+  suppressMessages(db_write_meta(con, meta, "26-1"))
+  suppressMessages(db_write_meta(con, meta, "26-1"))
+  expect_equal(DBI::dbGetQuery(con, "SELECT COUNT(*) AS n FROM subjects")$n, 4)
+  expect_equal(DBI::dbGetQuery(con, "SELECT COUNT(*) AS n FROM experiments")$n, 1)
+})
+
+test_that("db_write_meta lists every missing template column", {
+  con <- local_test_db()
+  sheet <- meta_read(testthat::test_path("../fixtures/meta_minimal.xlsx"))$meta
+  sheet <- dplyr::select(sheet, !c(line, bmt_date))
+  expect_error(db_write_meta(con, sheet, "26-1"), "line, bmt_date")
+  expect_equal(DBI::dbGetQuery(con, "SELECT COUNT(*) AS n FROM experiments")$n, 0)
+})

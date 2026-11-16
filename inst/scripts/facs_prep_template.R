@@ -1,47 +1,32 @@
 # FACS prep script for one panel -- copy into the project and adapt.
 # Template: system.file("scripts", "facs_prep_template.R", package = "JanisHelpers")
 #
-# The loop (facs_prep_run()):
+# One self-contained script per panel; the pipeline logic lives in
+# JanisHelpers (facs_prep_run(), db_write_meta()).
+#
 #   final <- FALSE  read the .wsp, select populations, calculate, save the
 #                   prep result and render the QC report (all samples shown;
 #                   exclusions only flagged). Adjust gates in FlowJo (save a
 #                   new dated .wsp for major changes) and/or edit the meta
 #                   workbook's `exclusions` sheet, then rerun.
-#   final <- TRUE   QC passed: export the saved prep result to the database,
-#                   dropping and recording the exclusions, then snapshot.
-#                   Asks before overwriting a root that is already stored.
+#   final <- TRUE   QC passed: register experiment + mice, export the saved
+#                   prep result to the database (dropping and recording the
+#                   exclusions), then snapshot. Asks before overwriting a
+#                   root that is already stored.
 #
 # Run interactively from the project root (the folder holding data/).
-# With several panels per experiment, move the shared part (paths, meta,
-# db_open()) into one sourced script and keep only the panel part here.
+# Keep the live .duckdb local; only snapshots go on OneDrive.
 
 library(JanisHelpers)
 
 final <- FALSE
 
-# ---- experiment (shared across panels) --------------------------------------
+# ---- experiment ---------------------------------------------------------------
 
-data_dir  <- "data"
-exp_dir   <- "26-1_BMT-mRNA-V4"                 # inside data_dir
+exp_path  <- file.path("data", "26-1_BMT-mRNA-V4")
+meta      <- meta_read(file.path(exp_path, "meta", "meta_26-1.xlsx"))  # standard template
+mice      <- dplyr::filter(meta$meta, !is.na(mouse_ID))
 db_path   <- "~/databases/MPO_mRNA/MPO_mRNA.duckdb"
-snapshot_root <- file.path(data_dir, "z_snapshots")
-
-facs_dir   <- file.path(data_dir, exp_dir, "raw", "FACS")
-meta       <- meta_read(file.path(data_dir, exp_dir, "meta", "meta_26-1.xlsx"))
-mice       <- dplyr::filter(meta$meta, !is.na(mouse_ID))
-exclusions <- meta$exclusions                   # NULL if the sheet doesn't exist
-
-# Open the database and register the experiment + subjects (the column
-# mapping depends on the meta workbook -- adapt).
-db_open <- function() {
-  con <- db_connect(path.expand(db_path))
-  db_write_experiment(con, "26-1", "BMT-mRNA-V4", project = "MPO_mRNA")
-  db_write_subjects(con, dplyr::transmute(
-    mice, mouse_id = mouse_ID, experiment_code = "26-1",
-    treatment_group = as.character(group)
-  ))
-  con
-}
 
 # ---- panel --------------------------------------------------------------------
 
@@ -59,16 +44,28 @@ prepare <- function(data) {
     facs_calc_pct_of(ref_pop = "live_CD45+")
 }
 
-con <- if (final) db_open()
+# ---- run ------------------------------------------------------------------------
+
+con <- if (final) {
+  db_connect(path.expand(db_path)) |>
+    db_write_meta(meta, "26-1", "BMT-mRNA-V4", project = "MPO_mRNA")
+}
 facs_prep_run(
-  final, file.path(facs_dir, wsp), file.path(facs_dir, panel_dir), assay,
-  prepare = prepare, mice = mice, exclusions = exclusions, con = con,
+  final,
+  wsp_path   = file.path(exp_path, "raw", "FACS", wsp),
+  panel_dir  = file.path(exp_path, "raw", "FACS", panel_dir),
+  assay      = assay,
+  prepare    = prepare,
+  mice       = mice,
+  exclusions = meta$exclusions,                 # NULL if the sheet doesn't exist
+  con        = con,
   condition_keyword = NA_character_,            # e.g. "restimulation" for multi-well panels
-  # QC report: outliers scored within groups, batch plots per staining day.
-  group_col = "group", batch_col = "death_date",
-  # Mice this panel should contain: all minus dropouts (`early` -- adapt).
+  # QC report: outliers scored within groups, batch plots per staining day,
+  # completeness against all mice minus dropouts (`early`).
+  group_col     = "group",
+  batch_col     = "death_date",
   expected_mice = mice$mouse_ID[is.na(mice$early)],
   qc_mfi_populations = character(),             # e.g. "Treg_FoxP3+_CD25hi"
-  data_dir = data_dir, snapshot_root = snapshot_root
+  snapshot_root = file.path("data", "z_snapshots")
 )
 if (!is.null(con)) DBI::dbDisconnect(con, shutdown = TRUE)
