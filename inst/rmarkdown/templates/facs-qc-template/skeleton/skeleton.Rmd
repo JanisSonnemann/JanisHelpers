@@ -191,6 +191,66 @@ if (is.null(comp)) {
 }
 ```
 
+### Empty values and missing stats
+
+Empty (`NA`) values usually come from a calculation without inputs (e.g.
+`count_per_g` for a tissue without weight / volumes in the meta workbook);
+they are exported as empty rows. Filter them out in `prepare()` if the
+metric isn't wanted for that tissue.
+
+```{r empty-values, results = "asis"}
+empty <- JanisHelpers:::qc_empty_values_(data)
+n_empty <- sum(empty$n_empty)
+n_no_events <- sum(empty$n_no_events)
+cat("\n\n#### Empty values\n\n")
+cat(n_empty, " of ", nrow(data), " values empty (",
+    round(100 * n_empty / nrow(data), 1), "%)", sep = "")
+if (n_no_events > 0) {
+  cat(", ", n_no_events, " of them in populations with 0 events (expected)", sep = "")
+}
+cat(". \"absent\" = metric not calculated for that tissue.\n\n")
+bad <- empty[empty$status %in% c("all empty", "partly empty"), ]
+if (nrow(bad) > 0) {
+  cat("**Warning: empty values for ",
+      paste0(bad$metric, " (", bad$tissue,
+             ifelse(length(conditions) > 1, paste0(" / ", bad$condition), ""),
+             ")", collapse = ", "),
+      ".**\n\n", sep = "")
+}
+print(knitr::kable(JanisHelpers:::qc_empty_grid_(empty),
+                   caption = "Values per metric x tissue"))
+
+cat("\n\n#### Missing stats\n\n")
+missing_stats <- JanisHelpers:::qc_missing_stats_(data)
+if (nrow(missing_stats) == 0) {
+  cat("None -- every file has all populations x metrics of its tissue.\n")
+} else {
+  cat("**Warning: these gates / statistics exist only in some files of the",
+      "tissue** (gate or statistic not applied to all samples in FlowJo?).\n\n")
+  print(knitr::kable(missing_stats))
+}
+
+cat("\n\n#### Keywords\n\n")
+dropped <- info$dropped_files
+if (is.null(dropped)) {
+  note("Files dropped for missing keywords not recorded (prep saved by an older JanisHelpers).")
+} else if (nrow(dropped) == 0) {
+  cat("No files dropped -- every file has `mouse_ID` and `tissue`.\n\n")
+} else {
+  cat(nrow(dropped), " file(s) dropped for a missing `mouse_ID` / `tissue`",
+      " keyword. Compensation / FMO files are expected here; check the rest.\n\n",
+      sep = "")
+  print(knitr::kable(dropped))
+}
+empty_kw <- JanisHelpers:::qc_empty_keywords_(data, settings)
+if (nrow(empty_kw) > 0) {
+  cat("\n\n**Warning: empty group / batch values** (check the meta workbook).\n\n")
+  print(knitr::kable(empty_kw))
+} else if (!is.null(settings$group_col) || !is.null(settings$batch_col)) {
+  cat("\n\nNo empty group / batch values.\n")
+}
+```
+
 ### Fraction of parent
 
 Gating hierarchy: each population as a fraction of its parent.

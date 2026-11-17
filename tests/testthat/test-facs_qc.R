@@ -326,3 +326,106 @@ test_that("qc_score_ only scores MFI for qc_mfi_populations and positive values"
   expect_true(is.na(neg$t))
   expect_false(neg$flag)
 })
+
+# -- empty values / missing stats / keywords ----------------------------------------
+
+# fake_qc_data() with two liver mice and a count_per_g metric that is empty
+# for spleen (no organ weights) and for one liver file.
+empty_qc_data_ <- function() {
+  d <- fake_qc_data(n_per_group = 2)
+  d$tissue[d$mouse_ID %in% c("m-1", "m-3")] <- "liver"
+  per_g <- dplyr::filter(d, metric == "count") |>
+    dplyr::mutate(metric = "count_per_g",
+                  value = dplyr::if_else(tissue == "spleen" | mouse_ID == "m-3",
+                                         NA_real_, value))
+  dplyr::bind_rows(d, per_g)
+}
+
+test_that("qc_empty_values_ classifies each metric x tissue", {
+  e <- qc_empty_values_(empty_qc_data_())
+  st <- function(m, t) e$status[e$metric == m & e$tissue == t]
+  expect_equal(st("count_per_g", "spleen"), "all empty")
+  expect_equal(st("count_per_g", "liver"), "partly empty")
+  expect_equal(st("count", "spleen"), "ok")
+  liver <- e[e$metric == "count_per_g" & e$tissue == "liver", ]
+  expect_equal(c(liver$n_values, liver$n_empty, liver$n_files_empty), c(6L, 3L, 1L))
+})
+
+test_that("qc_empty_values_ marks a metric missing for a tissue as absent", {
+  d <- dplyr::filter(empty_qc_data_(), !(metric == "count_per_g" & tissue == "spleen"))
+  e <- qc_empty_values_(d)
+  absent <- e[e$metric == "count_per_g" & e$tissue == "spleen", ]
+  expect_equal(absent$status, "absent")
+  expect_equal(absent$n_values, 0L)
+})
+
+test_that("qc_empty_grid_ has one row per metric and one column per tissue", {
+  g <- qc_empty_grid_(qc_empty_values_(empty_qc_data_()))
+  expect_setequal(names(g), c("metric", "liver", "spleen"))
+  expect_equal(g$spleen[g$metric == "count_per_g"], "all empty")
+  expect_equal(g$liver[g$metric == "count_per_g"], "3/6 empty")
+})
+
+test_that("qc_empty_values_ treats empties at 0 events as expected", {
+  d <- fake_qc_data(n_per_group = 2)
+  rare_count <- d$mouse_ID == "m-2" & d$population == "rare" & d$metric == "count"
+  d$value[rare_count] <- 0
+  d <- dplyr::bind_rows(
+    d,
+    dplyr::filter(d, population == "rare", metric == "count") |>
+      dplyr::mutate(metric = "median_CD25",
+                    value = dplyr::if_else(mouse_ID == "m-2", NA_real_, 500))
+  )
+  e <- qc_empty_values_(d)
+  mfi <- e[e$metric == "median_CD25", ]
+  expect_equal(mfi$status, "ok")
+  expect_equal(c(mfi$n_empty, mfi$n_no_events, mfi$n_files_empty), c(1L, 1L, 0L))
+  expect_equal(qc_empty_grid_(e)$spleen[qc_empty_grid_(e)$metric == "median_CD25"],
+               "ok (1 at 0 events)")
+})
+
+test_that("qc_missing_stats_ lists gates / stats only some files have", {
+  d <- fake_qc_data()
+  expect_equal(nrow(qc_missing_stats_(d)), 0)
+  d1 <- dplyr::filter(d, !(mouse_ID == "m-4" & metric == "median_CD25"))
+  m <- qc_missing_stats_(d1)
+  expect_equal(nrow(m), 1)
+  expect_equal(c(m$population, m$metrics, m$n_files, m$files),
+               c("T", "median_CD25", "15/16", "missing in: m-4"))
+  # a stat added to one sample only: metrics collapsed, "only in"
+  extra <- dplyr::filter(d, mouse_ID == "m-7", population == "live",
+                         metric == "count") |>
+    dplyr::slice(c(1, 1)) |>
+    dplyr::mutate(metric = c("median_A", "median_B"))
+  m2 <- qc_missing_stats_(dplyr::bind_rows(d, extra))
+  expect_equal(c(m2$population, m2$metrics, m2$n_files, m2$files),
+               c("live", "median_A, median_B", "1/16", "only in: m-7"))
+})
+
+test_that("qc_missing_stats_ compares files within a tissue only", {
+  d <- empty_qc_data_()
+  d <- dplyr::filter(d, !(tissue == "liver" & population == "rare"))
+  expect_equal(nrow(qc_missing_stats_(d)), 0)
+})
+
+test_that("qc_empty_keywords_ lists files with empty group / batch values", {
+  d <- fake_qc_data()
+  s <- fake_qc_settings(d)
+  expect_equal(nrow(qc_empty_keywords_(d, s)), 0)
+  d$grp[d$mouse_ID == "m-2"] <- NA
+  d$day[d$mouse_ID == "m-2"] <- NA
+  k <- qc_empty_keywords_(d, s)
+  expect_equal(k$mouse_ID, c("m-2", "m-2"))
+  expect_equal(k$empty, c("day", "grp"))
+  expect_equal(nrow(qc_empty_keywords_(d, list())), 0)
+})
+
+test_that("qc_dropped_files_ lists files without mouse_ID or tissue", {
+  d <- dplyr::bind_rows(
+    fake_qc_data(n_per_group = 1),
+    tibble::tibble(file_name = c("comp.fcs", "fmo.fcs"),
+                   mouse_ID = c(NA, "m-1"), tissue = NA_character_,
+                   metric = "count", value = 1)
+  )
+  expect_equal(qc_dropped_files_(d)$file_name, c("comp.fcs", "fmo.fcs"))
+})

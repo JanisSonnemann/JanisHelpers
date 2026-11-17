@@ -91,8 +91,9 @@ facs_check_file_clashes <- function(data) {
 #' @returns Invisibly, the path of the written `.rds`. It holds a list with
 #'   `data` (the tibble plus a `condition` column) and `info` (`wsp_path`,
 #'   `wsp_root`, `wsp_version`, `assay`, `condition_keyword`, `panel_dir`,
-#'   `created_at`, `package_version`, and `qc` -- the QC settings above with
-#'   defaults filled in).
+#'   `created_at`, `package_version`, `qc` -- the QC settings above with
+#'   defaults filled in -- and `dropped_files`, a tibble of the files dropped
+#'   for a missing `mouse_ID` / `tissue` keyword, shown in the QC report).
 #' @examples
 #' \dontrun{
 #' wsp <- "data/26-1_exp/raw/FACS/overview-26-1_20260806.wsp"
@@ -120,6 +121,7 @@ facs_prep_save <- function(data, wsp_path, assay, panel_dir,
   }
   wsp <- parse_wsp_name_(wsp_path)
 
+  dropped_files <- qc_dropped_files_(data)
   data <- dplyr::filter(data, !is.na(mouse_ID), !is.na(tissue))
   data$condition <- if (is.na(kw)) "none" else as.character(data[[kw]])
   if (anyNA(data$condition)) {
@@ -154,7 +156,8 @@ facs_prep_save <- function(data, wsp_path, assay, panel_dir,
       panel_dir = panel_dir,
       created_at = Sys.time(),
       package_version = as.character(utils::packageVersion("JanisHelpers")),
-      qc = qc
+      qc = qc,
+      dropped_files = dropped_files
     )
   )
   path <- facs_prep_paths_(wsp_path, panel_dir)$prep

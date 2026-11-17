@@ -317,3 +317,138 @@ qc_settings_ <- function(prep) {
   }
   qc_resolve_(prep$data)
 }
+
+# -- empty values / missing stats / keywords -------------------------------------
+
+# Values present per metric x tissue x condition: one row per metric x every
+# tissue x condition in `data` (a metric missing there is "absent"). Columns:
+# metric, tissue, condition, n_values, n_empty (NA values), n_no_events (of
+# those, in populations with 0 events -- expected, e.g. an MFI of no cells),
+# n_files_empty (files with unexpected empties), status ("ok", "partly
+# empty", "all empty", "absent"; only unexpected empties count).
+qc_empty_values_ <- function(data) {
+  counts <- data |>
+    dplyr::filter(metric == "count") |>
+    dplyr::distinct(file_name, population_full_path, n_events = value)
+  present <- data |>
+    dplyr::left_join(counts, by = c("file_name", "population_full_path")) |>
+    dplyr::mutate(.empty = is.na(value),
+                  .no_events = .empty & dplyr::coalesce(n_events == 0, FALSE)) |>
+    dplyr::summarise(
+      n_values = dplyr::n(),
+      n_empty = sum(.empty),
+      n_no_events = sum(.no_events),
+      n_files_empty = dplyr::n_distinct(file_name[.empty & !.no_events]),
+      .by = c(metric, tissue, condition)
+    )
+  tidyr::expand_grid(
+    metric = unique(data$metric),
+    dplyr::distinct(data, tissue, condition)
+  ) |>
+    dplyr::left_join(present, by = c("metric", "tissue", "condition")) |>
+    dplyr::mutate(
+      status = dplyr::case_when(
+        is.na(n_values) ~ "absent",
+        n_empty == n_no_events ~ "ok",
+        n_empty == n_values ~ "all empty",
+        .default = "partly empty"
+      ),
+      dplyr::across(c(n_values, n_empty, n_no_events, n_files_empty),
+                    ~ dplyr::coalesce(.x, 0L))
+    ) |>
+    dplyr::arrange(metric, tissue, condition)
+}
+
+# Wide display of qc_empty_values_(): one row per metric, one column per
+# tissue (x condition, if there are several); cells "ok", "absent",
+# "all empty" or "<n>/<N> empty", with " (<k> at 0 events)" appended when
+# some empties are populations without events.
+qc_empty_grid_ <- function(empty) {
+  multi_cond <- length(unique(empty$condition)) > 1
+  empty |>
+    dplyr::mutate(
+      column = if (multi_cond) paste0(tissue, " / ", condition) else tissue,
+      cell = dplyr::if_else(status == "partly empty",
+                            paste0(n_empty - n_no_events, "/", n_values, " empty"),
+                            status),
+      cell = dplyr::if_else(n_no_events > 0,
+                            paste0(cell, " (", n_no_events, " at 0 events)"), cell)
+    ) |>
+    dplyr::select(metric, column, cell) |>
+    tidyr::pivot_wider(names_from = column, values_from = cell)
+}
+
+# Population x metric rows that only some files of a tissue x condition have
+# (a gate or statistic missing for some samples in FlowJo). One row per
+# tissue x condition x gate x set of files, metrics collapsed: tissue,
+# condition, population (leaf name, "parent/leaf" if ambiguous), metrics
+# (comma-separated), n_files ("<present>/<total>"), files ("only in: ..."
+# when present in at most half the files, else "missing in: ..."; mouse IDs).
+qc_missing_stats_ <- function(data) {
+  keys <- c("tissue", "condition")
+  files <- dplyr::distinct(data, file_name, mouse_ID, tissue, condition)
+  n_files <- dplyr::count(files, tissue, condition, name = "n_total")
+  out <- data |>
+    dplyr::distinct(tissue, condition, population, population_full_path,
+                    metric, file_name) |>
+    dplyr::summarise(present = list(file_name),
+                     .by = c(tissue, condition, population,
+                             population_full_path, metric)) |>
+    dplyr::left_join(n_files, by = keys) |>
+    dplyr::mutate(n_present = lengths(present)) |>
+    dplyr::filter(n_present < n_total)
+  if (nrow(out) == 0) {
+    return(tibble::tibble(tissue = character(), condition = character(),
+                          population = character(), metrics = character(),
+                          n_files = character(), files = character()))
+  }
+  out$population <- as.character(
+    qc_pop_label_(out$population, out$population_full_path)
+  )
+  out$files <- purrr::pmap_chr(
+    list(out$present, out$tissue, out$condition, out$n_present, out$n_total),
+    function(present, tis, cond, n_present, n_total) {
+      f <- files[files$tissue == tis & files$condition == cond, ]
+      only <- n_present <= n_total / 2
+      ids <- sort(f$mouse_ID[(f$file_name %in% present) == only])
+      paste0(if (only) "only in: " else "missing in: ", paste(ids, collapse = ", "))
+    }
+  )
+  out |>
+    dplyr::mutate(n_files = paste0(n_present, "/", n_total)) |>
+    dplyr::summarise(metrics = paste(metric, collapse = ", "),
+                     .by = c(tissue, condition, population,
+                             population_full_path, n_files, files)) |>
+    dplyr::arrange(tissue, condition, population_full_path) |>
+    dplyr::select(tissue, condition, population, metrics, n_files, files)
+}
+
+# Files with an empty group / batch value (columns joined from the meta
+# workbook). Columns: file_name, mouse_ID, tissue, condition, empty (the
+# empty column's name). Zero rows if none, or if neither column is set.
+qc_empty_keywords_ <- function(data, settings) {
+  cols <- intersect(c(settings$group_col, settings$batch_col), names(data))
+  if (length(cols) == 0) {
+    return(tibble::tibble(file_name = character(), mouse_ID = character(),
+                          tissue = character(), condition = character(),
+                          empty = character()))
+  }
+  data |>
+    dplyr::distinct(file_name, mouse_ID, tissue, condition,
+                    dplyr::across(dplyr::all_of(cols))) |>
+    dplyr::mutate(dplyr::across(dplyr::all_of(cols), as.character)) |>
+    tidyr::pivot_longer(dplyr::all_of(cols), names_to = "empty") |>
+    dplyr::filter(is.na(value)) |>
+    dplyr::select(file_name, mouse_ID, tissue, condition, empty) |>
+    dplyr::arrange(mouse_ID, tissue, condition, empty)
+}
+
+# Files without a mouse_ID or tissue keyword -- dropped by facs_prep_save()
+# (compensation / FMO files are expected here). Columns: file_name,
+# mouse_ID, tissue.
+qc_dropped_files_ <- function(data) {
+  data |>
+    dplyr::filter(is.na(mouse_ID) | is.na(tissue)) |>
+    dplyr::distinct(file_name, mouse_ID, tissue) |>
+    dplyr::arrange(file_name)
+}

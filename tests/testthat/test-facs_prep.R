@@ -85,6 +85,9 @@ test_that("facs_prep_save drops files without mouse_ID or tissue", {
   )
   path <- facs_prep_save(fake_prep_data(files), d$wsp_path, "overview", d$panel_dir)
   expect_equal(unique(readRDS(path)$data$file_name), "a.fcs")
+  expect_equal(readRDS(path)$info$dropped_files,
+               tibble::tibble(file_name = "comp.fcs", mouse_ID = NA_character_,
+                              tissue = NA_character_))
 })
 
 test_that("facs_prep_save takes condition from the keyword column", {

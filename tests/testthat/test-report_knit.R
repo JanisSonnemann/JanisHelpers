@@ -139,6 +139,32 @@ test_that("report_knit_facs_qc renders QC checks with flags", {
   expect_match(html, "<img")
 })
 
+test_that("report_knit_facs_qc reports empty values, missing stats and keywords", {
+  skip_if_not(rmarkdown::pandoc_available())
+  d <- local_prep_dirs()
+  qd <- fake_qc_data()
+  qd$tissue[qd$mouse_ID %in% c("m-1", "m-2", "m-9", "m-10")] <- "liver"
+  per_g <- dplyr::filter(qd, metric == "count") |>
+    dplyr::mutate(metric = "count_per_g",
+                  value = dplyr::if_else(tissue == "spleen", NA_real_, value))
+  qd <- dplyr::bind_rows(qd, per_g) |>
+    dplyr::filter(!(mouse_ID == "m-4" & metric == "median_CD25"))
+  qd$grp[qd$mouse_ID == "m-5"] <- NA
+  comp <- dplyr::mutate(qd[1, ], file_name = "comp.fcs", mouse_ID = NA,
+                        tissue = NA)
+  prep <- suppressMessages(facs_prep_save(
+    dplyr::bind_rows(qd, comp), d$wsp_path, "overview", d$panel_dir,
+    group_col = "grp", batch_col = "day"
+  ))
+  html <- render_qc_html_(prep)
+  expect_match(html, "Empty values and missing stats")
+  expect_match(html, "count_per_g \\(spleen\\)")
+  expect_match(html, "all empty")
+  expect_match(html, "missing in: m-4")
+  expect_match(html, "comp.fcs")
+  expect_match(html, "empty group / batch values")
+})
+
 test_that("report_knit_facs_qc renders an old prep without qc settings", {
   skip_if_not(rmarkdown::pandoc_available())
   d <- local_prep_dirs()

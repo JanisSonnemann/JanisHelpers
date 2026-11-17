@@ -70,8 +70,9 @@ events than this. Default 50.}
 Invisibly, the path of the written \code{.rds}. It holds a list with
 \code{data} (the tibble plus a \code{condition} column) and \code{info} (\code{wsp_path},
 \code{wsp_root}, \code{wsp_version}, \code{assay}, \code{condition_keyword}, \code{panel_dir},
-\code{created_at}, \code{package_version}, and \code{qc} -- the QC settings above with
-defaults filled in).
+\code{created_at}, \code{package_version}, \code{qc} -- the QC settings above with
+defaults filled in -- and \code{dropped_files}, a tibble of the files dropped
+for a missing \code{mouse_ID} / \code{tissue} keyword, shown in the QC report).
 }
 \description{
 Step one of the prep / QC loop: after reading a workspace with
