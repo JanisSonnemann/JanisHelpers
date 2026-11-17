@@ -55,12 +55,17 @@ counts, default \code{"beads"}.}
 }
 \value{
 \code{data} with additional rows appended:
-\code{metric = "count_per_g"}. Errors if \code{method_col} is not found
-in \code{data} or \code{meta}, or contains a value outside
-\code{{"beads", "hts", NA}}. Warns and fills \code{NA} if a
-\code{mouse_ID}/\code{tissue} combination in \code{data} has no match
-in \code{meta}, or if the bead method is resolved for a sample with no
-matching bead count.
+\code{metric = "count_per_g"}, only for samples where every input of
+the resolved method is available. Samples whose
+\code{mouse_ID}/\code{tissue} has no match in \code{meta}, whose
+volumes / organ piece weight are \code{NA}, or (bead method) that have
+no bead count get no \code{count_per_g} rows rather than rows with
+\code{value = NA}. Errors if \code{method_col} is not found in
+\code{data} or \code{meta}, or contains a value outside
+\code{{"beads", "hts", NA}}. Warns about unmatched
+\code{mouse_ID}/\code{tissue} combinations and missing bead counts;
+messages which matched combinations were skipped for missing volumes /
+weights.
 }
 \description{
 Converts raw event counts into cells per gram of processed tissue, using

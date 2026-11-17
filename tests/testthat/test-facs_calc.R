@@ -54,7 +54,25 @@ test_that("facs_calc_pct_of() warns and fills NA when ref_pop has no match for a
   f2_rows <- dplyr::filter(new_rows, file_name == "f2")
 
   expect_equal(f1_row$value, 0.3)
-  expect_true(all(is.na(f2_rows$value)))
+  expect_equal(nrow(f2_rows), 0L)
+})
+
+test_that("facs_calc_pct_of() only adds rows for populations gated below ref_pop", {
+  data <- tibble::tibble(
+    file_name             = "f1",
+    population_full_path  = c("Singlets", "Singlets/Live", "Singlets/Live/CD3+",
+                              "Singlets/Live-", "Singlets/Live-/CD3+", "Singlets/Dead"),
+    population             = c("Singlets", "Live", "CD3+", "Live-", "CD3+", "Dead"),
+    metric                 = "count",
+    value                  = c(2000, 1000, 400, 500, 50, 300)
+  )
+
+  result <- facs_calc_pct_of(data, ref_pop = "Live")
+  new_rows <- dplyr::filter(result, metric == "pct_of_Live")
+
+  expect_equal(new_rows$population_full_path, "Singlets/Live/CD3+")
+  expect_equal(new_rows$value, 0.4)
+  expect_true(all(new_rows$value <= 1))
 })
 
 # ── facs_calc_count_per_g ────────────────────────────────────────────────────
@@ -132,7 +150,7 @@ test_that("facs_calc_count_per_g() computes count_per_g for every tissue present
   expect_equal(new_rows$value, c(500000, 1000000))
 })
 
-test_that("facs_calc_count_per_g() warns and fills NA when a mouse_ID/tissue combination has no match in meta", {
+test_that("facs_calc_count_per_g() warns and adds no rows when a mouse_ID/tissue combination has no match in meta", {
   meta_wrong_mouse <- dplyr::mutate(count_per_g_meta, mouse_ID = "m2")
 
   expect_warning(
@@ -146,7 +164,33 @@ test_that("facs_calc_count_per_g() warns and fills NA when a mouse_ID/tissue com
     fixed = TRUE
   )
   new_row <- dplyr::filter(result, metric == "count_per_g")
-  expect_true(is.na(new_row$value))
+  expect_equal(nrow(new_row), 0L)
+  expect_equal(nrow(result), nrow(count_per_g_data))
+})
+
+test_that("facs_calc_count_per_g() skips samples with NA volumes or organ weight instead of adding NA rows", {
+  data_two <- dplyr::bind_rows(
+    count_per_g_data,
+    dplyr::mutate(count_per_g_data, file_name = "s2", tissue = "spleen")
+  )
+  meta_two <- dplyr::bind_rows(
+    count_per_g_meta,
+    dplyr::mutate(count_per_g_meta, tissue = "spleen", organ_piece_weight = NA_real_)
+  )
+
+  expect_message(
+    result <- facs_calc_count_per_g(
+      data_two, meta_two,
+      vol_total = "vol_total", vol_stained = "vol_stained",
+      vol_resuspended = "vol_resuspended", vol_measured = "vol_measured",
+      organ_piece_weight = "organ_piece_weight"
+    ),
+    regexp = "m1/spleen",
+    fixed = TRUE
+  )
+  new_rows <- dplyr::filter(result, metric == "count_per_g")
+  expect_equal(unique(new_rows$file_name), unique(count_per_g_data$file_name))
+  expect_false(anyNA(new_rows$value))
 })
 
 test_that("facs_calc_count_per_g() errors when a volume argument is neither a column nor a numeric constant", {
@@ -246,7 +290,7 @@ test_that("facs_calc_count_per_g() errors when method_col is not found in data o
   )
 })
 
-test_that("facs_calc_count_per_g() warns and fills NA when bead method resolved but no bead count found", {
+test_that("facs_calc_count_per_g() warns and adds no rows when bead method resolved but no bead count found", {
   meta_beads_missing <- dplyr::mutate(count_per_g_meta, method = "beads")
 
   expect_warning(
@@ -261,7 +305,7 @@ test_that("facs_calc_count_per_g() warns and fills NA when bead method resolved 
     fixed = TRUE
   )
   new_row <- dplyr::filter(result, metric == "count_per_g")
-  expect_true(is.na(new_row$value))
+  expect_equal(nrow(new_row), 0L)
 })
 
 # ── end-to-end fixture test ─────────────────────────────────────────────────

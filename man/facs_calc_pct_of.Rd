@@ -16,11 +16,13 @@ not \code{population_full_path}) to use as the denominator.}
 }
 \value{
 \code{data} with additional rows appended: one row per
-\code{file_name x population} (excluding \code{ref_pop} itself), with
+\code{file_name x population} for every population gated below
+\code{ref_pop} in that file (descendants only -- \code{ref_pop} itself,
+its ancestors and populations on other branches are skipped), with
 \code{metric = paste0("pct_of_", ref_pop)} and \code{value} as a 0-1
 fraction of \code{ref_pop}'s count in that file. Errors if \code{ref_pop}
-matches more than one population per file; warns and fills \code{NA} if
-\code{ref_pop} has no match for a file.
+matches more than one population per file; warns and adds no rows for a
+file in which \code{ref_pop} has no match.
 }
 \description{
 Computes each population's count as a fraction of a named ancestor

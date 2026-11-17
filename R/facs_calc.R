@@ -13,11 +13,13 @@
 #'   not \code{population_full_path}) to use as the denominator.
 #'
 #' @returns \code{data} with additional rows appended: one row per
-#'   \code{file_name x population} (excluding \code{ref_pop} itself), with
+#'   \code{file_name x population} for every population gated below
+#'   \code{ref_pop} in that file (descendants only -- \code{ref_pop} itself,
+#'   its ancestors and populations on other branches are skipped), with
 #'   \code{metric = paste0("pct_of_", ref_pop)} and \code{value} as a 0-1
 #'   fraction of \code{ref_pop}'s count in that file. Errors if \code{ref_pop}
-#'   matches more than one population per file; warns and fills \code{NA} if
-#'   \code{ref_pop} has no match for a file.
+#'   matches more than one population per file; warns and adds no rows for a
+#'   file in which \code{ref_pop} has no match.
 #' @export
 #'
 #' @examples
@@ -28,7 +30,7 @@
 facs_calc_pct_of <- function(data, ref_pop) {
   ref_counts <- data |>
     dplyr::filter(population == ref_pop, metric == "count") |>
-    dplyr::select(file_name, ref_count = value)
+    dplyr::select(file_name, ref_path = population_full_path, ref_count = value)
 
   dup_files <- unique(ref_counts$file_name[duplicated(ref_counts$file_name)])
   if (length(dup_files) > 0L) {
@@ -43,13 +45,18 @@ facs_calc_pct_of <- function(data, ref_pop) {
   if (length(missing_files) > 0L) {
     warning(glue::glue(
       "ref_pop '{ref_pop}' not found for file_name(s): ",
-      "{paste(missing_files, collapse = ', ')}. Result filled with NA."
+      "{paste(missing_files, collapse = ', ')}. No pct_of_{ref_pop} rows added for them."
     ))
   }
 
+  # Only populations gated below ref_pop: full path starts with ref_pop's path
+  # plus "/" (the separator keeps sibling gates sharing a name prefix out).
   new_rows <- data |>
-    dplyr::filter(metric == "count", population != ref_pop) |>
-    dplyr::left_join(ref_counts, by = "file_name") |>
+    dplyr::filter(metric == "count") |>
+    dplyr::inner_join(ref_counts, by = "file_name") |>
+    dplyr::filter(startsWith(
+      as.character(population_full_path), paste0(ref_path, "/")
+    )) |>
     dplyr::mutate(
       metric = paste0("pct_of_", ref_pop),
       value  = value / ref_count
@@ -114,12 +121,17 @@ resolve_var_ <- function(df, var, arg_name) {
 #'   (beads per microliter), default \code{10400}.
 #'
 #' @returns \code{data} with additional rows appended:
-#'   \code{metric = "count_per_g"}. Errors if \code{method_col} is not found
-#'   in \code{data} or \code{meta}, or contains a value outside
-#'   \code{{"beads", "hts", NA}}. Warns and fills \code{NA} if a
-#'   \code{mouse_ID}/\code{tissue} combination in \code{data} has no match
-#'   in \code{meta}, or if the bead method is resolved for a sample with no
-#'   matching bead count.
+#'   \code{metric = "count_per_g"}, only for samples where every input of
+#'   the resolved method is available. Samples whose
+#'   \code{mouse_ID}/\code{tissue} has no match in \code{meta}, whose
+#'   volumes / organ piece weight are \code{NA}, or (bead method) that have
+#'   no bead count get no \code{count_per_g} rows rather than rows with
+#'   \code{value = NA}. Errors if \code{method_col} is not found in
+#'   \code{data} or \code{meta}, or contains a value outside
+#'   \code{{"beads", "hts", NA}}. Warns about unmatched
+#'   \code{mouse_ID}/\code{tissue} combinations and missing bead counts;
+#'   messages which matched combinations were skipped for missing volumes /
+#'   weights.
 #' @export
 #'
 #' @examples
@@ -205,11 +217,30 @@ facs_calc_count_per_g <- function(
   if (any(missing_bead)) {
     warning(glue::glue(
       "Bead method resolved but no bead count found for file_name(s): ",
-      "{paste(unique(filtered$file_name[missing_bead]), collapse = ', ')}. Result filled with NA."
+      "{paste(unique(filtered$file_name[missing_bead]), collapse = ', ')}. No count_per_g rows added for them."
     ))
   }
 
-  new_rows <- filtered |>
+  # Skip samples lacking any input of their method instead of emitting NA rows.
+  matched <- paste(filtered$mouse_ID, filtered$tissue) %in% paste(m$mouse_ID, m$tissue)
+  inputs_missing <- is.na(filtered$vol_stained) | is.na(filtered$vol_total) |
+    is.na(filtered$organ_piece_weight) |
+    dplyr::if_else(
+      filtered$method == "beads",
+      is.na(filtered$bead_count),
+      is.na(filtered$vol_measured) | is.na(filtered$vol_resuspended)
+    )
+  # Unmatched combos and missing bead counts were already warned about above.
+  na_inputs <- matched & inputs_missing & !missing_bead
+  if (any(na_inputs)) {
+    skipped <- dplyr::distinct(filtered[na_inputs, ], mouse_ID, tissue)
+    message(glue::glue(
+      "count_per_g skipped (volume / organ weight missing in `meta`) for mouse_ID/tissue: ",
+      "{paste(skipped$mouse_ID, skipped$tissue, sep = '/', collapse = ', ')}"
+    ))
+  }
+
+  new_rows <- filtered[!inputs_missing, ] |>
     dplyr::mutate(
       metric = "count_per_g",
       value  = dplyr::if_else(
