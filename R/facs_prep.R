@@ -42,6 +42,72 @@ facs_check_file_clashes <- function(data) {
     dplyr::arrange(mouse_ID, tissue, condition, file_name)
 }
 
+#' Select populations for a panel, in display order
+#'
+#' Keeps only the listed populations and makes `population` a factor in the
+#' order given -- the selection step of a panel's `prepare` function (see
+#' [facs_prep_run()]). Errors if a listed name is not a population in `data`
+#' (typically a FlowJo spelling difference), naming the closest existing
+#' population for each, so a typo can't drop a gate unnoticed.
+#'
+#' @param data Long FACS tibble with a `population` column (e.g.
+#'   `facs_read_wsp()$data`).
+#' @param populations Character vector of population names (leaf names, as
+#'   in `population`, not `population_full_path`), in display order.
+#' @param labels Named character vector or `NULL` -- display renames,
+#'   `c("<workspace name>" = "<label>")`, applied to `population` after
+#'   selection (e.g. to fix a FlowJo typo). `population_full_path`, the
+#'   database key, keeps the workspace spelling. Names must be in
+#'   `populations`.
+#' @returns `data` filtered to `populations`, with `population` a factor
+#'   whose levels follow `populations` (relabelled by `labels`).
+#' @examples
+#' \dontrun{
+#' facs_read_wsp("overview-26-1_20260806.wsp")$data |>
+#'   facs_select_populations(c("Singlets", "live_CD45+", "CD4+"))
+#' }
+#' @export
+facs_select_populations <- function(data, populations, labels = NULL) {
+  dup <- unique(populations[duplicated(populations)])
+  if (length(dup) > 0) {
+    stop(
+      "Population(s) listed more than once: ",
+      paste0("'", dup, "'", collapse = ", "), ".",
+      call. = FALSE
+    )
+  }
+  available <- unique(as.character(data$population))
+  missing <- setdiff(populations, available)
+  if (length(missing) > 0) {
+    closest <- available[apply(utils::adist(missing, available), 1, which.min)]
+    stop(
+      length(missing), " selected population(s) not in the data:\n",
+      paste0("  '", missing, "' (closest: '", closest, "')", collapse = "\n"),
+      "\nFix the spelling to match the workspace.",
+      call. = FALSE
+    )
+  }
+  unknown_labels <- setdiff(names(labels), populations)
+  if (length(unknown_labels) > 0) {
+    stop(
+      "`labels` name(s) not in the selection: ",
+      paste0("'", unknown_labels, "'", collapse = ", "), ".",
+      call. = FALSE
+    )
+  }
+  relabel <- function(x) {
+    hit <- x %in% names(labels)
+    x[hit] <- labels[x[hit]]
+    unname(x)
+  }
+  data |>
+    dplyr::filter(as.character(population) %in% populations) |>
+    dplyr::mutate(population = factor(
+      relabel(as.character(population)),
+      levels = relabel(populations)
+    ))
+}
+
 #' Save a prep result for one workspace version
 #'
 #' Step one of the prep / QC loop: after reading a workspace with

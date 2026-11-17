@@ -305,3 +305,54 @@ test_that("facs_prep_run(final = TRUE) skips the snapshot without snapshot_root"
 
   expect_false(dir.exists(file.path(d$data_dir, "z_snapshots")))
 })
+
+# -- facs_select_populations ---------------------------------------------------
+
+restim_like <- tibble::tibble(
+  file_name = "a.fcs",
+  population = factor(c("Singlets", "CD4+#", "CD4+_CD44+_IFNg+#", "CD8_CD44+_CD137+#")),
+  metric = "count",
+  value = c(1000, 300, 30, 5)
+)
+
+test_that("facs_select_populations keeps the selection in the given order", {
+  out <- facs_select_populations(restim_like, c("CD4+_CD44+_IFNg+#", "Singlets"))
+  expect_equal(as.character(out$population), c("Singlets", "CD4+_CD44+_IFNg+#"))
+  expect_equal(levels(out$population), c("CD4+_CD44+_IFNg+#", "Singlets"))
+})
+
+test_that("facs_select_populations errors on names not in the data, with suggestions", {
+  expect_error(
+    facs_select_populations(
+      restim_like, c("Singlets", "CD4+_CD44+_IFNg#", "CD8+_CD44+_CD137+#")
+    ),
+    paste0(
+      "2 selected population\\(s\\) not in the data.*",
+      "'CD4\\+_CD44\\+_IFNg#' \\(closest: 'CD4\\+_CD44\\+_IFNg\\+#'\\).*",
+      "'CD8\\+_CD44\\+_CD137\\+#' \\(closest: 'CD8_CD44\\+_CD137\\+#'\\)"
+    )
+  )
+})
+
+test_that("facs_select_populations errors on duplicated names", {
+  expect_error(
+    facs_select_populations(restim_like, c("Singlets", "CD4+#", "Singlets")),
+    "listed more than once: 'Singlets'"
+  )
+})
+
+test_that("facs_select_populations relabels via `labels`, keeping the order", {
+  out <- facs_select_populations(
+    restim_like, c("Singlets", "CD4+#"),
+    labels = c("CD4+#" = "CD4+")
+  )
+  expect_equal(levels(out$population), c("Singlets", "CD4+"))
+  expect_equal(as.character(out$population), c("Singlets", "CD4+"))
+})
+
+test_that("facs_select_populations errors on labels for unselected populations", {
+  expect_error(
+    facs_select_populations(restim_like, "Singlets", labels = c("CD4+#" = "CD4+")),
+    "`labels` name\\(s\\) not in the selection: 'CD4\\+#'"
+  )
+})

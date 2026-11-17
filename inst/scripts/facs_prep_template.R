@@ -34,13 +34,14 @@ wsp       <- "overview-26-1_20260806.wsp"       # in raw/FACS/, <root>_YYYYMMDD.
 panel_dir <- "overview"                         # panel folder in raw/FACS/ (holds the .fcs)
 assay     <- "overview"                         # panel's assay name in the database
 
-# Populations to keep, in display order, and this panel's calculations.
+# Populations to keep, in display order (workspace spelling -- a name that
+# isn't in the workspace stops with the closest match), and this panel's
+# calculations. Display renames: facs_select_populations(labels = c(old = "new")).
 selection <- c("live_CD45+")
 
 prepare <- function(data) {
   data |>
-    dplyr::filter(population %in% selection) |>
-    dplyr::mutate(population = factor(population, levels = selection)) |>
+    facs_select_populations(selection) |>
     facs_calc_pct_of(ref_pop = "live_CD45+")
 }
 
