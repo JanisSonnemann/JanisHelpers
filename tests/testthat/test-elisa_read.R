@@ -133,3 +133,28 @@ test_that("parse_curated_dates_ handles the supported types", {
   expect_equal(r, as.Date(c("2026-05-06", "2026-05-20", "2026-05-05", NA)))
   expect_error(parse_curated_dates_(list("15/16.6.2026"), "M9"), "M9")
 })
+
+test_that("elisa_read_curated errors on empty or duplicated analyte headers", {
+  skip_if_not_installed("writexl")
+  v <- data.frame(mouse_ID = "M1", A = 1, B = 2)
+  names(v)[3] <- ""
+  f <- write_curated_(v)
+  expect_error(suppressMessages(elisa_read_curated(f, tissue = "serum")),
+               "without a header")
+  v <- data.frame(mouse_ID = "M1", A = 1, A = 2, check.names = FALSE)
+  f <- write_curated_(v)
+  expect_error(suppressMessages(elisa_read_curated(f, tissue = "serum")),
+               "duplicated analyte column\\(s\\): A")
+})
+
+test_that("elisa_read_curated reads a range sheet with an empty first header quietly", {
+  skip_if_not_installed("writexl")
+  r <- data.frame(x = c("LLOQ", "ULOQ"), A = c("1", "9"))
+  names(r)[1] <- ""
+  f <- write_curated_(data.frame(mouse_ID = "M1", A = 2), range = r)
+  msgs <- testthat::capture_messages(d <- elisa_read_curated(f, tissue = "serum"))
+  expect_length(msgs, 1L)
+  expect_match(msgs, "Extraction Summary")
+  expect_equal(d$lloq, 1)
+  expect_equal(d$uloq, 9)
+})

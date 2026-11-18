@@ -140,7 +140,8 @@ elisa_read_curated <- function(path, tissue = NA_character_) {
   tissue_chr <- cv$tissue
   collected_at <- cv$collected_at
 
-  analytes <- setdiff(names(raw), c("mouse_ID", "tissue", "date"))
+  analytes <- names(raw)[!names(raw) %in% c("mouse_ID", "tissue", "date")]
+  check_curated_headers_(analytes, path, "analyte")
   if (length(analytes) == 0L) {
     stop(glue::glue("Sheet 'values' of '{path}' has no analyte columns."))
   }
@@ -150,7 +151,7 @@ elisa_read_curated <- function(path, tissue = NA_character_) {
                         unit = NA_character_)
   if ("range" %in% sheets) {
     r <- readxl::read_excel(path, sheet = "range", col_types = "text",
-                            .name_repair = "minimal")
+                            .name_repair = "unique_quiet")
     lab <- toupper(stringr::str_trim(r[[1]]))
     pick <- function(l) {
       i <- which(lab == l)
@@ -231,6 +232,27 @@ parse_curated_dates_ <- function(x, mouse_ID) {
     as.numeric(d)
   }, numeric(1))
   as.Date(out, origin = "1970-01-01")
+}
+
+# Error on empty or duplicated value-column headers of a curated sheet (with
+# .name_repair = "minimal" an empty header is "" and a duplicate would
+# silently use only its first column). `what` is "analyte" or "metric".
+check_curated_headers_ <- function(cols, path, what) {
+  empty <- which(is.na(cols) | !nzchar(stringr::str_trim(cols)))
+  if (length(empty) > 0L) {
+    stop(glue::glue(
+      "Sheet 'values' of '{path}' has {length(empty)} {what} column(s) ",
+      "without a header -- name or delete them."
+    ), call. = FALSE)
+  }
+  dup <- unique(cols[duplicated(cols)])
+  if (length(dup) > 0L) {
+    stop(glue::glue(
+      "Sheet 'values' of '{path}' has duplicated {what} column(s): ",
+      "{paste(dup, collapse = ', ')} -- each {what} needs one column."
+    ), call. = FALSE)
+  }
+  invisible(cols)
 }
 
 # Cell of a list-column (col_types = "list") as character; empty -> NA.

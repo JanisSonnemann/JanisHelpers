@@ -18,3 +18,17 @@ test_that("histo_read_curated errors on non-numeric cells", {
   expect_error(suppressMessages(histo_read_curated(f, tissue = "kidney")),
                "gloms.*M1|abc")
 })
+
+test_that("histo_read_curated errors on empty or duplicated metric headers", {
+  skip_if_not_installed("writexl")
+  f <- withr::local_tempfile(fileext = ".xlsx")
+  v <- data.frame(mouse_ID = "M1", gloms = 1, gloms = 2, check.names = FALSE)
+  writexl::write_xlsx(list(values = v), f)
+  expect_error(suppressMessages(histo_read_curated(f, tissue = "kidney")),
+               "duplicated metric column\\(s\\): gloms")
+  v <- data.frame(mouse_ID = "M1", gloms = 1, x = 2)
+  names(v)[3] <- ""
+  writexl::write_xlsx(list(values = v), f)
+  expect_error(suppressMessages(histo_read_curated(f, tissue = "kidney")),
+               "without a header")
+})

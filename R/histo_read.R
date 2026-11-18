@@ -30,7 +30,8 @@ histo_read_curated <- function(path, tissue = NA_character_) {
 
   nm <- names(raw)
   id_col <- nm == "ID" | (grepl("_ID$", nm) & nm != "mouse_ID")
-  metrics <- setdiff(nm[!id_col], c("mouse_ID", "tissue", "date"))
+  metrics <- nm[!id_col & !nm %in% c("mouse_ID", "tissue", "date")]
+  check_curated_headers_(metrics, path, "metric")
   if (length(metrics) == 0L) {
     stop(glue::glue("Sheet 'values' of '{path}' has no metric columns."))
   }
