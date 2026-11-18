@@ -1,0 +1,5 @@
+name: ELISA QC report
+description: >
+  QC report for one curated ELISA file, rendered from the prep result saved
+  by elisa_prep_save(). Render with report_knit_elisa_qc().
+create_dir: FALSE

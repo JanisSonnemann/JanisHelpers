@@ -212,3 +212,27 @@ test_that("report_knit_facs_qc renders without exclusions and shows clashes", {
   expect_match(html, "share one mouse_ID")
   expect_match(html, "QC checks")
 })
+
+# -- report_knit_elisa_qc -----------------------------------------------------
+
+test_that("report_knit_elisa_qc renders into qc/ and names the sections", {
+  skip_if_not(rmarkdown::pandoc_available())
+  d <- withr::local_tempdir()
+  path <- file.path(d, "elisa_curated.xlsx")
+  file.copy(test_path("..", "fixtures", "elisa_curated.xlsx"), path)
+  data <- suppressMessages(elisa_read_curated(path, tissue = "spleen")) |>
+    dplyr::mutate(grp = ifelse(mouse_ID == "M1", "ctrl", "treated"))
+  prep <- suppressMessages(elisa_prep_save(data, path, "restim",
+                                           group_col = "grp",
+                                           expected_mice = c("M1", "M2", "M9")))
+  ex <- tibble::tibble(mouse_ID = c("M2", "M7"), reason = c("sick", "typo"))
+  out <- expect_no_warning(report_knit_elisa_qc(prep, exclusions = ex))
+  expect_equal(normalizePath(out),
+               normalizePath(file.path(d, "qc", "elisa_curated_qc.html")))
+  html <- paste(readLines(out, warn = FALSE), collapse = "\n")
+  for (s in c("Overview", "Completeness", "Exclusions", "Empty values", "Range",
+              "Replicate agreement", "Outliers", "Flagged samples", "sick",
+              "M7", "M9")) {
+    expect_match(html, s, fixed = TRUE)
+  }
+})

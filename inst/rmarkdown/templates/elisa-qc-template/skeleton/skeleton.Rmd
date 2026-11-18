@@ -1,0 +1,187 @@
+---
+title: "ELISA QC report"
+output:
+  html_document:
+    toc: true
+    toc_depth: 4
+    toc_float: true
+params:
+  prep: ""
+  exclusions: NULL
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE,
+                      fig.retina = 1, dpi = 96)
+prep <- readRDS(params$prep)
+info <- prep$info
+data <- prep$data
+qc <- info$qc
+group_col <- qc$group_col
+batch_col <- qc$batch_col
+log_scale <- isTRUE(qc$log_scale)
+matched <- JanisHelpers:::match_sample_exclusions_(data, params$exclusions, info$assay)
+means <- JanisHelpers:::elisa_qc_means_(data)
+scored <- JanisHelpers:::qc_table_score_(means, "analyte", group_col, log_scale)
+or_unset <- function(x) if (is.null(x)) "not set" else paste0("`", x, "`")
+
+emit_plot <- function(p) {
+  if (is.null(p)) return(invisible(NULL))
+  h <- JanisHelpers:::qc_fig_height_(length(unique(p$data$.row)))
+  env <- new.env()
+  env$p <- p
+  wd <- getwd()
+  on.exit(setwd(wd), add = TRUE)
+  cat(knitr::knit_child(
+    text = c(sprintf("```{r, fig.height = %s, fig.width = 10}", h), "print(p)", "```"),
+    envir = env, quiet = TRUE
+  ), "\n\n")
+}
+note <- function(...) cat("\n\n*", ..., "*\n\n", sep = "")
+```
+
+## Overview
+
+| | |
+|---|---|
+| File | `r basename(info$source_path)` |
+| Assay | `r info$assay` |
+| File modified | `r if (file.exists(info$source_path)) format(file.mtime(info$source_path), "%Y-%m-%d %H:%M") else "not found"` |
+| Prep result created | `r format(info$created_at, "%Y-%m-%d %H:%M")` |
+| JanisHelpers | `r info$package_version` |
+| Group / batch column | `r or_unset(group_col)` / `r or_unset(batch_col)` |
+| Replicate CV limit | `r qc$max_cv`% |
+
+All samples are shown. Rows on the exclusions sheet are only flagged here;
+they are dropped at the final export.
+
+```{r overview}
+overview <- data |>
+  dplyr::distinct(mouse_ID, tissue, collected_at) |>
+  dplyr::mutate(timepoint = JanisHelpers:::qc_timepoint_(collected_at)) |>
+  dplyr::summarise(n_samples = dplyr::n(), .by = c(tissue, timepoint)) |>
+  dplyr::arrange(tissue, match(timepoint, JanisHelpers:::qc_timepoint_levels_(timepoint)))
+knitr::kable(overview, caption = "Samples per tissue x timepoint")
+```
+
+## Completeness
+
+```{r completeness, results = "asis"}
+comp <- JanisHelpers:::qc_table_completeness_(data, qc$expected_mice)
+unknown <- attr(comp, "unknown")
+missing <- comp[comp$missing != "", ]
+if (nrow(missing) == 0) {
+  cat("None missing (", length(qc$expected_mice), " expected mice).\n", sep = "")
+} else {
+  cat("**Warning: expected mice missing.**\n\n")
+  print(knitr::kable(missing))
+}
+if (length(unknown) > 0) {
+  cat("\n\n**Warning: mice in the data that are not expected:** ",
+      paste(unknown, collapse = ", "), ".\n\n", sep = "")
+}
+```
+
+## Exclusions
+
+```{r exclusions, results = "asis"}
+if (nrow(matched$applicable) == 0) {
+  cat("No exclusions apply to this assay.\n")
+} else {
+  cat("Flagged samples (dropped at the final export):\n\n")
+  if (nrow(matched$excluded_samples) > 0) {
+    print(knitr::kable(matched$excluded_samples))
+  }
+}
+if (nrow(matched$unmatched) > 0) {
+  cat("\n\n### Warning: these rows match no sample\n\n",
+      "Check for typos -- the final export stops on them.\n\n")
+  print(knitr::kable(matched$unmatched))
+}
+```
+
+## Empty values
+
+Empty (`NA`) values are out-of-range readings or missing measurements.
+
+```{r empty, results = "asis"}
+empty <- JanisHelpers:::qc_table_empty_(data, "analyte")
+cat(sum(empty$n_empty), " of ", nrow(data), " values empty.\n\n", sep = "")
+print(knitr::kable(empty))
+```
+
+## Range
+
+OOR = reported out of range by the instrument software; LLOQ / ULOQ = numeric
+values below / above the quantification limits.
+
+```{r range}
+knitr::kable(JanisHelpers:::elisa_qc_range_(data))
+```
+
+## Replicate agreement
+
+```{r replicates, results = "asis"}
+reps <- JanisHelpers:::elisa_qc_replicates_(data, qc$max_cv)
+if (nrow(reps) == 0) {
+  cat("All replicate CVs are within ", qc$max_cv, "%.\n", sep = "")
+} else {
+  cat("**Warning: replicate CV above ", qc$max_cv, "%.**\n\n", sep = "")
+  reps$cv <- round(reps$cv, 1)
+  print(knitr::kable(reps))
+}
+```
+
+## Outliers
+
+Replicate means; labelled points lie outside their boxplot's whiskers (more
+than 1.5 x IQR beyond the quartiles) within group x tissue x timepoint x
+analyte.
+
+```{r no-group, results = "asis"}
+if (is.null(group_col)) {
+  note("Group column not set -- rerun the prep script with `group_col` to score outliers.")
+}
+```
+
+### By group
+
+```{r outliers, results = "asis"}
+emit_plot(JanisHelpers:::qc_table_plot_(scored, "analyte", group_col, log_scale))
+```
+
+### By batch
+
+```{r batch, results = "asis"}
+if (is.null(batch_col)) {
+  note("Batch column not set -- rerun the prep script with `batch_col`.")
+} else {
+  emit_plot(JanisHelpers:::qc_table_plot_(scored, "analyte", group_col,
+                                          log_scale, batch_col = batch_col))
+}
+```
+
+### Over time
+
+```{r time, results = "asis"}
+p <- JanisHelpers:::qc_table_time_plot_(means, "analyte", group_col)
+if (is.null(p)) note("Fewer than two sampling dates -- no time course.") else emit_plot(p)
+```
+
+## Flagged samples
+
+```{r flags, results = "asis"}
+if (is.null(group_col)) {
+  note("Not scored -- group column not set.")
+} else {
+  flags <- JanisHelpers:::qc_table_flag_table_(scored, "analyte")
+  if (nrow(flags) == 0) {
+    cat("No samples flagged.\n")
+  } else {
+    cat("Ranked by the number of analytes flagged.\n\n")
+    flags$excluded <- ifelse(flags$mouse_ID %in% matched$excluded_samples$mouse_ID,
+                             "excluded", "")
+    print(knitr::kable(flags))
+  }
+}
+```

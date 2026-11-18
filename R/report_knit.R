@@ -123,6 +123,28 @@ report_knit_facs_qc <- function(prep_path, exclusions = NULL) {
   render_qc_("facs-qc-template", prep_path, exclusions)
 }
 
+#' Render the ELISA QC report for one prep result
+#'
+#' Renders the `elisa-qc-template` from a prep result saved by
+#' [elisa_prep_save()] into `<folder of the curated xlsx>/qc/<file>_qc.html`.
+#' Sections: overview, completeness, exclusions (flagged samples; rows that
+#' match no sample as warnings), empty values, quantification range,
+#' replicate agreement, outliers (group and batch plots of replicate means)
+#' and a ranked table of flagged samples.
+#'
+#' @param prep_path Path to the prep `.rds` returned by [elisa_prep_save()].
+#' @param exclusions Optional tibble -- the `exclusions` sheet of the meta
+#'   workbook. `NULL` = no exclusions.
+#' @returns The path of the rendered `.html` file.
+#' @examples
+#' \dontrun{
+#' report_knit_elisa_qc(prep_path, meta_read(meta_path)$exclusions)
+#' }
+#' @export
+report_knit_elisa_qc <- function(prep_path, exclusions = NULL) {
+  render_qc_("elisa-qc-template", prep_path, exclusions)
+}
+
 # Internal: render a QC template for the prep `.rds` at `prep_path` into the
 # `qc/` folder beside its `processed/` folder; returns the html path.
 render_qc_ <- function(template, prep_path, exclusions = NULL) {

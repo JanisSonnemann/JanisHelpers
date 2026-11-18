@@ -60,3 +60,26 @@ test_that("elisa_prep_load refuses a report older than the prep", {
   Sys.setFileTime(paths$qc, Sys.time() - 1800)
   expect_error(elisa_prep_load(path), "older than the prep")
 })
+
+# ---- elisa_prep_run ----------------------------------------------------------
+
+test_that("elisa_prep_run(final = FALSE) saves and renders the report", {
+  skip_if_not(rmarkdown::pandoc_available())
+  path <- local_elisa_dir()
+  mice <- tibble::tibble(mouse_ID = c("M1", "M2"), group = c("a", "b"))
+  out <- suppressMessages(elisa_prep_run(
+    FALSE, path, "restim", tissue = "spleen", mice = mice, group_col = "group",
+    max_cv = 10
+  ))
+  expect_true(file.exists(out))
+  prep <- readRDS(elisa_prep_paths_(path)$prep)
+  expect_equal(prep$info$qc$group_col, "group")
+  expect_equal(prep$info$qc$max_cv, 10)
+  expect_true("group" %in% names(prep$data))
+})
+
+test_that("elisa_prep_run(final = TRUE) needs a connection", {
+  path <- local_elisa_dir()
+  expect_error(elisa_prep_run(TRUE, path, "restim"), "con")
+  expect_error(elisa_prep_run("yes", path, "restim"), "final")
+})

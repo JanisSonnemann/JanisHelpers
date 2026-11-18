@@ -110,6 +110,7 @@ Current `Imports`: `CytoML`, `DBI`, `dbplyr`, `diffcyt`, `dplyr`, `duckdb`, `fce
 | `experiment-report` | `report_knit_exp()` |
 | `wide-html` | `report_knit_wide()` |
 | `facs-qc-template` | `report_knit_facs_qc()` |
+| `elisa-qc-template` | `report_knit_elisa_qc()` |
 | `protocol-template` | standalone, no custom knit function |
 
 `report_knit_wide()` injects `inst/resources/wide-output.css` via `system.file()`.
