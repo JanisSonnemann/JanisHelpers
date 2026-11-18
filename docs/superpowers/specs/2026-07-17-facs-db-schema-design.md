@@ -6,7 +6,12 @@ Status: draft, pending review
 > columns and their `CHECK`, the `sample_digestions` table), `wsp_root` +
 > `import_log` added, `facs_measurements` FK to `facs_stains` dropped -- see
 > `2026-11-12-db-schema-import-log-design.md`. `import_exclusions` added
-> (`2026-11-12-facs-prep-qc-export-design.md`). The DDL below is current.
+> (`2026-11-12-facs-prep-qc-export-design.md`).
+>
+> **2026-11-18:** `samples` keyed by mouse x tissue x collection date;
+> `elisa_measurements` / `histo_measurements` reshaped (`import_unit`,
+> replace-on-reimport); `import_exclusions.collected_at` added -- see
+> `2026-11-18-elisa-histo-prep-qc-export-design.md`. The DDL below is current.
 Related: `docs/superpowers/specs/2026-07-17-facs-db-schema-diagram.html` (visual companion — entity cards, relationships, workflow diagram)
 
 ## Context
@@ -113,9 +118,9 @@ CREATE TABLE samples (
   subject_id   INTEGER NOT NULL REFERENCES subjects(subject_id),
   tissue       VARCHAR NOT NULL,   -- any specimen type: organ or fluid
                                     -- ("kidney", "serum", "urine", ...), free text
-  collected_at DATE,
+  collected_at DATE NOT NULL,   -- NULL input = the subject's end_date
   created_at   TIMESTAMP DEFAULT current_timestamp,
-  UNIQUE(subject_id, tissue)
+  UNIQUE(subject_id, tissue, collected_at)
 );
 
 CREATE SEQUENCE seq_assays START 1;
@@ -168,25 +173,25 @@ CREATE TABLE elisa_measurements (
   elisa_measurement_id INTEGER PRIMARY KEY DEFAULT nextval('seq_elisa_measurements'),
   sample_id            INTEGER NOT NULL REFERENCES samples(sample_id),
   assay_id             INTEGER NOT NULL REFERENCES assays(assay_id),
-  cytokine             VARCHAR NOT NULL,
-  sample_id_raw        VARCHAR,            -- raw plate label, e.g. "25-7-1" -- not
-                                            -- assumed to equal mouse_id, per
-                                            -- elisa_read_results()'s own doc note
-  replicate            INTEGER,
-  value                DOUBLE,
+  import_unit          VARCHAR NOT NULL,   -- curated file name; the unit replaced on reimport
+  analyte              VARCHAR NOT NULL,
+  replicate            INTEGER NOT NULL,
+  value                DOUBLE,             -- NA for out-of-range results
   unit                 VARCHAR,
-  result_status        VARCHAR,            -- "OK" / "OOR<" / "OOR>" / "<LLOQ" / ...
-  source_file          VARCHAR,            -- provenance: which Results_<cytokine>.xlsx
+  result_status        VARCHAR NOT NULL,   -- "ok" / "OOR<" / "OOR>"
+  lloq                 DOUBLE,
+  uloq                 DOUBLE,
+  source_file          VARCHAR,
   imported_at          TIMESTAMP DEFAULT current_timestamp,
-  UNIQUE(sample_id, assay_id, cytokine, sample_id_raw, replicate)
+  UNIQUE(sample_id, assay_id, analyte, replicate)
 );
 
 CREATE SEQUENCE seq_histo_measurements START 1;
 CREATE TABLE histo_measurements (
   histo_measurement_id INTEGER PRIMARY KEY DEFAULT nextval('seq_histo_measurements'),
   sample_id            INTEGER NOT NULL REFERENCES samples(sample_id),
-  assay_id             INTEGER REFERENCES assays(assay_id),   -- nullable: only one
-                                                               -- histo assay type in use today
+  assay_id             INTEGER NOT NULL REFERENCES assays(assay_id),
+  import_unit          VARCHAR NOT NULL,
   metric               VARCHAR NOT NULL,
   value                DOUBLE,
   source_file          VARCHAR,
@@ -212,7 +217,7 @@ CREATE TABLE import_log (
   imported_at          TIMESTAMP NOT NULL DEFAULT current_timestamp
 );
 
--- Exclusion-sheet rows applied by one FACS export (db_export_facs()), kept
+-- Exclusion-sheet rows applied by one export (db_export_*()), kept
 -- when the root is overwritten later. FK to another table: snapshot-safe.
 CREATE SEQUENCE seq_import_exclusions START 1;
 CREATE TABLE import_exclusions (
@@ -223,6 +228,7 @@ CREATE TABLE import_exclusions (
   panel           VARCHAR,     -- NULL = all panels
   condition       VARCHAR,     -- NULL = all conditions
   file_name       VARCHAR,     -- NULL = all files
+  collected_at    DATE,        -- NULL = all dates (ELISA / histology exports)
   reason          VARCHAR NOT NULL,
   decided_on      DATE,
   n_files_matched INTEGER NOT NULL

@@ -1,6 +1,6 @@
 # ELISA + histology prep -> QC loop -> database export (with timepoints)
 
-Status: draft, pending review
+Status: approved 2026-11-18
 Parallel to `2026-11-12-facs-prep-qc-export-design.md` (the FACS loop). Changes
 the sample model of `2026-07-17-facs-db-schema-design.md` and the ELISA /
 histology parts of `2026-11-12-db-schema-import-log-design.md`.

@@ -44,7 +44,8 @@ Imports:
 Suggests:
     ggrepel,
     testthat (>= 3.0.0),
-    withr
+    withr,
+    writexl
 Remotes:
     Close-your-eyes/fcexpr
 biocViews:
