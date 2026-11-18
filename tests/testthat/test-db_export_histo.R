@@ -99,6 +99,19 @@ test_that("histo unmatched exclusion errors and writes nothing", {
   expect_equal(count_rows_(con, "import_log"), 0)
 })
 
+test_that("histo export: unknown panel warns; logical NA dates stay Dates", {
+  con <- local_test_db(); seed_histo_db(con)
+  d <- histo_fixture_data()
+  d$collected_at <- NA
+  p <- histo_prep_in_root(d)
+  ex <- tibble::tibble(mouse_ID = "M2", panel = "titer", reason = "elisa only")
+  expect_warning(histo_export_quiet(con, p$prep, ex, data_dir = p$data_dir),
+                 "not registered.*'titer'")
+  res <- dplyr::collect(db_query_histo(con))
+  expect_equal(nrow(res), nrow(d))
+  expect_equal(unique(as.character(res$collected_at)), "2026-06-10")
+})
+
 test_that("histo dated row equal to end_date plus an empty-date row errors", {
   con <- local_test_db(); seed_histo_db(con)
   d <- histo_fixture_data()

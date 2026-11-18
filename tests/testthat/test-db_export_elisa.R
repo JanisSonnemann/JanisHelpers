@@ -98,6 +98,29 @@ test_that("an unmatched exclusion errors and writes nothing", {
   expect_equal(count_rows_(con, "import_log"), 0)
 })
 
+test_that("an unknown exclusion panel warns but does not block the export", {
+  con <- local_test_db(); seed_elisa_db(con)
+  p <- elisa_prep_in_root()
+  ex <- tibble::tibble(mouse_ID = "M2", panel = "Treg", reason = "facs only")
+  expect_warning(id <- export_quiet(con, p$prep, ex, data_dir = p$data_dir),
+                 "not registered.*'Treg'")
+  expect_equal(count_rows_(con, "elisa_measurements"), nrow(p$prep$data))
+  expect_equal(count_rows_(con, "import_exclusions"), 0)
+})
+
+test_that("a dated exclusion matching no sample hints at empty end-point dates", {
+  con <- local_test_db(); seed_elisa_db(con)
+  p <- elisa_prep_in_root()
+  ex <- tibble::tibble(mouse_ID = "M2", collected_at = as.Date("2026-06-10"),
+                       reason = "end bleed")
+  expect_error(export_quiet(con, p$prep, ex, data_dir = p$data_dir),
+               "leave collected_at empty to target them")
+  ex$collected_at <- NA
+  ex$mouse_ID <- "M9"
+  expect_error(export_quiet(con, p$prep, ex, data_dir = p$data_dir),
+               "match no sample")
+})
+
 test_that("a dated row equal to end_date plus an empty-date row errors", {
   con <- local_test_db(); seed_elisa_db(con)
   d <- fixture_data()

@@ -14,7 +14,7 @@ test_that("whole-mouse row excludes all its files", {
   expect_named(
     m$applicable,
     c("mouse_ID", "tissue", "panel", "condition", "file_name", "reason",
-      "date", "n_files_matched")
+      "collected_at", "date", "n_files_matched")
   )
 })
 
@@ -100,4 +100,26 @@ test_that("missing mouse_ID/reason column or empty reason errors", {
     ),
     "reason"
   )
+})
+
+test_that("a dated row without panel doesn't apply to FACS", {
+  ex <- tibble::tibble(
+    mouse_ID = c("25-7-1", "25-7-2"),
+    collected_at = as.Date(c("2026-05-01", NA)),
+    reason = c("hemolysed bleed", "sick")
+  )
+  m <- facs_match_exclusions(files, ex, panel = "overview")
+  expect_equal(m$applicable$mouse_ID, "25-7-2")
+  expect_equal(m$excluded_files$file_name, "m2_spl.fcs")
+  expect_equal(nrow(m$unmatched), 0)
+  expect_s3_class(m$applicable$collected_at, "Date")
+})
+
+test_that("a dated row naming this FACS panel errors", {
+  ex <- tibble::tibble(mouse_ID = "25-7-1", panel = "overview",
+                       collected_at = as.Date("2026-05-01"), reason = "x")
+  expect_error(facs_match_exclusions(files, ex, panel = "overview"),
+               "collected_at doesn't apply to FACS panel 'overview'")
+  # ... but is ignored by another panel
+  expect_equal(nrow(facs_match_exclusions(files, ex, panel = "treg")$applicable), 0)
 })

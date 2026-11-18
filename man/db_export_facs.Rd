@@ -18,15 +18,16 @@ db_export_facs(
 \item{prep}{A prep result from \code{\link[=facs_prep_load]{facs_prep_load()}}.}
 
 \item{exclusions}{Optional tibble -- the meta workbook's \code{exclusions} sheet
-(see \code{\link[=facs_match_exclusions]{facs_match_exclusions()}}). \code{NULL} = nothing excluded.}
+(see \code{\link[=facs_match_exclusions]{facs_match_exclusions()}}). \code{NULL} = nothing excluded. Rows naming
+a panel that is neither this one nor a registered assay raise a warning
+(possible typo) and are ignored.}
 
 \item{data_dir}{The project's \verb{data/} folder; \code{source_file} and
 \code{qc_report} are stored relative to it.}
 
 \item{overwrite}{\code{NULL} (default) asks interactively when the root already
 exists (default answer "no"; errors in a non-interactive session);
-\code{TRUE} / \code{FALSE} answers without asking. Exclusion rows naming a panel
-that is neither this one nor a registered assay stop the export.}
+\code{TRUE} / \code{FALSE} answers without asking.}
 }
 \value{
 Invisibly, the new \code{import_id}, or \code{NULL} if the overwrite was

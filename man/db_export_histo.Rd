@@ -18,7 +18,10 @@ db_export_histo(
 \item{prep}{A prep result from \code{\link[=histo_prep_load]{histo_prep_load()}}.}
 
 \item{exclusions}{Optional tibble -- the meta workbook's \code{exclusions} sheet.
-\code{NULL} = nothing excluded.}
+\code{NULL} = nothing excluded. Rows naming a panel that is neither this
+assay nor a registered one raise a warning (possible typo) and are
+ignored. A dated row matches the sheet's date: end-point samples have an
+empty date, so leave \code{collected_at} empty to target them.}
 
 \item{data_dir}{The project's \verb{data/} folder; \code{source_file} and
 \code{qc_report} are stored relative to it.}

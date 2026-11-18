@@ -11,8 +11,8 @@ facs_match_exclusions(data, exclusions, panel)
 \code{tissue}, \code{condition} (the \code{data} of a prep result).}
 
 \item{exclusions}{Tibble with required columns \code{mouse_ID} and \code{reason},
-optional \code{tissue}, \code{panel}, \code{condition}, \code{file_name}, \code{date}. \code{NULL} or
-zero rows = no exclusions.}
+optional \code{tissue}, \code{panel}, \code{condition}, \code{file_name}, \code{collected_at},
+\code{date}. \code{NULL} or zero rows = no exclusions.}
 
 \item{panel}{Character scalar, the assay name of the panel being checked.}
 }
@@ -21,7 +21,8 @@ A named list:
 \describe{
 \item{\code{applicable}}{the rows that apply to \code{panel}, with columns
 \code{mouse_ID}, \code{tissue}, \code{panel}, \code{condition}, \code{file_name}, \code{reason}
-(character), \code{date} (Date) and \code{n_files_matched} (integer).}
+(character), \code{collected_at} (Date, always empty here), \code{date} (Date)
+and \code{n_files_matched} (integer).}
 \item{\code{excluded_files}}{distinct \code{file_name} + \code{reason} (reasons of
 several rows hitting one file joined with \code{"; "}).}
 \item{\code{unmatched}}{the \code{applicable} rows that match no file.}
@@ -36,6 +37,10 @@ match, no case folding). Rows whose \code{panel} is empty apply to every panel;
 rows for other panels are ignored.
 }
 \details{
+FACS samples are end-point only, so a row with a filled \code{collected_at}
+(meant for one dated ELISA / histology sample) and an empty \code{panel} does
+not apply to FACS; a dated row naming this FACS panel is an error.
+
 Used by the QC report (to flag samples) and by \code{\link[=db_export_facs]{db_export_facs()}} (to drop
 them). This function never errors on rows that match nothing -- it returns
 them in \code{unmatched}, and the caller decides.

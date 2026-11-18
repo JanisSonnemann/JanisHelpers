@@ -79,6 +79,28 @@ test_that("applies exclusions and records them with the import", {
   expect_true(is.na(exc$tissue) && is.na(exc$panel) && is.na(exc$file_name))
 })
 
+test_that("a dated exclusion row (ELISA bleed) excludes no FACS file", {
+  con <- local_test_db(); seed_export_fixture(con)
+  d <- local_prep_dirs()
+  prep <- suppressMessages(local_loaded_prep(d, two_mice))
+  ex <- tibble::tibble(
+    mouse_ID = c("25-7-1", "25-7-2"),
+    collected_at = as.Date(c("2026-05-01", NA)),
+    reason = c("hemolysed bleed", "clots")
+  )
+  suppressMessages(db_export_facs(con, prep, ex, data_dir = d$data_dir))
+  mice <- unique(dplyr::collect(db_query_facs(con))$mouse_id)
+  expect_equal(mice, "25-7-1")
+  exc <- DBI::dbGetQuery(con, "SELECT mouse_id, collected_at FROM import_exclusions")
+  expect_equal(exc$mouse_id, "25-7-2")
+  expect_true(is.na(exc$collected_at))
+  # a dated row naming the FACS panel stops the export
+  ex2 <- tibble::tibble(mouse_ID = "25-7-1", panel = "overview",
+                        collected_at = as.Date("2026-05-01"), reason = "x")
+  expect_error(db_export_facs(con, prep, ex2, data_dir = d$data_dir,
+                              overwrite = TRUE), "collected_at")
+})
+
 test_that("unmatched exclusion row stops the export, nothing written", {
   con <- local_test_db(); seed_export_fixture(con)
   d <- local_prep_dirs()
@@ -202,18 +224,22 @@ test_that("overwrite = NULL outside an interactive session refuses to overwrite"
   expect_equal(n_rows(con, "import_log"), 1)
 })
 
-test_that("an exclusion row naming an unknown panel stops the export", {
+test_that("an exclusion row naming an unknown panel warns, export proceeds", {
   con <- local_test_db(); seed_export_fixture(con)
   d <- local_prep_dirs()
   prep <- suppressMessages(local_loaded_prep(d, two_mice))
   ex <- tibble::tibble(mouse_ID = "25-7-2", panel = "Overview", reason = "case typo")
-  expect_error(db_export_facs(con, prep, ex, data_dir = d$data_dir), "Overview")
-  expect_equal(n_rows(con, "import_log"), 0)
-  # a registered other FACS panel is fine (row ignored here)
+  expect_warning(
+    suppressMessages(db_export_facs(con, prep, ex, data_dir = d$data_dir)),
+    "not registered.*'Overview'.*Known panels / assays: overview"
+  )
+  expect_equal(n_rows(con, "import_log"), 1)
+  expect_equal(n_rows(con, "import_exclusions"), 0)
+  # a registered other FACS panel is fine (row ignored here, no warning)
   db_write_assay(con, "treg", domain = "facs")
   ex$panel <- "treg"
-  expect_no_error(suppressMessages(
-    db_export_facs(con, prep, ex, data_dir = d$data_dir)
+  expect_no_warning(suppressMessages(
+    db_export_facs(con, prep, ex, data_dir = d$data_dir, overwrite = TRUE)
   ))
 })
 
@@ -227,5 +253,7 @@ test_that("exclusion panel naming a registered assay of another domain passes", 
     db_export_facs(con, prep, ex, data_dir = d$data_dir)
   ))
   ex$panel <- "Treg"
-  expect_error(db_export_facs(con, prep, ex, data_dir = d$data_dir), "unknown panel")
+  expect_warning(suppressMessages(
+    db_export_facs(con, prep, ex, data_dir = d$data_dir, overwrite = TRUE)
+  ), "not registered")
 })

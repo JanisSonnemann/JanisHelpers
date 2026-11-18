@@ -38,13 +38,14 @@ format_rows_ <- function(x) {
 #' @param con A `DBI` connection from [db_connect()].
 #' @param prep A prep result from [facs_prep_load()].
 #' @param exclusions Optional tibble -- the meta workbook's `exclusions` sheet
-#'   (see [facs_match_exclusions()]). `NULL` = nothing excluded.
+#'   (see [facs_match_exclusions()]). `NULL` = nothing excluded. Rows naming
+#'   a panel that is neither this one nor a registered assay raise a warning
+#'   (possible typo) and are ignored.
 #' @param data_dir The project's `data/` folder; `source_file` and
 #'   `qc_report` are stored relative to it.
 #' @param overwrite `NULL` (default) asks interactively when the root already
 #'   exists (default answer "no"; errors in a non-interactive session);
-#'   `TRUE` / `FALSE` answers without asking. Exclusion rows naming a panel
-#'   that is neither this one nor a registered assay stop the export.
+#'   `TRUE` / `FALSE` answers without asking.
 #' @returns Invisibly, the new `import_id`, or `NULL` if the overwrite was
 #'   declined.
 #' @examples
@@ -72,7 +73,7 @@ db_export_facs <- function(con, prep, exclusions = NULL, data_dir = "data",
   }
 
   # A mistyped panel (e.g. "Treg" for assay "treg") would be ignored by every
-  # export, so unknown panel names stop here.
+  # export, so unknown panel names raise a warning here.
   check_exclusion_panels_(con, exclusions, info$assay)
 
   matched <- facs_match_exclusions(prep$data, exclusions, info$assay)
@@ -183,7 +184,7 @@ db_export_facs <- function(con, prep, exclusions = NULL, data_dir = "data",
         params = list(
           rep(id, nrow(ex)), ex$mouse_ID, ex$tissue, ex$panel, ex$condition,
           ex$file_name, ex$reason, ex$date, ex$n_files_matched,
-          rep(as.Date(NA), nrow(ex))
+          ex$collected_at
         ))
     }
     id

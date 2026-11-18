@@ -79,6 +79,6 @@ test_that("check_exclusion_panels_() accepts registered assays of any domain", {
   ex <- tibble::tibble(mouse_ID = "a", panel = "hist", reason = "x")
   expect_no_error(check_exclusion_panels_(con, ex, "titer"))
   ex$panel <- "Treg"
-  expect_error(check_exclusion_panels_(con, ex, "titer"), "unknown panel")
+  expect_warning(check_exclusion_panels_(con, ex, "titer"), "'Treg'.*Known panels / assays: titer")
   expect_no_error(check_exclusion_panels_(con, NULL, "titer"))
 })

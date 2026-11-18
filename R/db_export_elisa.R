@@ -22,7 +22,10 @@
 #' @param con A `DBI` connection from [db_connect()].
 #' @param prep A prep result from [elisa_prep_load()].
 #' @param exclusions Optional tibble -- the meta workbook's `exclusions` sheet.
-#'   `NULL` = nothing excluded.
+#'   `NULL` = nothing excluded. Rows naming a panel that is neither this
+#'   assay nor a registered one raise a warning (possible typo) and are
+#'   ignored. A dated row matches the sheet's date: end-point samples have an
+#'   empty date, so leave `collected_at` empty to target them.
 #' @param data_dir The project's `data/` folder; `source_file` and
 #'   `qc_report` are stored relative to it.
 #' @param overwrite `NULL` (default) asks interactively when the import unit

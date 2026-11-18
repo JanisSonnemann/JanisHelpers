@@ -12,8 +12,9 @@ check_replace_table_ <- function(table) {
 }
 
 # Internal: exclusion rows naming a panel that is neither `assay` nor any
-# registered assay (any domain) stop the export -- a mistyped panel would be
-# silently ignored.
+# registered assay (any domain) raise a warning -- a mistyped panel would be
+# silently ignored. Not an error: on a fresh database the other assays are
+# not registered yet, and their rows must not block this export.
 check_exclusion_panels_ <- function(con, exclusions, assay) {
   if (is.null(exclusions) || !"panel" %in% names(exclusions)) {
     return(invisible(TRUE))
@@ -22,14 +23,25 @@ check_exclusion_panels_ <- function(con, exclusions, assay) {
   panels <- unique(stats::na.omit(as.character(exclusions$panel)))
   unknown <- setdiff(panels[panels != ""], known)
   if (length(unknown) > 0) {
-    stop(
-      "The exclusions sheet names unknown panel(s): ",
+    warning(
+      "The exclusions sheet names panel(s) not registered in the database: ",
       paste0("'", unknown, "'", collapse = ", "), ". Known panels / assays: ",
-      paste(known, collapse = ", "), ". Nothing was written.",
+      paste(known, collapse = ", "), ". Their rows are ignored here -- check ",
+      "for typos if that assay is already exported.",
       call. = FALSE
     )
   }
   invisible(TRUE)
+}
+
+# Internal: hint appended to unmatched-exclusion messages when a row is dated
+# (exclusions match the sheet's dates, where end-point samples are empty).
+exclusion_date_hint_ <- function(unmatched) {
+  if (!any(!is.na(unmatched$collected_at))) {
+    return("")
+  }
+  paste0("\nEnd-point samples have an empty date in the sheet -- leave ",
+         "collected_at empty to target them.")
 }
 
 # Internal: TRUE to proceed, FALSE if the user declined. Asks only when
@@ -107,6 +119,9 @@ replace_import_ <- function(con, domain, table, rows, root, source_file,
 # end_date and checks `key` is unique. Stops before anything is written.
 # Returns list(data, excluded, matched).
 prepare_sample_export_ <- function(con, data, exclusions, assay, key, key_label) {
+  # An all-empty date column may arrive as logical NA; keep it a Date so the
+  # end-date fill below stays a Date.
+  data$collected_at <- as.Date(data$collected_at)
   check_exclusion_panels_(con, exclusions, assay)
   matched <- match_sample_exclusions_(data, exclusions, assay)
   if (nrow(matched$unmatched) > 0) {
@@ -114,6 +129,7 @@ prepare_sample_export_ <- function(con, data, exclusions, assay, key, key_label)
       "These exclusion rows match no sample of assay '", assay, "' -- ",
       "fix them in the meta workbook. Nothing was written.\n",
       format_rows_(dplyr::select(matched$unmatched, !n_samples_matched)),
+      exclusion_date_hint_(matched$unmatched),
       call. = FALSE
     )
   }
