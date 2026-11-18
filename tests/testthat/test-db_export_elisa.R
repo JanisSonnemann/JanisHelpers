@@ -1,7 +1,3 @@
-count_rows_ <- function(con, table) {
-  DBI::dbGetQuery(con, paste("SELECT COUNT(*) AS n FROM", table))$n
-}
-
 seed_elisa_db <- function(con) {
   db_write_experiment(con, experiment_code = "26-1")
   db_write_subjects(con, tibble::tibble(

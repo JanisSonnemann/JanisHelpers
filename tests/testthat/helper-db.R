@@ -15,3 +15,7 @@ seed_minimal_fixture <- function(con) {
   db_write_assay(con, assay_name = "anti-MPO", domain = "elisa")
   invisible(con)
 }
+
+count_rows_ <- function(con, table) {
+  DBI::dbGetQuery(con, paste("SELECT COUNT(*) AS n FROM", table))$n
+}

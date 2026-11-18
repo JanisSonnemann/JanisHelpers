@@ -44,51 +44,14 @@ db_export_elisa <- function(con, prep, exclusions = NULL, data_dir = "data",
   info <- prep$info
   root <- info$root
 
-  check_exclusion_panels_(con, exclusions, info$assay)
-  matched <- match_sample_exclusions_(prep$data, exclusions, info$assay)
-  if (nrow(matched$unmatched) > 0) {
-    stop(
-      "These exclusion rows match no sample of assay '", info$assay, "' -- ",
-      "fix them in the meta workbook. Nothing was written.\n",
-      format_rows_(dplyr::select(matched$unmatched, !n_samples_matched)),
-      call. = FALSE
-    )
-  }
-  excluded <- dplyr::distinct(matched$excluded_samples, mouse_ID, tissue, collected_at)
-  data <- dplyr::anti_join(prep$data, excluded,
-                           by = c("mouse_ID", "tissue", "collected_at"))
-  if (nrow(data) == 0) {
-    stop("Every sample is excluded -- nothing left to export.", call. = FALSE)
-  }
-
-  # Resolve empty dates to the subject's end date (what db_write_samples() does).
-  ends <- DBI::dbGetQuery(con, "SELECT mouse_id, end_date FROM subjects")
-  end_date <- ends$end_date[match(data$mouse_ID, ends$mouse_id)]
-  data$collected_at <- as.Date(ifelse(is.na(data$collected_at),
-                                      end_date, data$collected_at))
-  if (anyNA(data$collected_at)) {
-    stop(
-      "No date and no subject end_date (or unknown subject) for mouse_ID(s): ",
-      paste(sprintf("'%s'", unique(data$mouse_ID[is.na(data$collected_at)])),
-            collapse = ", "),
-      " -- register the subject with an end_date or give the sheet a date. ",
-      "Nothing was written.",
-      call. = FALSE
-    )
-  }
-
-  key <- c("mouse_ID", "tissue", "collected_at", "analyte", "replicate")
-  dups <- dplyr::count(data, dplyr::pick(dplyr::all_of(key))) |>
-    dplyr::filter(n > 1)
-  if (nrow(dups) > 0) {
-    stop(
-      "These mouse_ID x tissue x date x analyte x replicate occur twice ",
-      "(empty dates count as the subject's end_date) -- fix the curated ",
-      "file, rerun the prep script, then export. Nothing was written.\n",
-      format_rows_(dups),
-      call. = FALSE
-    )
-  }
+  prepared <- prepare_sample_export_(
+    con, prep$data, exclusions, info$assay,
+    key = c("mouse_ID", "tissue", "collected_at", "analyte", "replicate"),
+    key_label = "mouse_ID x tissue x date x analyte x replicate"
+  )
+  data <- prepared$data
+  excluded <- prepared$excluded
+  matched <- prepared$matched
 
   source_file <- relative_to_data_dir_(info$source_path, data_dir)
   qc_report <- relative_to_data_dir_(prep$paths$qc, data_dir)

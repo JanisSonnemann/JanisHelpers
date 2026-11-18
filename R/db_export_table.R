@@ -100,3 +100,56 @@ replace_import_ <- function(con, domain, table, rows, root, source_file,
     id
   })
 }
+
+# Internal: the validation sequence shared by db_export_elisa() and
+# db_export_histo(). Matches exclusions, drops the excluded samples (anti-join
+# on mouse_ID x tissue x collected_at), resolves empty dates to the subject's
+# end_date and checks `key` is unique. Stops before anything is written.
+# Returns list(data, excluded, matched).
+prepare_sample_export_ <- function(con, data, exclusions, assay, key, key_label) {
+  check_exclusion_panels_(con, exclusions, assay)
+  matched <- match_sample_exclusions_(data, exclusions, assay)
+  if (nrow(matched$unmatched) > 0) {
+    stop(
+      "These exclusion rows match no sample of assay '", assay, "' -- ",
+      "fix them in the meta workbook. Nothing was written.\n",
+      format_rows_(dplyr::select(matched$unmatched, !n_samples_matched)),
+      call. = FALSE
+    )
+  }
+  excluded <- dplyr::distinct(matched$excluded_samples, mouse_ID, tissue, collected_at)
+  data <- dplyr::anti_join(data, excluded,
+                           by = c("mouse_ID", "tissue", "collected_at"))
+  if (nrow(data) == 0) {
+    stop("Every sample is excluded -- nothing left to export.", call. = FALSE)
+  }
+
+  # Resolve empty dates to the subject's end date (what db_write_samples() does).
+  ends <- DBI::dbGetQuery(con, "SELECT mouse_id, end_date FROM subjects")
+  end_date <- ends$end_date[match(data$mouse_ID, ends$mouse_id)]
+  empty <- is.na(data$collected_at)
+  data$collected_at[empty] <- end_date[empty]
+  if (anyNA(data$collected_at)) {
+    stop(
+      "No date and no subject end_date (or unknown subject) for mouse_ID(s): ",
+      paste(sprintf("'%s'", unique(data$mouse_ID[is.na(data$collected_at)])),
+            collapse = ", "),
+      " -- register the subject with an end_date or give the sheet a date. ",
+      "Nothing was written.",
+      call. = FALSE
+    )
+  }
+
+  dups <- dplyr::count(data, dplyr::pick(dplyr::all_of(key))) |>
+    dplyr::filter(n > 1)
+  if (nrow(dups) > 0) {
+    stop(
+      "These ", key_label, " occur twice ",
+      "(empty dates count as the subject's end_date) -- fix the curated ",
+      "file, rerun the prep script, then export. Nothing was written.\n",
+      format_rows_(dups),
+      call. = FALSE
+    )
+  }
+  list(data = data, excluded = excluded, matched = matched)
+}
