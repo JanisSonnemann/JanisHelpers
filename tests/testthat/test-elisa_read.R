@@ -85,7 +85,7 @@ write_curated_ <- function(values, range = NULL) {
 }
 
 test_that("elisa_read_curated returns long rows with replicates and range", {
-  d <- elisa_read_curated(curated_path, tissue = "spleen")
+  d <- suppressMessages(elisa_read_curated(curated_path, tissue = "spleen"))
   expect_named(d, c("mouse_ID", "tissue", "collected_at", "analyte", "replicate", "value", "result_status", "unit", "lloq", "uloq"))
   m1 <- dplyr::filter(d, mouse_ID == "M1", is.na(collected_at), analyte == "IL-2")
   expect_equal(m1$replicate, 1:2)
@@ -95,33 +95,35 @@ test_that("elisa_read_curated returns long rows with replicates and range", {
   expect_equal(unique(d$unit), "pg/ml")
   expect_equal(unique(d$tissue), "spleen")
   expect_equal(sum(!is.na(d$collected_at)), 2)
+  expect_equal(d$replicate[d$analyte == "TNFa"], c(1L, 2L, 1L, 2L, 1L))
 })
 
 test_that("elisa_read_curated: tissue column overrides the argument where non-empty", {
   f <- write_curated_(data.frame(
     mouse_ID = c("M1", "M2"), tissue = c("serum", NA), A = c(1, 2)
   ))
-  d <- elisa_read_curated(f, tissue = "spleen")
+  d <- suppressMessages(elisa_read_curated(f, tissue = "spleen"))
   expect_equal(d$tissue, c("serum", "spleen"))
 })
 
 test_that("elisa_read_curated errors without any tissue", {
   f <- write_curated_(data.frame(mouse_ID = "M1", A = 1))
-  expect_error(elisa_read_curated(f), "tissue")
+  expect_error(suppressMessages(elisa_read_curated(f)), "tissue")
 })
 
 test_that("elisa_read_curated without range sheet gives NA lloq/uloq/unit", {
   f <- write_curated_(data.frame(mouse_ID = "M1", A = 1))
-  d <- elisa_read_curated(f, tissue = "serum")
-  expect_true(all(is.na(d$lloq)), all(is.na(d$uloq)))
+  d <- suppressMessages(elisa_read_curated(f, tissue = "serum"))
+  expect_true(all(is.na(d$lloq)))
+  expect_true(all(is.na(d$uloq)))
   expect_true(all(is.na(d$unit)))
 })
 
 test_that("elisa_read_curated errors on unreadable analyte cells", {
   f <- write_curated_(data.frame(mouse_ID = c("M1", "M7"), TNFa = c("1.5", "n.d.")))
-  expect_error(elisa_read_curated(f, tissue = "serum"), "n\\.d\\.")
-  expect_error(elisa_read_curated(f, tissue = "serum"), "TNFa")
-  expect_error(elisa_read_curated(f, tissue = "serum"), "M7")
+  expect_error(suppressMessages(elisa_read_curated(f, tissue = "serum")), "n\\.d\\.")
+  expect_error(suppressMessages(elisa_read_curated(f, tissue = "serum")), "TNFa")
+  expect_error(suppressMessages(elisa_read_curated(f, tissue = "serum")), "M7")
 })
 
 test_that("parse_curated_dates_ handles the supported types", {

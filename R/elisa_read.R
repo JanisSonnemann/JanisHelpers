@@ -194,10 +194,10 @@ elisa_read_curated <- function(path, tissue = NA_character_) {
 
   base <- tibble::tibble(mouse_ID = mouse, tissue = tissue_chr,
                          collected_at = collected_at)
-  base$replicate <- stats::ave(
-    seq_along(mouse), base$mouse_ID, base$tissue, as.character(base$collected_at),
-    FUN = seq_along
-  ) |> as.integer()
+  base <- base |>
+    dplyr::group_by(.data$mouse_ID, .data$tissue, .data$collected_at) |>
+    dplyr::mutate(replicate = dplyr::row_number()) |>
+    dplyr::ungroup()
 
   long <- purrr::map(analytes, function(a) {
     txt <- stringr::str_trim(cell(raw[[a]]))
