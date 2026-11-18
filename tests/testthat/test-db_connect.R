@@ -122,3 +122,19 @@ test_that("db_connect errors on a samples table with nullable collected_at", {
   err <- expect_error(db_connect(path), "older schema")
   expect_match(conditionMessage(err), "Recreate")
 })
+
+test_that("import_exclusions has collected_at and the append-only writers are gone", {
+  con <- local_test_db()
+  expect_true("collected_at" %in% DBI::dbListFields(con, "import_exclusions"))
+  expect_false(exists("db_write_elisa", asNamespace("JanisHelpers")))
+  expect_false(exists("db_write_histo", asNamespace("JanisHelpers")))
+})
+
+test_that("db_connect errors on an elisa_measurements table without analyte", {
+  path <- tempfile(fileext = ".duckdb")
+  old <- DBI::dbConnect(duckdb::duckdb(), path)
+  DBI::dbExecute(old, "CREATE TABLE elisa_measurements (elisa_measurement_id INTEGER, cytokine VARCHAR)")
+  DBI::dbDisconnect(old, shutdown = TRUE)
+  err <- expect_error(db_connect(path), "older schema")
+  expect_match(conditionMessage(err), "analyte")
+})

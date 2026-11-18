@@ -16,9 +16,9 @@ experiment_codes_ <- function(con, sample_ids) {
 
 # Internal: write one row to import_log and return its import_id.
 #
-# Called by every importer (db_write_elisa(), db_write_histo(), and later the
-# Stage 3 FACS export) INSIDE the caller's DBI::dbWithTransaction(), so the
-# data and its log row land together or not at all. Opens no transaction of
+# Called by every importer (the three db_export_*() functions) INSIDE the
+# caller's DBI::dbWithTransaction(), so the data and its log row land together
+# or not at all. Opens no transaction of
 # its own (DuckDB does not nest transactions). Log rows are never updated or
 # deleted by package code.
 #

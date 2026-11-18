@@ -7,26 +7,6 @@ check_string_arg_ <- function(x, arg, what) {
   invisible(x)
 }
 
-# Errors unless `data` has per-row `mouse_id` and `tissue` columns; hints at
-# renaming when it has meta_read()'s `mouse_ID` spelling instead.
-check_mouse_tissue_cols_ <- function(data, fn_name) {
-  missing_cols <- setdiff(c("mouse_id", "tissue"), names(data))
-  if (length(missing_cols) > 0) {
-    hint <- if ("mouse_id" %in% missing_cols && "mouse_ID" %in% names(data)) {
-      " `data` has `mouse_ID` -- rename it to `mouse_id` (the database's spelling)."
-    } else {
-      ""
-    }
-    stop(
-      fn_name, "() needs column(s) ",
-      paste(sprintf("`%s`", missing_cols), collapse = ", "),
-      " in `data`, one value per row.", hint,
-      call. = FALSE
-    )
-  }
-  invisible(TRUE)
-}
-
 # Errors unless `data` has the facs_import_wsp() columns, at least one row,
 # and (if it has FileName) rows from a single FCS file. Without this, a
 # wrong-shaped or empty tibble would create a stain with no measurements,
@@ -184,7 +164,7 @@ lookup_sample_ids_ <- function(con, mouse_id, tissue, collected_at = NA) {
     row_ = seq_along(mouse_id),
     mouse_id = as.character(mouse_id),
     tissue = as.character(tissue),
-    collected_at = as.Date(rep_len(collected_at, length(mouse_id)))
+    collected_at = as.Date(rep(collected_at, length.out = length(mouse_id)))
   )
   duckdb::duckdb_register(con, "tmp_sample_keys", keys)
   on.exit(duckdb::duckdb_unregister(con, "tmp_sample_keys"), add = TRUE)
@@ -364,155 +344,4 @@ insert_facs_stain_ <- function(con, sample_id, assay_id, data, wsp_root,
     FROM tmp_facs_measurements
     ON CONFLICT (facs_stain_id, population_full_path, metric) DO NOTHING
   ", params = list(facs_stain_id))
-}
-
-#' Import ELISA measurements
-#'
-#' Writes a tidy tibble of ELISA measurements (as produced by
-#' `elisa_read_results()`) into `elisa_measurements`.
-#'
-#' `elisa_measurements`'s uniqueness constraint (which backs duplicate-import
-#' detection) is `UNIQUE(sample_id, assay_id, cytokine, sample_id_raw,
-#' replicate)`; because SQL treats `NULL <> NULL`, an `NA` in `data$sample_id`
-#' (written as `sample_id_raw`) or `data$replicate` would let a repeat import
-#' insert duplicate rows undetected, so this function errors before writing
-#' anything if either column contains `NA`.
-#'
-#' A whole plate is written in one call: every row carries its own
-#' `mouse_id` and `tissue`, and each row's sample is resolved against the
-#' registered `subjects`/`samples`. If any `mouse_id` x `tissue` combination
-#' isn't registered (including an `NA` `mouse_id`), the function errors
-#' naming every unresolved combination and writes nothing. Drop standards,
-#' blanks and controls from `data` before calling.
-#'
-#' @param con A `DBI` connection from [db_connect()].
-#' @param data A tibble with columns `cytokine`, `sample_id` (raw plate
-#'   label), `replicate`, `value`, `unit`, `result_status` -- the shape
-#'   `elisa_read_results()` produces -- plus `mouse_id` and `tissue`, added
-#'   beforehand by joining a plate-label -> mouse table (e.g. with
-#'   [meta_annotate()]). `sample_id` and `replicate` must not contain `NA`.
-#' @param assay_name Character scalar identifying the assay/panel (already
-#'   registered via [db_write_assay()] with `domain = "elisa"`).
-#' @param source_file Character scalar, required -- the results file, as a
-#'   path relative to the project's `data/` folder (e.g.
-#'   `"25-7_exp/raw/ELISA/Results_MPO.xlsx"`). Stored on every row and in the log.
-#' @returns Invisibly, the number of rows inserted. Every call also writes one
-#'   `import_log` row (in the same transaction as the data), even when 0 rows
-#'   are inserted because the plate was already imported.
-#' @export
-db_write_elisa <- function(con, data, assay_name, source_file) {
-  check_string_arg_(
-    if (missing(source_file)) NULL else source_file, "source_file",
-    "the results file path relative to data/ (e.g. \"25-7_exp/raw/ELISA/Results_MPO.xlsx\")"
-  )
-  check_mouse_tissue_cols_(data, "db_write_elisa")
-  if (anyNA(data$sample_id) || anyNA(data$replicate)) {
-    stop(
-      "db_write_elisa() requires non-NA sample_id and replicate for every row ",
-      "-- these back the table's uniqueness constraint; NA values would break ",
-      "duplicate-import detection.",
-      call. = FALSE
-    )
-  }
-
-  assay_id <- lookup_assay_id_(con, assay_name, domain = "elisa")
-  sample_ids <- lookup_sample_ids_(con, data$mouse_id, data$tissue)
-
-  to_write <- tibble::tibble(
-    sample_id = sample_ids,
-    assay_id = assay_id,
-    cytokine = as.character(data$cytokine),
-    sample_id_raw = as.character(data$sample_id),
-    replicate = as.integer(data$replicate),
-    value = as.double(data$value),
-    unit = as.character(data$unit),
-    result_status = as.character(data$result_status),
-    source_file = source_file
-  )
-  duckdb::duckdb_register(con, "tmp_elisa_measurements", to_write)
-  on.exit(duckdb::duckdb_unregister(con, "tmp_elisa_measurements"), add = TRUE)
-
-  n <- DBI::dbWithTransaction(con, {
-    n <- DBI::dbExecute(con, "
-      INSERT INTO elisa_measurements (
-        sample_id, assay_id, cytokine, sample_id_raw, replicate, value, unit, result_status, source_file
-      )
-      SELECT sample_id, assay_id, cytokine, sample_id_raw, replicate, value, unit, result_status, source_file
-      FROM tmp_elisa_measurements
-      ON CONFLICT (sample_id, assay_id, cytokine, sample_id_raw, replicate) DO NOTHING
-    ")
-    write_import_log_(
-      con, "elisa",
-      experiment_code = experiment_codes_(con, sample_ids),
-      import_unit = basename(source_file),
-      source_file = source_file,
-      rows_written = n
-    )
-    n
-  })
-  invisible(n)
-}
-
-#' Import histology measurements
-#'
-#' Writes a tidy tibble of histology measurements into `histo_measurements`.
-#' A whole table is written in one call: every row carries its own
-#' `mouse_id` and `tissue`, resolved against the registered
-#' `subjects`/`samples`. If any `mouse_id` x `tissue` combination isn't
-#' registered (including an `NA` `mouse_id`), the function errors naming
-#' every unresolved combination and writes nothing.
-#'
-#' Note: `assay_name` is optional (histology has traditionally used a single
-#' un-named stain/scoring protocol). Rows written with `assay_name = NA` are
-#' not deduplicated against each other -- SQL's `NULL <> NULL` means the
-#' `UNIQUE(sample_id, assay_id, metric)` constraint doesn't catch a repeated
-#' import when `assay_id` is `NULL`. Pass an `assay_name` (registered via
-#' [db_write_assay()] with `domain = "histo"`) to get full dedup protection.
-#'
-#' @param con A `DBI` connection from [db_connect()].
-#' @param data A tibble with columns `metric`, `value`, `mouse_id`, `tissue`.
-#' @param assay_name Character scalar, optional -- identifies the
-#'   stain/scoring protocol.
-#' @param source_file Character scalar, required -- the scores file, as a
-#'   path relative to the project's `data/` folder (e.g.
-#'   `"25-7_exp/raw/histology/scores.xlsx"`). Stored on every row and in the log.
-#' @returns Invisibly, the number of rows inserted. Every call also writes one
-#'   `import_log` row (in the same transaction as the data).
-#' @export
-db_write_histo <- function(con, data, assay_name = NA_character_, source_file) {
-  check_string_arg_(
-    if (missing(source_file)) NULL else source_file, "source_file",
-    "the scores file path relative to data/ (e.g. \"25-7_exp/raw/histology/scores.xlsx\")"
-  )
-  check_mouse_tissue_cols_(data, "db_write_histo")
-  assay_id <- if (!is.na(assay_name)) lookup_assay_id_(con, assay_name, domain = "histo") else NA_integer_
-  sample_ids <- lookup_sample_ids_(con, data$mouse_id, data$tissue)
-
-  to_write <- tibble::tibble(
-    sample_id = sample_ids,
-    assay_id = assay_id,
-    metric = as.character(data$metric),
-    value = as.double(data$value),
-    source_file = source_file
-  )
-  duckdb::duckdb_register(con, "tmp_histo_measurements", to_write)
-  on.exit(duckdb::duckdb_unregister(con, "tmp_histo_measurements"), add = TRUE)
-
-  n <- DBI::dbWithTransaction(con, {
-    n <- DBI::dbExecute(con, "
-      INSERT INTO histo_measurements (sample_id, assay_id, metric, value, source_file)
-      SELECT sample_id, assay_id, metric, value, source_file
-      FROM tmp_histo_measurements
-      ON CONFLICT (sample_id, assay_id, metric) DO NOTHING
-    ")
-    write_import_log_(
-      con, "histo",
-      experiment_code = experiment_codes_(con, sample_ids),
-      import_unit = basename(source_file),
-      source_file = source_file,
-      rows_written = n
-    )
-    n
-  })
-  invisible(n)
 }

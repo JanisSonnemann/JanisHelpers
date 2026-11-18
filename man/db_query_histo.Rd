@@ -15,6 +15,5 @@ A lazy \code{tbl} -- filter/collect as needed.
 \description{
 Returns a lazy \code{dbplyr} \code{tbl} joining \code{histo_measurements} back through
 \code{samples}/\code{subjects}/\code{experiments}/\code{assays}, exposing natural keys instead
-of surrogate IDs. \code{assay_name} is \code{NA} for rows written without an
-\code{assay_name}. Call \code{\link[dplyr:collect]{dplyr::collect()}} to materialize.
+of surrogate IDs. Call \code{\link[dplyr:collect]{dplyr::collect()}} to materialize.
 }

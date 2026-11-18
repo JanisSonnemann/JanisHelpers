@@ -27,39 +27,28 @@ test_that("db_query_facs returns a flat tibble keyed by natural keys", {
   expect_equal(result$value, 1000)
 })
 
-test_that("db_query_elisa returns a flat tibble keyed by natural keys", {
+test_that("db_query_elisa and db_query_histo return flat tibbles keyed by natural keys", {
   con <- local_test_db()
   seed_minimal_fixture(con)
-  db_write_elisa(
-    con,
-    tibble::tibble(
-      cytokine = "MPO", sample_id = "25-7-1", replicate = 1L,
-      value = 12.3, unit = "pg/ml", result_status = "OK",
-      mouse_id = "25-7-1", tissue = "spleen"
-    ),
-    assay_name = "anti-MPO", source_file = "25-7/elisa/Results_MPO.xlsx"
-  )
+  db_write_assay(con, "anti-MPO", "elisa")
+  db_write_assay(con, "scores", "histo")
+  DBI::dbExecute(con, "INSERT INTO elisa_measurements
+    (sample_id, assay_id, import_unit, analyte, replicate, value, unit, result_status)
+    SELECT sm.sample_id, a.assay_id, 'Results_MPO', 'MPO', 1, 12.3, 'pg/ml', 'ok'
+    FROM samples sm, assays a WHERE a.assay_name = 'anti-MPO' LIMIT 1")
+  DBI::dbExecute(con, "INSERT INTO histo_measurements
+    (sample_id, assay_id, import_unit, metric, value)
+    SELECT sm.sample_id, a.assay_id, 'scores', 'damage_score', 2
+    FROM samples sm, assays a WHERE a.assay_name = 'scores' LIMIT 1")
 
-  result <- db_query_elisa(con) |> dplyr::collect()
-
-  expect_equal(result$mouse_id, "25-7-1")
-  expect_equal(result$assay_name, "anti-MPO")
-  expect_equal(result$cytokine, "MPO")
-  expect_equal(result$value, 12.3)
-})
-
-test_that("db_query_histo returns a flat tibble and tolerates a NULL assay_id", {
-  con <- local_test_db()
-  seed_minimal_fixture(con)
-  db_write_histo(
-    con,
-    tibble::tibble(metric = "damage_score", value = 2, mouse_id = "25-7-1", tissue = "spleen"),
-    source_file = "25-7/histo/scores.xlsx"
-  )
-
-  result <- db_query_histo(con) |> dplyr::collect()
-
-  expect_equal(result$mouse_id, "25-7-1")
-  expect_equal(result$metric, "damage_score")
-  expect_true(is.na(result$assay_name))
+  elisa <- dplyr::collect(db_query_elisa(con))
+  expect_named(elisa, c("experiment_code", "mouse_id", "tissue", "collected_at",
+    "assay_name", "import_unit", "analyte", "replicate", "value", "unit",
+    "result_status", "lloq", "uloq", "source_file", "imported_at"))
+  expect_equal(elisa$analyte, "MPO")
+  expect_equal(elisa$assay_name, "anti-MPO")
+  histo <- dplyr::collect(db_query_histo(con))
+  expect_named(histo, c("experiment_code", "mouse_id", "tissue", "collected_at",
+    "assay_name", "import_unit", "metric", "value", "source_file", "imported_at"))
+  expect_equal(histo$metric, "damage_score")
 })

@@ -41,9 +41,9 @@ db_query_elisa <- function(con) {
     dplyr::left_join(dplyr::tbl(con, "experiments"), by = "experiment_id") |>
     dplyr::left_join(dplyr::tbl(con, "assays"), by = "assay_id") |>
     dplyr::select(
-      experiment_code, mouse_id, tissue, assay_name,
-      cytokine, sample_id_raw, replicate, value, unit, result_status,
-      source_file, imported_at
+      experiment_code, mouse_id, tissue, collected_at, assay_name,
+      import_unit, analyte, replicate, value, unit, result_status,
+      lloq, uloq, source_file, imported_at
     )
 }
 
@@ -51,8 +51,7 @@ db_query_elisa <- function(con) {
 #'
 #' Returns a lazy `dbplyr` `tbl` joining `histo_measurements` back through
 #' `samples`/`subjects`/`experiments`/`assays`, exposing natural keys instead
-#' of surrogate IDs. `assay_name` is `NA` for rows written without an
-#' `assay_name`. Call [dplyr::collect()] to materialize.
+#' of surrogate IDs. Call [dplyr::collect()] to materialize.
 #'
 #' @param con A `DBI` connection from [db_connect()].
 #' @returns A lazy `tbl` -- filter/collect as needed.
@@ -64,7 +63,7 @@ db_query_histo <- function(con) {
     dplyr::left_join(dplyr::tbl(con, "experiments"), by = "experiment_id") |>
     dplyr::left_join(dplyr::tbl(con, "assays"), by = "assay_id") |>
     dplyr::select(
-      experiment_code, mouse_id, tissue, assay_name,
-      metric, value, source_file, imported_at
+      experiment_code, mouse_id, tissue, collected_at, assay_name,
+      import_unit, metric, value, source_file, imported_at
     )
 }

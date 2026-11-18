@@ -8,7 +8,8 @@
 #'
 #' Errors if the file was created by an older schema (one whose
 #' `facs_stains` table has no `wsp_root` or `condition` column, or whose
-#' `samples.collected_at` is nullable) -- such a file must be recreated, since
+#' `samples.collected_at` is nullable, or whose `elisa_measurements` has no
+#' `analyte` column) -- such a file must be recreated, since
 #' `CREATE TABLE IF NOT EXISTS` would silently keep the old tables.
 #'
 #' @param path Path to the DuckDB database file. Created if it doesn't exist.
@@ -53,6 +54,10 @@ db_old_schema_ <- function(con) {
     if (identical(nullable, "YES")) {
       reasons <- c(reasons, "samples.collected_at is nullable")
     }
+  }
+  if (DBI::dbExistsTable(con, "elisa_measurements") &&
+      !"analyte" %in% DBI::dbListFields(con, "elisa_measurements")) {
+    reasons <- c(reasons, "elisa_measurements has no analyte column")
   }
   reasons
 }
@@ -168,15 +173,17 @@ create_schema_ <- function(con) {
       elisa_measurement_id INTEGER PRIMARY KEY DEFAULT nextval('seq_elisa_measurements'),
       sample_id            INTEGER NOT NULL REFERENCES samples(sample_id),
       assay_id             INTEGER NOT NULL REFERENCES assays(assay_id),
-      cytokine             VARCHAR NOT NULL,
-      sample_id_raw        VARCHAR,
-      replicate            INTEGER,
+      import_unit          VARCHAR NOT NULL,
+      analyte              VARCHAR NOT NULL,
+      replicate            INTEGER NOT NULL,
       value                DOUBLE,
       unit                 VARCHAR,
-      result_status        VARCHAR,
+      result_status        VARCHAR NOT NULL,
+      lloq                 DOUBLE,
+      uloq                 DOUBLE,
       source_file          VARCHAR,
       imported_at          TIMESTAMP DEFAULT current_timestamp,
-      UNIQUE(sample_id, assay_id, cytokine, sample_id_raw, replicate)
+      UNIQUE(sample_id, assay_id, analyte, replicate)
     )
   ")
 
@@ -185,7 +192,8 @@ create_schema_ <- function(con) {
     CREATE TABLE IF NOT EXISTS histo_measurements (
       histo_measurement_id INTEGER PRIMARY KEY DEFAULT nextval('seq_histo_measurements'),
       sample_id            INTEGER NOT NULL REFERENCES samples(sample_id),
-      assay_id             INTEGER REFERENCES assays(assay_id),
+      assay_id             INTEGER NOT NULL REFERENCES assays(assay_id),
+      import_unit          VARCHAR NOT NULL,
       metric               VARCHAR NOT NULL,
       value                DOUBLE,
       source_file          VARCHAR,
@@ -229,6 +237,7 @@ create_schema_ <- function(con) {
       panel           VARCHAR,
       condition       VARCHAR,
       file_name       VARCHAR,
+      collected_at    DATE,
       reason          VARCHAR NOT NULL,
       decided_on      DATE,
       n_files_matched INTEGER NOT NULL
