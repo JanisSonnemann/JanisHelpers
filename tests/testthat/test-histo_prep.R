@@ -43,6 +43,33 @@ test_that("histo_prep_save errors on bad input and warns on duplicates", {
     "occur twice")
 })
 
+test_that("histo_prep_save stores end_dates and warns on duplicates after resolving", {
+  path <- local_histo_dir()
+  d <- read_histo_fixture(path)
+  dated <- dplyr::mutate(dplyr::filter(d, mouse_ID == "M2"),
+                         collected_at = as.Date("2026-06-10"))
+  both <- dplyr::bind_rows(d, dated)
+  expect_no_warning(out <- suppressMessages(histo_prep_save(both, path, "PAS")))
+  expect_null(readRDS(out)$info$end_dates)
+  expect_warning(
+    out <- suppressMessages(histo_prep_save(
+      both, path, "PAS",
+      end_dates = tibble::tibble(mouse_ID = "M2", death_date = as.Date("2026-06-10")))),
+    "occur twice")
+  expect_equal(readRDS(out)$info$end_dates, c(M2 = as.Date("2026-06-10")))
+})
+
+test_that("histo_prep_run fills end_dates from mice$death_date", {
+  skip_if_not(rmarkdown::pandoc_available())
+  path <- local_histo_dir()
+  mice <- tibble::tibble(mouse_ID = paste0("M", 1:4),
+                         death_date = as.Date("2026-06-10") + 0:3)
+  suppressMessages(histo_prep_run(FALSE, path, "PAS", tissue = "kidney", mice = mice))
+  prep <- readRDS(histo_prep_paths_(path)$prep)
+  expect_equal(unname(prep$info$end_dates), as.Date("2026-06-10") + 0:3)
+  expect_equal(names(prep$info$end_dates), paste0("M", 1:4))
+})
+
 test_that("histo_prep_load asks for a rerun without a report", {
   path <- local_histo_dir()
   suppressMessages(histo_prep_save(read_histo_fixture(path), path, "PAS"))

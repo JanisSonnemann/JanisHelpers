@@ -16,7 +16,8 @@ histo_prep_paths_ <- function(path) {
 #' samples; exclusions are only flagged in the QC report) with the QC settings
 #' at `<folder of path>/processed/<file name>_prep.rds`. The file name without
 #' extension is the import unit ("root") stored in the database. Warns when
-#' one mouse x tissue x date x metric occurs twice.
+#' one mouse x tissue x date x metric occurs twice (after resolving empty
+#' dates with `end_dates`).
 #'
 #' @param data Tibble from [histo_read_curated()] (optionally with ratio
 #'   metrics from [histo_calc_ratio()] and group / batch columns joined on) --
@@ -29,9 +30,14 @@ histo_prep_paths_ <- function(path) {
 #'   Default: the mice in `data`.
 #' @param rules Character vector of plausibility rules for the QC report.
 #'   Default `character()` (none).
-#' @returns Invisibly, the path of the written `.rds`, a list with `data` and
-#'   `info` (`source_path`, `root`, `assay`, `created_at`, `package_version`,
-#'   `qc`).
+#' @param end_dates Optional end (death) dates used by the QC report to place
+#'   end-point samples (empty `collected_at`) on the time axis: a Date vector
+#'   named by `mouse_ID`, or a data frame with `mouse_ID` and one date column.
+#'   Default `NULL` (end-point samples are shown as "end"). Stored as
+#'   `info$end_dates`; the export resolves dates from the database instead.
+#' @returns Invisibly, the path of the written `.rds` (which holds a list with
+#'   `data` and `info`: `source_path`, `root`, `assay`, `created_at`,
+#'   `package_version`, `end_dates`, `qc`).
 #' @examples
 #' \dontrun{
 #' histo_read_curated("data/26-1_exp/raw/histo/kidney_26-1.xlsx", "kidney") |>
@@ -40,7 +46,7 @@ histo_prep_paths_ <- function(path) {
 #' @export
 histo_prep_save <- function(data, path, assay, group_col = NULL,
                             batch_col = NULL, expected_mice = NULL,
-                            rules = character()) {
+                            rules = character(), end_dates = NULL) {
   missing_cols <- setdiff(.histo_prep_cols, names(data))
   if (length(missing_cols) > 0) {
     stop("`data` is missing column(s): ", paste(missing_cols, collapse = ", "),
@@ -56,14 +62,16 @@ histo_prep_save <- function(data, path, assay, group_col = NULL,
   if (!is.character(rules)) {
     stop("`rules` must be a character vector.", call. = FALSE)
   }
-  dups <- dplyr::count(
-    data, dplyr::pick(dplyr::all_of(c("mouse_ID", "tissue", "collected_at", "metric")))
-  ) |>
-    dplyr::filter(n > 1)
+  end_dates <- qc_end_dates_(end_dates)
+  dups <- qc_duplicate_keys_(
+    qc_resolve_end_dates_(data, end_dates),
+    c("mouse_ID", "tissue", "collected_at", "metric")
+  )
   if (nrow(dups) > 0) {
     warning(
-      "These mouse_ID x tissue x date x metric occur twice -- the export will ",
-      "refuse them:\n", format_rows_(dups), call. = FALSE
+      "These mouse_ID x tissue x date x metric occur twice (empty dates count ",
+      "as the end date, where known) -- the export will refuse them:\n",
+      format_rows_(dups), call. = FALSE
     )
   }
   paths <- histo_prep_paths_(path)
@@ -75,6 +83,7 @@ histo_prep_save <- function(data, path, assay, group_col = NULL,
       assay = assay,
       created_at = Sys.time(),
       package_version = as.character(utils::packageVersion("JanisHelpers")),
+      end_dates = end_dates,
       qc = list(
         group_col = group_col,
         batch_col = batch_col,
@@ -149,7 +158,9 @@ histo_prep_load <- function(path) {
 #' @param tissue Tissue of the file, passed to [histo_read_curated()].
 #' @param prepare Function applied to the long data tibble before saving.
 #' @param mice Optional tibble with `mouse_ID` and the `group_col` /
-#'   `batch_col` columns, joined into the data with [meta_annotate()].
+#'   `batch_col` columns, joined into the data with [meta_annotate()]. If it
+#'   has a `death_date` column, that becomes the prep's `end_dates` (unless
+#'   `end_dates` is passed in `...`).
 #' @param exclusions Optional tibble -- the meta workbook's `exclusions`
 #'   sheet. `NULL` = nothing excluded.
 #' @param con A `DBI` connection from [db_connect()], required when
@@ -157,7 +168,7 @@ histo_prep_load <- function(path) {
 #' @param group_col,batch_col Character scalars or `NULL`, see
 #'   [histo_prep_save()].
 #' @param ... Further QC settings passed to [histo_prep_save()]
-#'   (`expected_mice`, `rules`). Used only when
+#'   (`expected_mice`, `rules`, `end_dates`). Used only when
 #'   `final = FALSE`.
 #' @param data_dir The project's `data/` folder, see [db_export_histo()].
 #' @param snapshot_root Folder for dated snapshots after an export. `NULL`
@@ -209,8 +220,14 @@ histo_prep_run <- function(final, path, assay, tissue = NA_character_,
       by = "mouse_ID"
     )
   }
-  prep_path <- histo_prep_save(data, path, assay, group_col = group_col,
-                               batch_col = batch_col, ...)
+  args <- list(data, path, assay, group_col = group_col,
+               batch_col = batch_col, ...)
+  if (is.null(args$end_dates) && !is.null(mice) && "death_date" %in% names(mice)) {
+    args$end_dates <- mice |>
+      dplyr::filter(!is.na(mouse_ID)) |>
+      dplyr::select(mouse_ID, death_date)
+  }
+  prep_path <- do.call(histo_prep_save, args)
   report <- report_knit_histo_qc(prep_path, exclusions)
   message("QC report: ", report)
   invisible(report)

@@ -3,6 +3,86 @@
 # `value` and a variable column `var` ("analyte" for ELISA, "metric" for
 # histology).
 
+# `end_dates` as given to elisa_prep_save() / histo_prep_save() -> named Date
+# vector (names = mouse_ID, no NA). Accepts a named Date-like vector or a data
+# frame with `mouse_ID` and one date column. NULL stays NULL.
+qc_end_dates_ <- function(end_dates) {
+  if (is.null(end_dates)) {
+    return(NULL)
+  }
+  if (is.data.frame(end_dates)) {
+    other <- setdiff(names(end_dates), "mouse_ID")
+    if (!"mouse_ID" %in% names(end_dates) || length(other) != 1L) {
+      stop("`end_dates` as a data frame needs columns `mouse_ID` and one date ",
+           "column.", call. = FALSE)
+    }
+    ids <- as.character(end_dates$mouse_ID)
+    dates <- end_dates[[other]]
+  } else {
+    ids <- names(end_dates)
+    dates <- end_dates
+    if (is.null(ids)) {
+      stop("`end_dates` must be named by mouse_ID (or a data frame with ",
+           "`mouse_ID` and a date column).", call. = FALSE)
+    }
+  }
+  dates <- tryCatch(
+    as.Date(dates),
+    error = function(e) {
+      stop("`end_dates` could not be read as dates: ", conditionMessage(e),
+           call. = FALSE)
+    }
+  )
+  keep <- !is.na(ids) & ids != "" & !is.na(dates)
+  out <- stats::setNames(unname(dates[keep]), ids[keep])
+  out <- out[!duplicated(data.frame(names(out), as.numeric(out)))]
+  clash <- unique(names(out)[duplicated(names(out))])
+  if (length(clash) > 0L) {
+    stop("`end_dates` gives several dates for mouse_ID(s): ",
+         paste(clash, collapse = ", "), ".", call. = FALSE)
+  }
+  out
+}
+
+# Fill empty `collected_at` with the mouse's end date where `end_dates` (named
+# Date vector, see qc_end_dates_()) knows it; others stay NA ("end").
+qc_resolve_end_dates_ <- function(data, end_dates = NULL) {
+  data$collected_at <- as.Date(data$collected_at)
+  if (length(end_dates) == 0L || nrow(data) == 0L) {
+    return(data)
+  }
+  empty <- is.na(data$collected_at)
+  data$collected_at[empty] <- unname(end_dates[as.character(data$mouse_ID[empty])])
+  data
+}
+
+# Rows of `key` that occur more than once (`n` = count) -- the check the
+# export makes after resolving empty dates.
+qc_duplicate_keys_ <- function(data, key) {
+  dplyr::count(data, dplyr::pick(dplyr::all_of(key))) |>
+    dplyr::filter(n > 1)
+}
+
+# Excluded samples (sheet dates, from match_sample_exclusions_()) as the
+# report's sample keys: mouse_ID, tissue, timepoint after resolving end dates.
+qc_excluded_keys_ <- function(excluded_samples, end_dates = NULL) {
+  qc_resolve_end_dates_(excluded_samples, end_dates) |>
+    dplyr::transmute(mouse_ID = as.character(mouse_ID),
+                     tissue = as.character(tissue),
+                     timepoint = qc_timepoint_(collected_at)) |>
+    dplyr::distinct()
+}
+
+# Logical: is each row of `x` (mouse_ID, tissue, timepoint) an excluded sample?
+qc_is_excluded_ <- function(x, excluded_keys) {
+  if (is.null(excluded_keys) || nrow(excluded_keys) == 0L) {
+    return(rep(FALSE, nrow(x)))
+  }
+  paste(x$mouse_ID, x$tissue, x$timepoint, sep = "\r") %in%
+    paste(excluded_keys$mouse_ID, excluded_keys$tissue, excluded_keys$timepoint,
+          sep = "\r")
+}
+
 # Timepoint label: the date, or "end" for the end-point sample (NA date).
 qc_timepoint_ <- function(collected_at) {
   ifelse(is.na(collected_at), "end", format(as.Date(collected_at)))
@@ -144,19 +224,37 @@ qc_table_time_plot_ <- function(data, var, group_col = NULL) {
 }
 
 # Flagged samples ranked by the number of distinct `var` values flagged:
-# mouse_ID, n_flagged, <var>s, plus the flagged tissue x timepoint list.
-qc_table_flag_table_ <- function(scored, var) {
+# mouse_ID, n_flagged, <var>s, plus the flagged tissue x timepoint list. With
+# `excluded_keys` (qc_excluded_keys_()), adds `excluded`: "excluded" when
+# every flagged sample of the mouse is excluded, "excluded: <tissue
+# timepoint>, ..." when only some are, "" otherwise.
+qc_table_flag_table_ <- function(scored, var, excluded_keys = NULL) {
   flagged <- scored[scored$flag, ]
   if (nrow(flagged) == 0) {
-    return(tibble::tibble(mouse_ID = character(), n_flagged = integer(),
-                          flagged = character(), where = character()))
+    out <- tibble::tibble(mouse_ID = character(), n_flagged = integer(),
+                          flagged = character(), where = character())
+    if (!is.null(excluded_keys)) out$excluded <- character()
+    return(out)
   }
-  flagged |>
+  flagged$.where <- paste(flagged$tissue, flagged$timepoint)
+  flagged$.excl <- qc_is_excluded_(
+    dplyr::mutate(flagged, mouse_ID = as.character(mouse_ID)), excluded_keys
+  )
+  out <- flagged |>
     dplyr::summarise(
       n_flagged = dplyr::n_distinct(.data[[var]]),
       flagged = paste(sort(unique(.data[[var]])), collapse = ", "),
-      where = paste(sort(unique(paste(tissue, timepoint))), collapse = ", "),
+      where = paste(sort(unique(.where)), collapse = ", "),
+      excluded = if (all(.excl)) {
+        "excluded"
+      } else if (any(.excl)) {
+        paste0("excluded: ", paste(sort(unique(.where[.excl])), collapse = ", "))
+      } else {
+        ""
+      },
       .by = mouse_ID
     ) |>
     dplyr::arrange(dplyr::desc(n_flagged), mouse_ID)
+  if (is.null(excluded_keys)) out$excluded <- NULL
+  out
 }

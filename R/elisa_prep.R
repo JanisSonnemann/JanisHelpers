@@ -30,9 +30,14 @@ elisa_prep_paths_ <- function(path) {
 #'   Default: the mice in `data`.
 #' @param max_cv Replicate CV threshold in percent. Default 20.
 #' @param log_scale Logical; log-scale the outlier plots. Default `FALSE`.
-#' @returns Invisibly, the path of the written `.rds`, a list with `data` and
-#'   `info` (`source_path`, `root`, `assay`, `created_at`, `package_version`,
-#'   `qc`).
+#' @param end_dates Optional end (death) dates used by the QC report to place
+#'   end-point samples (empty `collected_at`) on the time axis: a Date vector
+#'   named by `mouse_ID`, or a data frame with `mouse_ID` and one date column.
+#'   Default `NULL` (end-point samples are shown as "end"). Stored as
+#'   `info$end_dates`; the export resolves dates from the database instead.
+#' @returns Invisibly, the path of the written `.rds` (which holds a list with
+#'   `data` and `info`: `source_path`, `root`, `assay`, `created_at`,
+#'   `package_version`, `end_dates`, `qc`).
 #' @examples
 #' \dontrun{
 #' elisa_read_curated("data/26-1_exp/raw/ELISA/spleen_26-1.xlsx", "spleen") |>
@@ -41,7 +46,8 @@ elisa_prep_paths_ <- function(path) {
 #' @export
 elisa_prep_save <- function(data, path, assay, group_col = NULL,
                             batch_col = NULL, expected_mice = NULL,
-                            max_cv = 20, log_scale = FALSE) {
+                            max_cv = 20, log_scale = FALSE,
+                            end_dates = NULL) {
   missing_cols <- setdiff(.elisa_prep_cols, names(data))
   if (length(missing_cols) > 0) {
     stop("`data` is missing column(s): ", paste(missing_cols, collapse = ", "),
@@ -57,6 +63,7 @@ elisa_prep_save <- function(data, path, assay, group_col = NULL,
   if (!is.numeric(max_cv) || length(max_cv) != 1 || is.na(max_cv) || max_cv < 0) {
     stop("`max_cv` must be a single non-negative number.", call. = FALSE)
   }
+  end_dates <- qc_end_dates_(end_dates)
   paths <- elisa_prep_paths_(path)
   prep <- list(
     data = data,
@@ -66,6 +73,7 @@ elisa_prep_save <- function(data, path, assay, group_col = NULL,
       assay = assay,
       created_at = Sys.time(),
       package_version = as.character(utils::packageVersion("JanisHelpers")),
+      end_dates = end_dates,
       qc = list(
         group_col = group_col,
         batch_col = batch_col,
@@ -141,7 +149,9 @@ elisa_prep_load <- function(path) {
 #' @param tissue Tissue of the file, passed to [elisa_read_curated()].
 #' @param prepare Function applied to the long data tibble before saving.
 #' @param mice Optional tibble with `mouse_ID` and the `group_col` /
-#'   `batch_col` columns, joined into the data with [meta_annotate()].
+#'   `batch_col` columns, joined into the data with [meta_annotate()]. If it
+#'   has a `death_date` column, that becomes the prep's `end_dates` (unless
+#'   `end_dates` is passed in `...`).
 #' @param exclusions Optional tibble -- the meta workbook's `exclusions`
 #'   sheet. `NULL` = nothing excluded.
 #' @param con A `DBI` connection from [db_connect()], required when
@@ -149,7 +159,7 @@ elisa_prep_load <- function(path) {
 #' @param group_col,batch_col Character scalars or `NULL`, see
 #'   [elisa_prep_save()].
 #' @param ... Further QC settings passed to [elisa_prep_save()]
-#'   (`expected_mice`, `max_cv`, `log_scale`). Used only when
+#'   (`expected_mice`, `max_cv`, `log_scale`, `end_dates`). Used only when
 #'   `final = FALSE`.
 #' @param data_dir The project's `data/` folder, see [db_export_elisa()].
 #' @param snapshot_root Folder for dated snapshots after an export. `NULL`
@@ -201,8 +211,14 @@ elisa_prep_run <- function(final, path, assay, tissue = NA_character_,
       by = "mouse_ID"
     )
   }
-  prep_path <- elisa_prep_save(data, path, assay, group_col = group_col,
-                               batch_col = batch_col, ...)
+  args <- list(data, path, assay, group_col = group_col,
+               batch_col = batch_col, ...)
+  if (is.null(args$end_dates) && !is.null(mice) && "death_date" %in% names(mice)) {
+    args$end_dates <- mice |>
+      dplyr::filter(!is.na(mouse_ID)) |>
+      dplyr::select(mouse_ID, death_date)
+  }
+  prep_path <- do.call(elisa_prep_save, args)
   report <- report_knit_elisa_qc(prep_path, exclusions)
   message("QC report: ", report)
   invisible(report)

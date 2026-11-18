@@ -91,3 +91,70 @@ test_that("qc_table_time_plot_ needs two dates", {
   d$collected_at <- as.Date("2026-05-01") + c(0, 0, 0, 7, 7, 7)
   expect_s3_class(qc_table_time_plot_(d, "analyte", "grp"), "ggplot")
 })
+
+# ---- end dates / duplicates / exclusion keys ---------------------------------
+
+test_that("qc_end_dates_ normalises named vectors and data frames", {
+  v <- qc_end_dates_(c(M1 = "2026-06-10", M2 = NA))
+  expect_equal(v, c(M1 = as.Date("2026-06-10")))
+  df <- tibble::tibble(mouse_ID = c("M1", "M2", NA),
+                       death_date = as.POSIXct(c("2026-06-10", "2026-06-11", "2026-01-01"),
+                                               tz = "UTC"))
+  expect_equal(qc_end_dates_(df),
+               c(M1 = as.Date("2026-06-10"), M2 = as.Date("2026-06-11")))
+  expect_null(qc_end_dates_(NULL))
+  expect_error(qc_end_dates_(as.Date("2026-06-10")), "named")
+  expect_error(qc_end_dates_(tibble::tibble(mouse_ID = "M1", a = 1, b = 2)),
+               "one date column")
+  expect_error(qc_end_dates_(c(M1 = "2026-06-10", M1 = "2026-06-11")),
+               "several dates.*M1")
+})
+
+test_that("resolved end dates put the end bleed on the time plot", {
+  d <- fixture_data()
+  ends <- c(M1 = as.Date("2026-06-10"), M2 = as.Date("2026-06-11"))
+  r <- qc_resolve_end_dates_(d, ends)
+  expect_false(anyNA(r$collected_at))
+  expect_equal(r$collected_at[d$mouse_ID == "M2"],
+               rep(as.Date("2026-06-11"), sum(d$mouse_ID == "M2")))
+  # unchanged without end dates (older preps); unknown mice stay NA
+  expect_identical(qc_resolve_end_dates_(d, NULL)$collected_at, d$collected_at)
+  expect_equal(sum(is.na(qc_resolve_end_dates_(d, ends["M1"])$collected_at)),
+               sum(d$mouse_ID == "M2"))
+
+  expect_null(qc_table_time_plot_(elisa_qc_means_(d), "analyte"))
+  p <- qc_table_time_plot_(elisa_qc_means_(r), "analyte")
+  expect_s3_class(p, "ggplot")
+  m1 <- p$data[p$data$mouse_ID == "M1" & p$data$analyte == "TNFa", ]
+  expect_setequal(m1$collected_at, as.Date(c("2026-05-06", "2026-06-10")))
+  expect_true(as.Date("2026-06-11") %in% p$data$collected_at)
+})
+
+test_that("qc_duplicate_keys_ finds an empty-date row dated at the end date", {
+  d <- fixture_data()
+  key <- c("mouse_ID", "tissue", "collected_at", "analyte", "replicate")
+  expect_equal(nrow(qc_duplicate_keys_(d, key)), 0)
+  r <- qc_resolve_end_dates_(d, c(M1 = as.Date("2026-05-06")))
+  dups <- qc_duplicate_keys_(r, key)
+  expect_equal(nrow(dups), 2)   # M1 x 2026-05-06 x 2 analytes, replicate 1
+  expect_equal(unique(dups$mouse_ID), "M1")
+})
+
+test_that("flag table and exclusion keys match on mouse x tissue x timepoint", {
+  s <- qc_table_score_(synthetic_scores(), "analyte", "grp", FALSE)
+  s$tissue <- "serum"
+  s$collected_at <- as.Date(NA)
+  s$timepoint <- "end"
+  ex_samples <- tibble::tibble(mouse_ID = "S6", tissue = "serum",
+                               collected_at = as.Date(NA), reason = "x")
+  keys <- qc_excluded_keys_(ex_samples, c(S6 = as.Date("2026-06-10")))
+  expect_equal(keys$timepoint, "2026-06-10")
+  expect_equal(qc_table_flag_table_(s, "analyte", keys)$excluded, "")
+  keys <- qc_excluded_keys_(ex_samples, NULL)
+  expect_equal(keys$timepoint, "end")
+  expect_equal(qc_table_flag_table_(s, "analyte", keys)$excluded, "excluded")
+  # another tissue of the same mouse is not this sample
+  keys$tissue <- "spleen"
+  expect_equal(qc_table_flag_table_(s, "analyte", keys)$excluded, "")
+  expect_false("excluded" %in% names(qc_table_flag_table_(s, "analyte")))
+})

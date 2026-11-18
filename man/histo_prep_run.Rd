@@ -33,7 +33,9 @@ histo_prep_run(
 \item{prepare}{Function applied to the long data tibble before saving.}
 
 \item{mice}{Optional tibble with \code{mouse_ID} and the \code{group_col} /
-\code{batch_col} columns, joined into the data with \code{\link[=meta_annotate]{meta_annotate()}}.}
+\code{batch_col} columns, joined into the data with \code{\link[=meta_annotate]{meta_annotate()}}. If it
+has a \code{death_date} column, that becomes the prep's \code{end_dates} (unless
+\code{end_dates} is passed in \code{...}).}
 
 \item{exclusions}{Optional tibble -- the meta workbook's \code{exclusions}
 sheet. \code{NULL} = nothing excluded.}
@@ -45,7 +47,7 @@ sheet. \code{NULL} = nothing excluded.}
 \code{\link[=histo_prep_save]{histo_prep_save()}}.}
 
 \item{...}{Further QC settings passed to \code{\link[=histo_prep_save]{histo_prep_save()}}
-(\code{expected_mice}, \code{rules}). Used only when
+(\code{expected_mice}, \code{rules}, \code{end_dates}). Used only when
 \code{final = FALSE}.}
 
 \item{data_dir}{The project's \verb{data/} folder, see \code{\link[=db_export_histo]{db_export_histo()}}.}

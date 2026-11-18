@@ -237,6 +237,45 @@ test_that("report_knit_elisa_qc renders into qc/ and names the sections", {
   }
 })
 
+test_that("report_knit_elisa_qc resolves end dates and warns on duplicates", {
+  skip_if_not(rmarkdown::pandoc_available())
+  d <- withr::local_tempdir()
+  path <- file.path(d, "elisa_curated.xlsx")
+  file.copy(test_path("..", "fixtures", "elisa_curated.xlsx"), path)
+  data <- suppressMessages(elisa_read_curated(path, tissue = "spleen")) |>
+    dplyr::mutate(grp = ifelse(mouse_ID == "M1", "ctrl", "treated"))
+  # M1's end bleed gets the date of its dated bleed -> duplicate sample
+  prep <- suppressMessages(elisa_prep_save(
+    data, path, "restim", group_col = "grp",
+    end_dates = c(M1 = as.Date("2026-05-06"), M2 = as.Date("2026-06-11"))))
+  ex <- tibble::tibble(mouse_ID = "M2", collected_at = as.Date("2026-06-11"),
+                       reason = "dated end")
+  out <- report_knit_elisa_qc(prep, exclusions = ex)
+  html <- paste(readLines(out, warn = FALSE), collapse = "\n")
+  expect_match(html, "Duplicate samples", fixed = TRUE)
+  expect_match(html, "Warning: these mouse_ID x tissue x date x analyte x replicate\\s+occur\\s+twice")
+  expect_match(html, "2026-06-11", fixed = TRUE)
+  expect_match(html, "8 of 8 empty-date rows", fixed = TRUE)
+  expect_match(html, "leave\\s+collected_at\\s+empty\\s+to\\s+target")
+})
+
+test_that("report_knit_elisa_qc renders an older prep without end_dates", {
+  skip_if_not(rmarkdown::pandoc_available())
+  d <- withr::local_tempdir()
+  path <- file.path(d, "elisa_curated.xlsx")
+  file.copy(test_path("..", "fixtures", "elisa_curated.xlsx"), path)
+  data <- suppressMessages(elisa_read_curated(path, tissue = "spleen"))
+  prep <- suppressMessages(elisa_prep_save(data, path, "restim"))
+  old <- readRDS(prep)
+  old$info$end_dates <- NULL
+  old$info <- old$info[setdiff(names(old$info), "end_dates")]
+  saveRDS(old, prep)
+  out <- expect_no_warning(report_knit_elisa_qc(prep))
+  html <- paste(readLines(out, warn = FALSE), collapse = "\n")
+  expect_match(html, "not given \\(empty dates shown as end\\)")
+  expect_match(html, "No mouse_ID x tissue x date x analyte x replicate\\s+occurs\\s+twice")
+})
+
 # -- report_knit_histo_qc -----------------------------------------------------
 
 test_that("report_knit_histo_qc renders into qc/ and names the sections", {
@@ -269,4 +308,25 @@ test_that("report_knit_histo_qc says so when no rules are set", {
   out <- report_knit_histo_qc(prep)
   html <- paste(readLines(out, warn = FALSE), collapse = "\n")
   expect_match(html, "No rules set", fixed = TRUE)
+})
+
+test_that("report_knit_histo_qc warns on duplicates and renders an older prep", {
+  skip_if_not(rmarkdown::pandoc_available())
+  d <- withr::local_tempdir()
+  path <- file.path(d, "histo_curated.xlsx")
+  file.copy(test_path("..", "fixtures", "histo_curated.xlsx"), path)
+  data <- suppressMessages(histo_read_curated(path, tissue = "kidney"))
+  dated <- dplyr::mutate(dplyr::filter(data, mouse_ID == "M2"),
+                         collected_at = as.Date("2026-06-10"))
+  prep <- suppressWarnings(suppressMessages(histo_prep_save(
+    dplyr::bind_rows(data, dated), path, "PAS",
+    end_dates = c(M2 = as.Date("2026-06-10")))))
+  html <- paste(readLines(report_knit_histo_qc(prep), warn = FALSE), collapse = "\n")
+  expect_match(html, "Warning: these mouse_ID x tissue x date x metric\\s+occur\\s+twice")
+
+  old <- readRDS(prep)
+  old$info <- old$info[setdiff(names(old$info), "end_dates")]
+  saveRDS(old, prep)
+  html <- paste(readLines(report_knit_histo_qc(prep), warn = FALSE), collapse = "\n")
+  expect_match(html, "not given \\(empty dates shown as end\\)")
 })

@@ -15,12 +15,19 @@ knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE,
                       fig.retina = 1, dpi = 96)
 prep <- readRDS(params$prep)
 info <- prep$info
-data <- prep$data
+# Empty dates (end-point samples) are placed at the mouse's end date where the
+# prep knows it (info$end_dates; NULL in older preps -> shown as "end").
+# Exclusions match the sheet's dates, as at the export.
+end_dates <- info$end_dates
+data <- JanisHelpers:::qc_resolve_end_dates_(prep$data, end_dates)
+n_end <- sum(is.na(prep$data$collected_at))
+n_resolved <- n_end - sum(is.na(data$collected_at))
 qc <- info$qc
 group_col <- qc$group_col
 batch_col <- qc$batch_col
 log_scale <- isTRUE(qc$log_scale)
-matched <- JanisHelpers:::match_sample_exclusions_(data, params$exclusions, info$assay)
+matched <- JanisHelpers:::match_sample_exclusions_(prep$data, params$exclusions, info$assay)
+excluded_keys <- JanisHelpers:::qc_excluded_keys_(matched$excluded_samples, end_dates)
 means <- JanisHelpers:::elisa_qc_means_(data)
 scored <- JanisHelpers:::qc_table_score_(means, "analyte", group_col, log_scale)
 or_unset <- function(x) if (is.null(x)) "not set" else paste0("`", x, "`")
@@ -50,6 +57,7 @@ note <- function(...) cat("\n\n*", ..., "*\n\n", sep = "")
 | Prep result created | `r format(info$created_at, "%Y-%m-%d %H:%M")` |
 | JanisHelpers | `r info$package_version` |
 | Group / batch column | `r or_unset(group_col)` / `r or_unset(batch_col)` |
+| End-point dates | `r if (n_end == 0) "no empty dates" else if (is.null(end_dates)) "not given (empty dates shown as end)" else paste0(n_resolved, " of ", n_end, " empty-date rows placed at the end date")` |
 | Replicate CV limit | `r qc$max_cv`% |
 
 All samples are shown. Rows on the exclusions sheet are only flagged here;
@@ -82,6 +90,22 @@ if (length(unknown) > 0) {
 }
 ```
 
+## Duplicate samples
+
+```{r duplicates, results = "asis"}
+dups <- JanisHelpers:::qc_duplicate_keys_(data, c("mouse_ID", "tissue", "collected_at", "analyte", "replicate"))
+if (nrow(dups) == 0) {
+  cat("No mouse_ID x tissue x date x analyte x replicate occurs twice.\n")
+} else {
+  cat("**Warning: these mouse_ID x tissue x date x analyte x replicate occur twice** (empty dates count as the ",
+      "mouse's end date) -- the final export refuses them. Fix the curated ",
+      "file (an end-point sample needs an empty date, not the end date).\n\n",
+      sep = "")
+  dups$collected_at <- JanisHelpers:::qc_timepoint_(dups$collected_at)
+  print(knitr::kable(dups))
+}
+```
+
 ## Exclusions
 
 ```{r exclusions, results = "asis"}
@@ -95,7 +119,12 @@ if (nrow(matched$applicable) == 0) {
 }
 if (nrow(matched$unmatched) > 0) {
   cat("\n\n### Warning: these rows match no sample\n\n",
-      "Check for typos -- the final export stops on them.\n\n")
+      "Check for typos -- the final export stops on them.",
+      if (any(!is.na(matched$unmatched$collected_at))) {
+        paste(" End-point samples have an empty date in the sheet --",
+              "leave collected_at empty to target them.")
+      },
+      "\n\n")
   print(knitr::kable(matched$unmatched))
 }
 ```
@@ -174,13 +203,11 @@ if (is.null(p)) note("Fewer than two sampling dates -- no time course.") else em
 if (is.null(group_col)) {
   note("Not scored -- group column not set.")
 } else {
-  flags <- JanisHelpers:::qc_table_flag_table_(scored, "analyte")
+  flags <- JanisHelpers:::qc_table_flag_table_(scored, "analyte", excluded_keys)
   if (nrow(flags) == 0) {
     cat("No samples flagged.\n")
   } else {
     cat("Ranked by the number of analytes flagged.\n\n")
-    flags$excluded <- ifelse(flags$mouse_ID %in% matched$excluded_samples$mouse_ID,
-                             "excluded", "")
     print(knitr::kable(flags))
   }
 }

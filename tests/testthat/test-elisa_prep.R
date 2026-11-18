@@ -78,6 +78,32 @@ test_that("elisa_prep_run(final = FALSE) saves and renders the report", {
   expect_true("group" %in% names(prep$data))
 })
 
+test_that("elisa_prep_save stores end_dates; elisa_prep_run fills them from death_date", {
+  path <- local_elisa_dir()
+  out <- suppressMessages(elisa_prep_save(
+    read_elisa_fixture(path), path, "restim",
+    end_dates = c(M1 = as.Date("2026-06-10"))))
+  expect_equal(readRDS(out)$info$end_dates, c(M1 = as.Date("2026-06-10")))
+  out <- suppressMessages(elisa_prep_save(read_elisa_fixture(path), path, "restim"))
+  expect_null(readRDS(out)$info$end_dates)
+
+  skip_if_not(rmarkdown::pandoc_available())
+  mice <- tibble::tibble(mouse_ID = c("M1", "M2"), group = c("a", "b"),
+                         death_date = as.Date(c("2026-06-10", "2026-06-11")))
+  suppressMessages(elisa_prep_run(FALSE, path, "restim", tissue = "spleen",
+                                  mice = mice, group_col = "group"))
+  prep <- readRDS(elisa_prep_paths_(path)$prep)
+  expect_equal(prep$info$end_dates,
+               c(M1 = as.Date("2026-06-10"), M2 = as.Date("2026-06-11")))
+  expect_false("death_date" %in% names(prep$data))
+  # explicit end_dates in ... win over mice$death_date
+  suppressMessages(elisa_prep_run(FALSE, path, "restim", tissue = "spleen",
+                                  mice = mice,
+                                  end_dates = c(M2 = as.Date("2026-07-01"))))
+  prep <- readRDS(elisa_prep_paths_(path)$prep)
+  expect_equal(prep$info$end_dates, c(M2 = as.Date("2026-07-01")))
+})
+
 test_that("elisa_prep_run(final = TRUE) needs a connection", {
   path <- local_elisa_dir()
   expect_error(elisa_prep_run(TRUE, path, "restim"), "con")

@@ -12,7 +12,8 @@ elisa_prep_save(
   batch_col = NULL,
   expected_mice = NULL,
   max_cv = 20,
-  log_scale = FALSE
+  log_scale = FALSE,
+  end_dates = NULL
 )
 }
 \arguments{
@@ -34,11 +35,17 @@ Default: the mice in \code{data}.}
 \item{max_cv}{Replicate CV threshold in percent. Default 20.}
 
 \item{log_scale}{Logical; log-scale the outlier plots. Default \code{FALSE}.}
+
+\item{end_dates}{Optional end (death) dates used by the QC report to place
+end-point samples (empty \code{collected_at}) on the time axis: a Date vector
+named by \code{mouse_ID}, or a data frame with \code{mouse_ID} and one date column.
+Default \code{NULL} (end-point samples are shown as "end"). Stored as
+\code{info$end_dates}; the export resolves dates from the database instead.}
 }
 \value{
-Invisibly, the path of the written \code{.rds}, a list with \code{data} and
-\code{info} (\code{source_path}, \code{root}, \code{assay}, \code{created_at}, \code{package_version},
-\code{qc}).
+Invisibly, the path of the written \code{.rds} (which holds a list with
+\code{data} and \code{info}: \code{source_path}, \code{root}, \code{assay}, \code{created_at},
+\code{package_version}, \code{end_dates}, \code{qc}).
 }
 \description{
 First step of the ELISA prep / QC loop. Stores the curated data (all
