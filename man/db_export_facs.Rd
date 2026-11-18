@@ -26,7 +26,7 @@ db_export_facs(
 \item{overwrite}{\code{NULL} (default) asks interactively when the root already
 exists (default answer "no"; errors in a non-interactive session);
 \code{TRUE} / \code{FALSE} answers without asking. Exclusion rows naming a panel
-that is neither this one nor a registered FACS assay stop the export.}
+that is neither this one nor a registered assay stop the export.}
 }
 \value{
 Invisibly, the new \code{import_id}, or \code{NULL} if the overwrite was
