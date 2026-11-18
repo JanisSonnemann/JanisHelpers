@@ -1,4 +1,5 @@
 ^CLAUDE\.md$
+^AGENTS\.md$
 ^renv$
 ^renv\.lock$
 ^JanisHelpers\.Rproj$

@@ -1,5 +1,5 @@
 # Generator for elisa_curated.xlsx and histo_curated.xlsx.
-# writexl is NOT a package dependency; install locally to regenerate.
+# writexl is in DESCRIPTION Suggests only (not Imports); install it to regenerate.
 # Run from the package root: Rscript tests/fixtures/make_curated_fixtures.R
 elisa_values <- data.frame(
   mouse_ID = c("M1", "M1", "M2", "M2", "M1"),

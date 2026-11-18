@@ -1,6 +1,6 @@
 # Lab database schema redesign
 
-Status: draft, pending review
+Status: current schema (updated 2026-11-18)
 
 > **2026-11-12:** calc inputs removed (`facs_stains` volume/bead/count-method
 > columns and their `CHECK`, the `sample_digestions` table), `wsp_root` +
