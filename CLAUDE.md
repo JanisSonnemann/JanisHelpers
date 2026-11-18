@@ -33,6 +33,7 @@ devtools::install()    # full install
 | Function | `domain_verb()` or `domain_verb_qualifier()` | `facs_import_wsp()`, `report_knit_dated()`, `report_knit_wide()` |
 
 **Domains** (use exactly these prefixes):
+- `histo_` — histology scoring import (curated sheets), QC and export
 - `facs_` — FlowJo / flow cytometry
 - `analysis_` — statistical summaries and tests
 - `plot_` — ggplot2 visualization of FACS/analysis data

@@ -132,43 +132,13 @@ elisa_read_results <- function(path, cytokine = NULL) {
 #'   elisa_read_curated("spleen-restim-48h_26-1.xlsx", tissue = "spleen")
 #' }
 elisa_read_curated <- function(path, tissue = NA_character_) {
-  sheets <- readxl::excel_sheets(path)
-  if (!"values" %in% sheets) {
-    stop(glue::glue(
-      "No 'values' sheet in '{path}'; found: {paste(sheets, collapse = ', ')}."
-    ))
-  }
-  raw <- readxl::read_excel(path, sheet = "values", col_types = "list",
-                            .name_repair = "minimal")
-  cell <- function(col) {
-    vapply(col, function(z) if (length(z) == 0L || is.na(z[[1]])) NA_character_ else as.character(z[[1]]), character(1))
-  }
-  if (!"mouse_ID" %in% names(raw)) {
-    stop(glue::glue("Sheet 'values' of '{path}' has no 'mouse_ID' column."))
-  }
-  mouse <- stringr::str_trim(cell(raw$mouse_ID))
-  keep <- !is.na(mouse) & nzchar(mouse)
-  raw <- raw[keep, , drop = FALSE]
-  mouse <- mouse[keep]
-
-  tissue_chr <- rep(as.character(tissue), length(mouse))
-  if ("tissue" %in% names(raw)) {
-    tc <- stringr::str_trim(cell(raw$tissue))
-    ok <- !is.na(tc) & nzchar(tc)
-    tissue_chr[ok] <- tc[ok]
-  }
-  if (any(is.na(tissue_chr))) {
-    stop(glue::glue(
-      "No tissue for mouse(s) {paste(unique(mouse[is.na(tissue_chr)]), collapse = ', ')}: ",
-      "give a 'tissue' column or the `tissue` argument."
-    ))
-  }
-
-  collected_at <- if ("date" %in% names(raw)) {
-    parse_curated_dates_(raw$date, mouse)
-  } else {
-    as.Date(rep(NA_real_, length(mouse)))
-  }
+  cv <- read_curated_values_(path, tissue)
+  sheets <- cv$sheets
+  raw <- cv$raw
+  cell <- curated_cell_
+  mouse <- cv$mouse
+  tissue_chr <- cv$tissue
+  collected_at <- cv$collected_at
 
   analytes <- setdiff(names(raw), c("mouse_ID", "tissue", "date"))
   if (length(analytes) == 0L) {
@@ -261,4 +231,52 @@ parse_curated_dates_ <- function(x, mouse_ID) {
     as.numeric(d)
   }, numeric(1))
   as.Date(out, origin = "1970-01-01")
+}
+
+# Cell of a list-column (col_types = "list") as character; empty -> NA.
+curated_cell_ <- function(col) {
+  vapply(col, function(z) if (length(z) == 0L || is.na(z[[1]])) NA_character_ else as.character(z[[1]]), character(1))
+}
+
+# Shared reading of a curated `values` sheet: drops rows without mouse_ID,
+# resolves tissue (column overrides `tissue` where non-empty; error if none)
+# and parses the optional `date` column. Returns list(sheets, raw, mouse,
+# tissue, collected_at) with `raw` restricted to the kept rows.
+read_curated_values_ <- function(path, tissue = NA_character_) {
+  sheets <- readxl::excel_sheets(path)
+  if (!"values" %in% sheets) {
+    stop(glue::glue(
+      "No 'values' sheet in '{path}'; found: {paste(sheets, collapse = ', ')}."
+    ))
+  }
+  raw <- readxl::read_excel(path, sheet = "values", col_types = "list",
+                            .name_repair = "minimal")
+  if (!"mouse_ID" %in% names(raw)) {
+    stop(glue::glue("Sheet 'values' of '{path}' has no 'mouse_ID' column."))
+  }
+  mouse <- stringr::str_trim(curated_cell_(raw$mouse_ID))
+  keep <- !is.na(mouse) & nzchar(mouse)
+  raw <- raw[keep, , drop = FALSE]
+  mouse <- mouse[keep]
+
+  tissue_chr <- rep(as.character(tissue), length(mouse))
+  if ("tissue" %in% names(raw)) {
+    tc <- stringr::str_trim(curated_cell_(raw$tissue))
+    ok <- !is.na(tc) & nzchar(tc)
+    tissue_chr[ok] <- tc[ok]
+  }
+  if (any(is.na(tissue_chr))) {
+    stop(glue::glue(
+      "No tissue for mouse(s) {paste(unique(mouse[is.na(tissue_chr)]), collapse = ', ')}: ",
+      "give a 'tissue' column or the `tissue` argument."
+    ))
+  }
+
+  collected_at <- if ("date" %in% names(raw)) {
+    parse_curated_dates_(raw$date, mouse)
+  } else {
+    as.Date(rep(NA_real_, length(mouse)))
+  }
+  list(sheets = sheets, raw = raw, mouse = mouse, tissue = tissue_chr,
+       collected_at = collected_at)
 }
