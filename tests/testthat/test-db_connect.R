@@ -112,3 +112,13 @@ test_that("a root's measurements and stains can be replaced in one transaction",
     "25-7/facs/overview_25-7_20261120.wsp"
   )
 })
+
+test_that("db_connect errors on a samples table with nullable collected_at", {
+  path <- tempfile(fileext = ".duckdb")
+  old <- DBI::dbConnect(duckdb::duckdb(), path)
+  DBI::dbExecute(old, "CREATE TABLE samples (sample_id INTEGER, subject_id INTEGER,
+    tissue VARCHAR, collected_at DATE, UNIQUE(subject_id, tissue))")
+  DBI::dbDisconnect(old, shutdown = TRUE)
+  err <- expect_error(db_connect(path), "older schema")
+  expect_match(conditionMessage(err), "Recreate")
+})

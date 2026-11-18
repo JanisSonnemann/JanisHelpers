@@ -85,14 +85,16 @@ db_write_subjects <- function(con, data) {
   invisible(n)
 }
 
-#' Register samples (subject x tissue harvests)
+#' Register samples (subject x tissue x collection date)
 #'
 #' Bulk-inserts sample rows. `data` must already be shaped with one row per
-#' subject x tissue, referencing subjects already registered via
+#' subject x tissue x collection date, referencing subjects already registered via
 #' [db_write_subjects()]. Errors if any row's `mouse_id` isn't registered yet
 #' -- naming every unresolved `mouse_id` -- rather than silently dropping
 #' those rows. Organ weights and volumes are not stored (they are calculation
 #' inputs for the FACS export script); such columns in `data` are ignored.
+#' A missing (`NA` or absent) `collected_at` means the subject's `end_date`;
+#' errors naming every mouse with neither.
 #'
 #' @param con A `DBI` connection from [db_connect()].
 #' @param data A tibble with columns `mouse_id`, `tissue`, and optionally
@@ -119,12 +121,28 @@ db_write_samples <- function(con, data) {
     )
   }
 
-  n <- DBI::dbExecute(con, "
-    INSERT INTO samples (subject_id, tissue, collected_at)
-    SELECT sub.subject_id, t.tissue, CAST(t.collected_at AS DATE)
+  no_date <- DBI::dbGetQuery(con, "
+    SELECT DISTINCT t.mouse_id
     FROM tmp_samples t
     JOIN subjects sub ON sub.mouse_id = t.mouse_id
-    ON CONFLICT (subject_id, tissue) DO NOTHING
+    WHERE CAST(t.collected_at AS DATE) IS NULL AND sub.end_date IS NULL
+  ")$mouse_id
+  if (length(no_date) > 0) {
+    stop(
+      "No collected_at and no subject end_date for mouse_id(s): ",
+      paste(sprintf("'%s'", no_date), collapse = ", "),
+      " -- give the subject an end_date or pass collected_at.",
+      call. = FALSE
+    )
+  }
+
+  n <- DBI::dbExecute(con, "
+    INSERT INTO samples (subject_id, tissue, collected_at)
+    SELECT DISTINCT sub.subject_id, t.tissue,
+      COALESCE(CAST(t.collected_at AS DATE), sub.end_date)
+    FROM tmp_samples t
+    JOIN subjects sub ON sub.mouse_id = t.mouse_id
+    ON CONFLICT (subject_id, tissue, collected_at) DO NOTHING
   ")
 
   invisible(n)

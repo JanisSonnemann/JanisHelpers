@@ -267,7 +267,8 @@ test_that("facs_prep_run(final = TRUE) exports the saved prep and snapshots", {
   con <- local_test_db()
   db_write_experiment(con, experiment_code = "25-7")
   db_write_subjects(con, tibble::tibble(
-    mouse_id = c("25-7-1", "25-7-2"), experiment_code = "25-7"
+    mouse_id = c("25-7-1", "25-7-2"), experiment_code = "25-7",
+    end_date = as.Date("2026-06-10")
   ))
   d <- local_prep_dirs()
   suppressMessages(local_loaded_prep(d, two_files))
@@ -293,7 +294,8 @@ test_that("facs_prep_run(final = TRUE) skips the snapshot without snapshot_root"
   con <- local_test_db()
   db_write_experiment(con, experiment_code = "25-7")
   db_write_subjects(con, tibble::tibble(
-    mouse_id = c("25-7-1", "25-7-2"), experiment_code = "25-7"
+    mouse_id = c("25-7-1", "25-7-2"), experiment_code = "25-7",
+    end_date = as.Date("2026-06-10")
   ))
   d <- local_prep_dirs()
   suppressMessages(local_loaded_prep(d, two_files))

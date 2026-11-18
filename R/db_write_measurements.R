@@ -172,49 +172,40 @@ check_facs_root_keyword_ <- function(con, wsp_root, condition_keyword) {
   invisible(TRUE)
 }
 
-lookup_sample_id_ <- function(con, mouse_id, tissue) {
-  result <- DBI::dbGetQuery(
-    con,
-    "SELECT sm.sample_id
-     FROM samples sm
-     JOIN subjects sub ON sub.subject_id = sm.subject_id
-     WHERE sub.mouse_id = ? AND sm.tissue = ?",
-    params = list(mouse_id, tissue)
-  )
-  if (nrow(result) == 0) {
-    stop(
-      "No sample found for mouse_id '", mouse_id, "', tissue '", tissue,
-      "' -- register the subject (db_write_subjects()) and sample (db_write_samples()) first.",
-      call. = FALSE
-    )
-  }
-  result$sample_id[[1]]
+lookup_sample_id_ <- function(con, mouse_id, tissue, collected_at = NA) {
+  lookup_sample_ids_(con, mouse_id, tissue, collected_at)[[1]]
 }
 
-# Vectorised lookup_sample_id_(): one sample_id per (mouse_id, tissue) pair,
-# in input order. Errors naming every unresolved pair (NA counts as unresolved).
-lookup_sample_ids_ <- function(con, mouse_id, tissue) {
+# Vectorised: one sample_id per (mouse_id, tissue, collected_at) in input
+# order; NA collected_at = the subject's end_date. Errors naming every
+# unresolved mouse x tissue x date (NA counts as unresolved).
+lookup_sample_ids_ <- function(con, mouse_id, tissue, collected_at = NA) {
   keys <- tibble::tibble(
     row_ = seq_along(mouse_id),
     mouse_id = as.character(mouse_id),
-    tissue = as.character(tissue)
+    tissue = as.character(tissue),
+    collected_at = as.Date(rep_len(collected_at, length(mouse_id)))
   )
   duckdb::duckdb_register(con, "tmp_sample_keys", keys)
   on.exit(duckdb::duckdb_unregister(con, "tmp_sample_keys"), add = TRUE)
 
   resolved <- DBI::dbGetQuery(con, "
-    SELECT k.row_, k.mouse_id, k.tissue, sm.sample_id
+    SELECT k.row_, k.mouse_id, k.tissue, sm.sample_id,
+      CAST(COALESCE(k.collected_at, sub.end_date) AS VARCHAR) AS date_
     FROM tmp_sample_keys k
     LEFT JOIN subjects sub ON sub.mouse_id = k.mouse_id
-    LEFT JOIN samples sm ON sm.subject_id = sub.subject_id AND sm.tissue = k.tissue
+    LEFT JOIN samples sm ON sm.subject_id = sub.subject_id
+      AND sm.tissue = k.tissue
+      AND sm.collected_at = COALESCE(k.collected_at, sub.end_date)
     ORDER BY k.row_
   ")
 
-  unresolved <- unique(resolved[is.na(resolved$sample_id), c("mouse_id", "tissue")])
-  if (nrow(unresolved) > 0) {
+  bad <- resolved[is.na(resolved$sample_id), ]
+  bad <- unique(bad[c("mouse_id", "tissue", "date_")])
+  if (nrow(bad) > 0) {
     stop(
-      "No sample found for mouse_id x tissue: ",
-      paste(sprintf("'%s x %s'", unresolved$mouse_id, unresolved$tissue), collapse = ", "),
+      "No sample found for mouse_id x tissue x date: ",
+      paste(sprintf("'%s x %s x %s'", bad$mouse_id, bad$tissue, bad$date_), collapse = ", "),
       " -- register the subjects (db_write_subjects()) and samples (db_write_samples()) first.",
       call. = FALSE
     )

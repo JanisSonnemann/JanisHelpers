@@ -21,7 +21,7 @@ exclusion-sheet rows applied by each \code{\link[=db_export_facs]{db_export_facs
 }
 \details{
 Errors if the file was created by an older schema (one whose
-\code{facs_stains} table has no \code{wsp_root} or \code{condition} column) -- such a file must be
-recreated, since \verb{CREATE TABLE IF NOT EXISTS} would silently keep the old
-tables.
+\code{facs_stains} table has no \code{wsp_root} or \code{condition} column, or whose
+\code{samples.collected_at} is nullable) -- such a file must be recreated, since
+\verb{CREATE TABLE IF NOT EXISTS} would silently keep the old tables.
 }

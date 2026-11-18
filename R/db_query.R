@@ -19,7 +19,7 @@ db_query_facs <- function(con) {
     dplyr::left_join(dplyr::tbl(con, "experiments"), by = "experiment_id") |>
     dplyr::left_join(dplyr::tbl(con, "assays"), by = "assay_id") |>
     dplyr::select(
-      experiment_code, mouse_id, tissue, assay_name,
+      experiment_code, mouse_id, tissue, collected_at, assay_name,
       population_full_path, population, metric, value,
       wsp_root, condition, condition_keyword, source_file, imported_at
     )

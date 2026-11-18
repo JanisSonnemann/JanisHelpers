@@ -172,10 +172,10 @@ test_that("db_write_facs requires a single non-empty wsp_root", {
 
 seed_guard_fixture_ <- function(con) {
   seed_minimal_fixture(con)
-  db_write_subjects(con, tibble::tibble(mouse_id = "25-7-2", experiment_code = "25-7"))
+  db_write_subjects(con, tibble::tibble(mouse_id = "25-7-2", experiment_code = "25-7", end_date = as.Date("2026-06-10")))
   db_write_samples(con, tibble::tibble(mouse_id = "25-7-2", tissue = "spleen"))
   db_write_experiment(con, experiment_code = "25-8")
-  db_write_subjects(con, tibble::tibble(mouse_id = "25-8-1", experiment_code = "25-8"))
+  db_write_subjects(con, tibble::tibble(mouse_id = "25-8-1", experiment_code = "25-8", end_date = as.Date("2026-06-10")))
   db_write_samples(con, tibble::tibble(mouse_id = "25-8-1", tissue = "spleen"))
   db_write_assay(con, assay_name = "treg", domain = "facs")
   invisible(con)
@@ -363,7 +363,7 @@ test_that("every facs measurement has a matching stain", {
 
 seed_two_mouse_plate_ <- function(con) {
   seed_minimal_fixture(con)
-  db_write_subjects(con, tibble::tibble(mouse_id = "25-7-2", experiment_code = "25-7"))
+  db_write_subjects(con, tibble::tibble(mouse_id = "25-7-2", experiment_code = "25-7", end_date = as.Date("2026-06-10")))
   db_write_samples(con, tibble::tibble(
     mouse_id = c("25-7-1", "25-7-2"), tissue = c("serum", "serum")
   ))
@@ -502,7 +502,7 @@ test_that("db_write_elisa logs every experiment on a mixed plate", {
   con <- local_test_db()
   seed_two_mouse_plate_(con)
   db_write_experiment(con, experiment_code = "25-8")
-  db_write_subjects(con, tibble::tibble(mouse_id = "25-8-1", experiment_code = "25-8"))
+  db_write_subjects(con, tibble::tibble(mouse_id = "25-8-1", experiment_code = "25-8", end_date = as.Date("2026-06-10")))
   db_write_samples(con, tibble::tibble(mouse_id = "25-8-1", tissue = "serum"))
 
   plate <- elisa_plate_(
@@ -606,8 +606,8 @@ test_that("db_write_histo lists every unresolved mouse_id x tissue and writes no
     mouse_id = c("25-7-1", "25-7-9", NA), tissue = c("serum", "serum", "kidney")
   )
   err <- expect_error(db_write_histo(con, histo_data, source_file = histo_src_))
-  expect_match(conditionMessage(err), "'25-7-9 x serum'", fixed = TRUE)
-  expect_match(conditionMessage(err), "'NA x kidney'", fixed = TRUE)
+  expect_match(conditionMessage(err), "'25-7-9 x serum x NA'", fixed = TRUE)
+  expect_match(conditionMessage(err), "'NA x kidney x NA'", fixed = TRUE)
   expect_equal(nrow(DBI::dbGetQuery(con, "SELECT * FROM histo_measurements")), 0)
   expect_equal(nrow(read_log_(con)), 0)
 })
@@ -657,4 +657,17 @@ test_that("db_write_histo requires source_file", {
   )
   expect_error(db_write_histo(con, histo_data), "source_file")
   expect_error(db_write_histo(con, histo_data, source_file = ""), "source_file")
+})
+
+test_that("lookup_sample_ids_ resolves NA to end_date and dated samples", {
+  con <- local_test_db(); seed_minimal_fixture(con)
+  db_write_samples(con, tibble::tibble(
+    mouse_id = "25-7-1", tissue = "serum", collected_at = as.Date("2026-05-06")))
+  db_write_samples(con, tibble::tibble(mouse_id = "25-7-1", tissue = "serum"))
+  ids <- lookup_sample_ids_(con, c("25-7-1", "25-7-1"), c("serum", "serum"),
+                            collected_at = as.Date(c(NA, "2026-05-06")))
+  expect_length(unique(ids), 2)
+  err <- expect_error(lookup_sample_ids_(con, "25-7-1", "serum",
+                                         collected_at = as.Date("2026-05-07")))
+  expect_match(conditionMessage(err), "25-7-1 x serum x 2026-05-07")
 })

@@ -7,7 +7,8 @@ two_mice <- tibble::tibble(
 seed_export_fixture <- function(con) {
   db_write_experiment(con, experiment_code = "25-7")
   db_write_subjects(con, tibble::tibble(
-    mouse_id = c("25-7-1", "25-7-2"), experiment_code = "25-7"
+    mouse_id = c("25-7-1", "25-7-2"), experiment_code = "25-7",
+    end_date = as.Date("2026-06-10")
   ))
   invisible(con)
 }

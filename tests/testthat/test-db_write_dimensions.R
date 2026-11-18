@@ -46,8 +46,8 @@ test_that("db_write_subjects is idempotent and fills missing optional columns", 
   con <- local_test_db()
   db_write_experiment(con, experiment_code = "25-7")
 
-  db_write_subjects(con, tibble::tibble(mouse_id = "25-7-1", experiment_code = "25-7"))
-  n <- db_write_subjects(con, tibble::tibble(mouse_id = "25-7-1", experiment_code = "25-7"))
+  db_write_subjects(con, tibble::tibble(mouse_id = "25-7-1", experiment_code = "25-7", end_date = as.Date("2026-06-10")))
+  n <- db_write_subjects(con, tibble::tibble(mouse_id = "25-7-1", experiment_code = "25-7", end_date = as.Date("2026-06-10")))
   expect_equal(n, 0)
 
   row <- DBI::dbGetQuery(con, "SELECT * FROM subjects WHERE mouse_id = '25-7-1'")
@@ -59,7 +59,7 @@ test_that("db_write_subjects errors clearly on an unknown experiment_code", {
   con <- local_test_db()
 
   expect_error(
-    db_write_subjects(con, tibble::tibble(mouse_id = "25-7-1", experiment_code = "not-registered")),
+    db_write_subjects(con, tibble::tibble(mouse_id = "25-7-1", experiment_code = "not-registered", end_date = as.Date("2026-06-10"))),
     "Unknown experiment_code"
   )
 
@@ -70,7 +70,7 @@ test_that("db_write_subjects errors clearly on an unknown experiment_code", {
 test_that("db_write_samples inserts samples and ignores weight columns", {
   con <- local_test_db()
   db_write_experiment(con, experiment_code = "25-7")
-  db_write_subjects(con, tibble::tibble(mouse_id = "25-7-1", experiment_code = "25-7"))
+  db_write_subjects(con, tibble::tibble(mouse_id = "25-7-1", experiment_code = "25-7", end_date = as.Date("2026-06-10")))
 
   n <- db_write_samples(con, tibble::tibble(
     mouse_id = c("25-7-1", "25-7-1"),
@@ -90,7 +90,7 @@ test_that("db_write_samples inserts samples and ignores weight columns", {
 test_that("db_write_samples is idempotent", {
   con <- local_test_db()
   db_write_experiment(con, experiment_code = "25-7")
-  db_write_subjects(con, tibble::tibble(mouse_id = "25-7-1", experiment_code = "25-7"))
+  db_write_subjects(con, tibble::tibble(mouse_id = "25-7-1", experiment_code = "25-7", end_date = as.Date("2026-06-10")))
 
   db_write_samples(con, tibble::tibble(mouse_id = "25-7-1", tissue = "spleen"))
   n <- db_write_samples(con, tibble::tibble(mouse_id = "25-7-1", tissue = "spleen"))
@@ -192,4 +192,29 @@ test_that("db_write_meta lists every missing template column", {
   sheet <- dplyr::select(sheet, !c(line, bmt_date))
   expect_error(db_write_meta(con, sheet, "26-1"), "line, bmt_date")
   expect_equal(DBI::dbGetQuery(con, "SELECT COUNT(*) AS n FROM experiments")$n, 0)
+})
+
+test_that("db_write_samples defaults collected_at to the subject's end_date", {
+  con <- local_test_db(); seed_minimal_fixture(con)
+  got <- DBI::dbGetQuery(con, "SELECT collected_at FROM samples")$collected_at
+  expect_equal(got, as.Date("2026-06-10"))
+})
+
+test_that("db_write_samples keeps one sample per mouse x tissue x date", {
+  con <- local_test_db(); seed_minimal_fixture(con)
+  n <- db_write_samples(con, tibble::tibble(
+    mouse_id = "25-7-1", tissue = "serum",
+    collected_at = as.Date(c("2026-05-06", "2026-05-20"))))
+  expect_equal(n, 2)
+  expect_equal(db_write_samples(con, tibble::tibble(mouse_id = "25-7-1", tissue = "spleen")), 0)
+})
+
+test_that("db_write_samples names every subject without end_date and writes nothing", {
+  con <- local_test_db()
+  db_write_experiment(con, "25-7")
+  db_write_subjects(con, tibble::tibble(mouse_id = c("25-7-8", "25-7-9"), experiment_code = "25-7"))
+  err <- expect_error(db_write_samples(con, tibble::tibble(mouse_id = c("25-7-8", "25-7-9"), tissue = "kidney")))
+  expect_match(conditionMessage(err), "25-7-8.*25-7-9")
+  expect_match(conditionMessage(err), "end_date")
+  expect_equal(DBI::dbGetQuery(con, "SELECT COUNT(*) n FROM samples")$n, 0)
 })

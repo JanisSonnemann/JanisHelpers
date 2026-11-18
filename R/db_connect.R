@@ -7,31 +7,54 @@
 #' exclusion-sheet rows applied by each [db_export_facs()] call).
 #'
 #' Errors if the file was created by an older schema (one whose
-#' `facs_stains` table has no `wsp_root` or `condition` column) -- such a file must be
-#' recreated, since `CREATE TABLE IF NOT EXISTS` would silently keep the old
-#' tables.
+#' `facs_stains` table has no `wsp_root` or `condition` column, or whose
+#' `samples.collected_at` is nullable) -- such a file must be recreated, since
+#' `CREATE TABLE IF NOT EXISTS` would silently keep the old tables.
 #'
 #' @param path Path to the DuckDB database file. Created if it doesn't exist.
 #' @returns A `DBI` connection (class `duckdb_connection`).
 #' @export
 db_connect <- function(path) {
   con <- DBI::dbConnect(duckdb::duckdb(), path)
+  reasons <- db_old_schema_(con)
+  if (length(reasons) > 0) {
+    DBI::dbDisconnect(con, shutdown = TRUE)
+    stop(
+      "'", path, "' was created by an older schema (",
+      paste(reasons, collapse = "; "), "). Recreate the database file and ",
+      "re-import.",
+      call. = FALSE
+    )
+  }
+  create_schema_(con)
+  con
+}
+
+# Reasons why an existing database file predates the current schema (empty =
+# current or new). Checked before create_schema_(), which would silently keep
+# old tables.
+db_old_schema_ <- function(con) {
+  reasons <- character()
   if (DBI::dbExistsTable(con, "facs_stains")) {
     missing_cols <- setdiff(
       c("wsp_root", "condition"), DBI::dbListFields(con, "facs_stains")
     )
     if (length(missing_cols) > 0) {
-      DBI::dbDisconnect(con, shutdown = TRUE)
-      stop(
-        "'", path, "' was created by an older schema (facs_stains has no ",
-        paste(missing_cols, collapse = "/"), " column). Recreate the database ",
-        "file and re-import.",
-        call. = FALSE
-      )
+      reasons <- c(reasons, paste0(
+        "facs_stains has no ", paste(missing_cols, collapse = "/"), " column"
+      ))
     }
   }
-  create_schema_(con)
-  con
+  if (DBI::dbExistsTable(con, "samples")) {
+    nullable <- DBI::dbGetQuery(con, "
+      SELECT is_nullable FROM information_schema.columns
+      WHERE table_name = 'samples' AND column_name = 'collected_at'
+    ")$is_nullable
+    if (identical(nullable, "YES")) {
+      reasons <- c(reasons, "samples.collected_at is nullable")
+    }
+  }
+  reasons
 }
 
 create_schema_ <- function(con) {
@@ -87,9 +110,9 @@ create_schema_ <- function(con) {
       sample_id    INTEGER PRIMARY KEY DEFAULT nextval('seq_samples'),
       subject_id   INTEGER NOT NULL REFERENCES subjects(subject_id),
       tissue       VARCHAR NOT NULL,
-      collected_at DATE,
+      collected_at DATE NOT NULL,
       created_at   TIMESTAMP DEFAULT current_timestamp,
-      UNIQUE(subject_id, tissue)
+      UNIQUE(subject_id, tissue, collected_at)
     )
   ")
 

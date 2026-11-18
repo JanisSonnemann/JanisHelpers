@@ -2,7 +2,7 @@
 % Please edit documentation in R/db_write_dimensions.R
 \name{db_write_samples}
 \alias{db_write_samples}
-\title{Register samples (subject x tissue harvests)}
+\title{Register samples (subject x tissue x collection date)}
 \usage{
 db_write_samples(con, data)
 }
@@ -17,9 +17,11 @@ Invisibly, the number of rows inserted into \code{samples}.
 }
 \description{
 Bulk-inserts sample rows. \code{data} must already be shaped with one row per
-subject x tissue, referencing subjects already registered via
+subject x tissue x collection date, referencing subjects already registered via
 \code{\link[=db_write_subjects]{db_write_subjects()}}. Errors if any row's \code{mouse_id} isn't registered yet
 -- naming every unresolved \code{mouse_id} -- rather than silently dropping
 those rows. Organ weights and volumes are not stored (they are calculation
 inputs for the FACS export script); such columns in \code{data} are ignored.
+A missing (\code{NA} or absent) \code{collected_at} means the subject's \code{end_date};
+errors naming every mouse with neither.
 }
