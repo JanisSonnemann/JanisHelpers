@@ -145,6 +145,28 @@ report_knit_elisa_qc <- function(prep_path, exclusions = NULL) {
   render_qc_("elisa-qc-template", prep_path, exclusions)
 }
 
+#' Render the histology QC report for one prep result
+#'
+#' Renders the `histo-qc-template` from a prep result saved by
+#' [histo_prep_save()] into `<folder of the curated xlsx>/qc/<file>_qc.html`.
+#' Sections: overview, completeness, exclusions (flagged samples; rows that
+#' match no sample as warnings), empty values, sanity rules (violations of the
+#' plausibility rules stored in the prep result), outliers (per metric) and a
+#' ranked table of flagged samples.
+#'
+#' @param prep_path Path to the prep `.rds` returned by [histo_prep_save()].
+#' @param exclusions Optional tibble -- the `exclusions` sheet of the meta
+#'   workbook. `NULL` = no exclusions.
+#' @returns The path of the rendered `.html` file.
+#' @examples
+#' \dontrun{
+#' report_knit_histo_qc(prep_path, meta_read(meta_path)$exclusions)
+#' }
+#' @export
+report_knit_histo_qc <- function(prep_path, exclusions = NULL) {
+  render_qc_("histo-qc-template", prep_path, exclusions)
+}
+
 # Internal: render a QC template for the prep `.rds` at `prep_path` into the
 # `qc/` folder beside its `processed/` folder; returns the html path.
 render_qc_ <- function(template, prep_path, exclusions = NULL) {

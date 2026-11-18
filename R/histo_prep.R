@@ -132,3 +132,86 @@ histo_prep_load <- function(path) {
   prep$paths <- paths[c("prep", "qc")]
   prep
 }
+
+#' Run the histology prep / QC loop for one curated file
+#'
+#' One call for the whole loop, driven by a `final` switch (see
+#' `inst/scripts/histo_prep_template.R`). `final = FALSE` reads the curated
+#' sheet ([histo_read_curated()]), applies `prepare()`, joins the group /
+#' batch columns from `mice`, saves the prep result ([histo_prep_save()]) and
+#' renders the QC report ([report_knit_histo_qc()]). `final = TRUE` loads the
+#' saved prep ([histo_prep_load()]), exports it ([db_export_histo()]) and
+#' optionally snapshots the database.
+#'
+#' @param final `FALSE` to prep and render the QC report, `TRUE` to export.
+#' @param path Path of the curated `.xlsx`.
+#' @param assay Assay name the data is exported under.
+#' @param tissue Tissue of the file, passed to [histo_read_curated()].
+#' @param prepare Function applied to the long data tibble before saving.
+#' @param mice Optional tibble with `mouse_ID` and the `group_col` /
+#'   `batch_col` columns, joined into the data with [meta_annotate()].
+#' @param exclusions Optional tibble -- the meta workbook's `exclusions`
+#'   sheet. `NULL` = nothing excluded.
+#' @param con A `DBI` connection from [db_connect()], required when
+#'   `final = TRUE`; left open.
+#' @param group_col,batch_col Character scalars or `NULL`, see
+#'   [histo_prep_save()].
+#' @param ... Further QC settings passed to [histo_prep_save()]
+#'   (`expected_mice`, `rules`). Used only when
+#'   `final = FALSE`.
+#' @param data_dir The project's `data/` folder, see [db_export_histo()].
+#' @param snapshot_root Folder for dated snapshots after an export. `NULL`
+#'   (default) = none.
+#' @param overwrite Passed to [db_export_histo()].
+#' @returns Invisibly: with `final = FALSE` the QC report path; with
+#'   `final = TRUE` the new `import_id`, or `NULL` if the overwrite was
+#'   declined.
+#' @examples
+#' \dontrun{
+#' histo_prep_run(
+#'   FALSE, "data/26-1_exp/raw/histo/kidney_26-1.xlsx", "PAS",
+#'   tissue = "kidney", mice = meta$meta, group_col = "group"
+#' )
+#' }
+#' @export
+histo_prep_run <- function(final, path, assay, tissue = NA_character_,
+                           prepare = identity, mice = NULL, exclusions = NULL,
+                           con = NULL, group_col = NULL, batch_col = NULL,
+                           ..., data_dir = "data", snapshot_root = NULL,
+                           overwrite = NULL) {
+  if (!is.logical(final) || length(final) != 1L || is.na(final)) {
+    stop("`final` must be TRUE or FALSE.", call. = FALSE)
+  }
+  if (final) {
+    if (is.null(con)) {
+      stop("`con` is required for the final export (final = TRUE).",
+           call. = FALSE)
+    }
+    prep <- histo_prep_load(path)
+    id <- db_export_histo(con, prep, exclusions, data_dir = data_dir,
+                          overwrite = overwrite)
+    if (!is.null(id) && !is.null(snapshot_root)) db_snapshot(con, snapshot_root)
+    return(invisible(id))
+  }
+
+  if (!file.exists(path)) {
+    stop("Curated file not found: ", path, call. = FALSE)
+  }
+  data <- histo_read_curated(path, tissue) |>
+    prepare()
+  cols <- c(group_col, batch_col)
+  if (!is.null(mice) && length(cols) > 0L) {
+    data <- meta_annotate(
+      data,
+      mice |>
+        dplyr::filter(!is.na(mouse_ID)) |>
+        dplyr::select(mouse_ID, dplyr::all_of(unique(cols))),
+      by = "mouse_ID"
+    )
+  }
+  prep_path <- histo_prep_save(data, path, assay, group_col = group_col,
+                               batch_col = batch_col, ...)
+  report <- report_knit_histo_qc(prep_path, exclusions)
+  message("QC report: ", report)
+  invisible(report)
+}

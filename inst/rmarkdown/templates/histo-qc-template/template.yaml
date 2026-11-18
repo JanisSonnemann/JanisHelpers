@@ -1,0 +1,5 @@
+name: Histology QC report
+description: >
+  QC report for one curated histology file, rendered from the prep result saved
+  by histo_prep_save(). Render with report_knit_histo_qc().
+create_dir: FALSE

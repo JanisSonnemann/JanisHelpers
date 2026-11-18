@@ -75,3 +75,28 @@ test_that("histo_prep_load refuses a report older than the prep", {
   Sys.setFileTime(paths$qc, Sys.time() - 1800)
   expect_error(histo_prep_load(path), "older than the prep")
 })
+
+# ---- histo_prep_run ----------------------------------------------------------
+
+test_that("histo_prep_run(final = FALSE) saves and renders the report", {
+  skip_if_not(rmarkdown::pandoc_available())
+  path <- local_histo_dir()
+  mice <- tibble::tibble(mouse_ID = c("M1", "M2", "M3", "M4"),
+                         group = c("a", "b", "a", "b"))
+  out <- suppressMessages(histo_prep_run(
+    FALSE, path, "PAS", tissue = "kidney", mice = mice, group_col = "group",
+    prepare = function(d) histo_calc_ratio(d, "crescents", "gloms", "pct_crescents"),
+    rules = "crescents <= gloms"
+  ))
+  expect_true(file.exists(out))
+  prep <- readRDS(histo_prep_paths_(path)$prep)
+  expect_equal(prep$info$qc$group_col, "group")
+  expect_equal(prep$info$qc$rules, "crescents <= gloms")
+  expect_true("pct_crescents" %in% prep$data$metric)
+})
+
+test_that("histo_prep_run(final = TRUE) needs a connection", {
+  path <- local_histo_dir()
+  expect_error(histo_prep_run(TRUE, path, "PAS"), "con")
+  expect_error(histo_prep_run("yes", path, "PAS"), "final")
+})

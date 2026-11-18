@@ -236,3 +236,37 @@ test_that("report_knit_elisa_qc renders into qc/ and names the sections", {
     expect_match(html, s, fixed = TRUE)
   }
 })
+
+# -- report_knit_histo_qc -----------------------------------------------------
+
+test_that("report_knit_histo_qc renders into qc/ and names the sections", {
+  skip_if_not(rmarkdown::pandoc_available())
+  d <- withr::local_tempdir()
+  path <- file.path(d, "histo_curated.xlsx")
+  file.copy(test_path("..", "fixtures", "histo_curated.xlsx"), path)
+  data <- suppressMessages(histo_read_curated(path, tissue = "kidney")) |>
+    dplyr::mutate(grp = ifelse(mouse_ID == "M1", "ctrl", "treated"))
+  prep <- suppressMessages(histo_prep_save(data, path, "PAS", group_col = "grp",
+                                           rules = "crescents <= gloms"))
+  ex <- tibble::tibble(mouse_ID = c("M2", "M7"), reason = c("sick", "typo"))
+  out <- expect_no_warning(report_knit_histo_qc(prep, exclusions = ex))
+  expect_equal(normalizePath(out),
+               normalizePath(file.path(d, "qc", "histo_curated_qc.html")))
+  html <- paste(readLines(out, warn = FALSE), collapse = "\n")
+  for (s in c("Overview", "Completeness", "Exclusions", "Empty values",
+              "Sanity rules", "Outliers", "Flagged samples", "sick", "M7", "M4")) {
+    expect_match(html, s, fixed = TRUE)
+  }
+})
+
+test_that("report_knit_histo_qc says so when no rules are set", {
+  skip_if_not(rmarkdown::pandoc_available())
+  d <- withr::local_tempdir()
+  path <- file.path(d, "histo_curated.xlsx")
+  file.copy(test_path("..", "fixtures", "histo_curated.xlsx"), path)
+  prep <- suppressMessages(histo_prep_save(
+    suppressMessages(histo_read_curated(path, tissue = "kidney")), path, "PAS"))
+  out <- report_knit_histo_qc(prep)
+  html <- paste(readLines(out, warn = FALSE), collapse = "\n")
+  expect_match(html, "No rules set", fixed = TRUE)
+})
