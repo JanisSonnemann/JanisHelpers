@@ -429,3 +429,10 @@ test_that("qc_dropped_files_ lists files without mouse_ID or tissue", {
   )
   expect_equal(qc_dropped_files_(d)$file_name, c("comp.fcs", "fmo.fcs"))
 })
+
+test_that("qc_whisker_side_() flags points beyond 1.5 x IQR", {
+  expect_equal(qc_whisker_side_(c(1, 2, 2, 3, 2, 50)),
+               c(rep(NA_character_, 5), "high"))
+  expect_equal(qc_whisker_side_(c(-50, 1, 2, 2, 3, 2))[1], "low")
+  expect_equal(qc_whisker_side_(c(NA, 1, 2)), rep(NA_character_, 3))
+})

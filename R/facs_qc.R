@@ -67,6 +67,18 @@ qc_resolve_ <- function(data, qc = list()) {
   )
 }
 
+# Tukey whisker rule on one group's plot values `t`: "low" / "high" for points
+# beyond 1.5 x IQR from the quartiles (quantile type 7, NAs ignored), else NA.
+qc_whisker_side_ <- function(t) {
+  q <- stats::quantile(t, c(0.25, 0.75), na.rm = TRUE, names = FALSE)
+  iqr <- q[[2]] - q[[1]]
+  dplyr::case_when(
+    t < q[[1]] - 1.5 * iqr ~ "low",
+    t > q[[2]] + 1.5 * iqr ~ "high",
+    .default = NA_character_
+  )
+}
+
 # Boxplot-whisker outliers for the three plot checks. Returns the rows of
 # `data` that belong to a check, plus `check`, `n_events`, `t` (the value on
 # the plot's axis: fraction as is, log10(count + 1), log10(MFI); NA if not
@@ -115,23 +127,15 @@ qc_score_ <- function(data, settings, excluded_files = character()) {
       c(group_col, "tissue", "condition", "population_full_path", "metric")
     ))) |>
     dplyr::mutate(
-      .q1 = stats::quantile(t, 0.25, na.rm = TRUE, names = FALSE),
-      .q3 = stats::quantile(t, 0.75, na.rm = TRUE, names = FALSE),
+      side = qc_whisker_side_(t),
       box_median = stats::median(value[!is.na(t)])
     ) |>
     dplyr::ungroup() |>
     dplyr::mutate(
-      .iqr = .q3 - .q1,
-      side = dplyr::case_when(
-        t < .q1 - 1.5 * .iqr ~ "low",
-        t > .q3 + 1.5 * .iqr ~ "high",
-        .default = NA_character_
-      ),
       side = dplyr::if_else(!is.na(n_events) & n_events >= min_events,
                             side, NA_character_),
       flag = !is.na(side)
-    ) |>
-    dplyr::select(!c(.q1, .q3, .iqr))
+    )
 }
 
 # Display label per row: the leaf population name, or "parent/leaf" when the

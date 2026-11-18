@@ -44,7 +44,7 @@ format_rows_ <- function(x) {
 #' @param overwrite `NULL` (default) asks interactively when the root already
 #'   exists (default answer "no"; errors in a non-interactive session);
 #'   `TRUE` / `FALSE` answers without asking. Exclusion rows naming a panel
-#'   that is neither this one nor a registered FACS assay stop the export.
+#'   that is neither this one nor a registered assay stop the export.
 #' @returns Invisibly, the new `import_id`, or `NULL` if the overwrite was
 #'   declined.
 #' @examples
@@ -73,22 +73,7 @@ db_export_facs <- function(con, prep, exclusions = NULL, data_dir = "data",
 
   # A mistyped panel (e.g. "Treg" for assay "treg") would be ignored by every
   # export, so unknown panel names stop here.
-  if (!is.null(exclusions) && "panel" %in% names(exclusions)) {
-    known <- c(info$assay, DBI::dbGetQuery(con, "
-      SELECT a.assay_name FROM assays a
-      JOIN domains d ON d.domain_id = a.domain_id
-      WHERE d.domain_name = 'facs'")$assay_name)
-    panels <- unique(stats::na.omit(as.character(exclusions$panel)))
-    unknown <- setdiff(panels[panels != ""], known)
-    if (length(unknown) > 0) {
-      stop(
-        "The exclusions sheet names unknown panel(s): ",
-        paste0("'", unknown, "'", collapse = ", "), ". Known FACS panels: ",
-        paste(unique(known), collapse = ", "), ". Nothing was written.",
-        call. = FALSE
-      )
-    }
-  }
+  check_exclusion_panels_(con, exclusions, info$assay)
 
   matched <- facs_match_exclusions(prep$data, exclusions, info$assay)
   if (nrow(matched$unmatched) > 0) {
@@ -193,11 +178,12 @@ db_export_facs <- function(con, prep, exclusions = NULL, data_dir = "data",
       DBI::dbExecute(con, "
         INSERT INTO import_exclusions (
           import_id, mouse_id, tissue, panel, condition, file_name, reason,
-          decided_on, n_files_matched
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          decided_on, n_files_matched, collected_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         params = list(
           rep(id, nrow(ex)), ex$mouse_ID, ex$tissue, ex$panel, ex$condition,
-          ex$file_name, ex$reason, ex$date, ex$n_files_matched
+          ex$file_name, ex$reason, ex$date, ex$n_files_matched,
+          rep(as.Date(NA), nrow(ex))
         ))
     }
     id

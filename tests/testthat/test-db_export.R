@@ -216,3 +216,16 @@ test_that("an exclusion row naming an unknown panel stops the export", {
     db_export_facs(con, prep, ex, data_dir = d$data_dir)
   ))
 })
+
+test_that("exclusion panel naming a registered assay of another domain passes", {
+  con <- local_test_db(); seed_export_fixture(con)
+  d <- local_prep_dirs()
+  prep <- suppressMessages(local_loaded_prep(d, two_mice))
+  db_write_assay(con, "titer", domain = "elisa")
+  ex <- tibble::tibble(mouse_ID = "25-7-2", panel = "titer", reason = "other assay")
+  expect_no_error(suppressMessages(
+    db_export_facs(con, prep, ex, data_dir = d$data_dir)
+  ))
+  ex$panel <- "Treg"
+  expect_error(db_export_facs(con, prep, ex, data_dir = d$data_dir), "unknown panel")
+})

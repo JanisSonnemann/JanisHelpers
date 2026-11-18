@@ -120,16 +120,22 @@ report_knit_wide <- function(input, ...) {
 #' }
 #' @export
 report_knit_facs_qc <- function(prep_path, exclusions = NULL) {
+  render_qc_("facs-qc-template", prep_path, exclusions)
+}
+
+# Internal: render a QC template for the prep `.rds` at `prep_path` into the
+# `qc/` folder beside its `processed/` folder; returns the html path.
+render_qc_ <- function(template, prep_path, exclusions = NULL) {
   prep_path <- normalizePath(prep_path, mustWork = TRUE)
   qc_dir <- file.path(dirname(dirname(prep_path)), "qc")
   dir.create(qc_dir, showWarnings = FALSE)
   # Intermediates go to a temp dir: knitting on OneDrive is slow and flaky.
-  work_dir <- tempfile("facs_qc_")
+  work_dir <- tempfile("qc_")
   dir.create(work_dir)
   on.exit(unlink(work_dir, recursive = TRUE), add = TRUE)
 
   rmarkdown::render(
-    system.file("rmarkdown", "templates", "facs-qc-template", "skeleton",
+    system.file("rmarkdown", "templates", template, "skeleton",
                 "skeleton.Rmd", package = "JanisHelpers"),
     output_dir = qc_dir,
     output_file = sub("_prep\\.rds$", "_qc.html", basename(prep_path)),
