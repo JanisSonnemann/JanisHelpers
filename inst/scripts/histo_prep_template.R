@@ -1,5 +1,6 @@
 # histology prep script for one curated file -- copy into the project and adapt.
 # Template: system.file("scripts", "histo_prep_template.R", package = "JanisHelpers")
+# Blank curated sheet: system.file("templates", "histo_curated_template.xlsx", package = "JanisHelpers")
 #
 # One self-contained script per curated .xlsx; the pipeline logic lives in
 # JanisHelpers (histo_prep_run(), db_write_meta()).

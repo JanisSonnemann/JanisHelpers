@@ -158,3 +158,30 @@ test_that("elisa_read_curated reads a range sheet with an empty first header qui
   expect_equal(d$lloq, 1)
   expect_equal(d$uloq, 9)
 })
+
+test_that("the shipped ELISA template reads once filled in", {
+  skip_if_not_installed("writexl")
+  tpl <- system.file("templates", "elisa_curated_template.xlsx", package = "JanisHelpers")
+  expect_true(nzchar(tpl))
+  expect_equal(readxl::excel_sheets(tpl), c("values", "range", "README"))
+
+  values <- readxl::read_excel(tpl, "values")
+  expect_equal(names(values)[1:3], c("mouse_ID", "tissue", "date"))
+  filled <- tibble::tibble(
+    mouse_ID = c("M1", "M1"), tissue = NA_character_, date = as.Date(NA),
+    TNFa = c("4.2", "OOR<"), `IL-2` = c("10", "12")
+  )
+  range <- readxl::read_excel(tpl, "range")
+  range$TNFa[1:2] <- c("7.81", "31.3")
+  range$`IL-2`[1:2] <- c("15.6", "250")
+  path <- tempfile(fileext = ".xlsx")
+  writexl::write_xlsx(list(values = filled, range = range,
+                           README = readxl::read_excel(tpl, "README")), path)
+
+  d <- suppressMessages(elisa_read_curated(path, tissue = "spleen"))
+  expect_equal(nrow(d), 4)
+  expect_equal(d$replicate[d$analyte == "TNFa"], 1:2)
+  expect_equal(d$result_status[d$analyte == "TNFa"], c("ok", "OOR<"))
+  expect_equal(unique(d$lloq[d$analyte == "IL-2"]), 15.6)
+  expect_equal(unique(d$unit), "pg/ml")
+})

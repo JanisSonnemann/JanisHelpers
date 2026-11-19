@@ -26,6 +26,10 @@ column per scored metric (numeric). Columns named \code{ID} or ending in
 \code{_ID} (other than \code{mouse_ID}) are slide labels and ignored. Rows
 without \code{mouse_ID} are dropped; mice with empty cells are kept with
 \code{NA} values. Any non-numeric text in a metric cell is an error.
+
+A blank template with a README sheet ships with the package:
+\code{system.file("templates", "histo_curated_template.xlsx",
+package = "JanisHelpers")}.
 }
 \examples{
 \dontrun{

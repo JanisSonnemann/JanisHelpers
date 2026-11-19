@@ -31,6 +31,10 @@ row order. The optional sheet \code{range} holds the row labels
 one column per analyte. Rows without \code{mouse_ID} are dropped. Empty
 analyte cells become \code{NA} with status \code{"ok"}; any other
 non-numeric text is an error.
+
+A blank template with a README sheet ships with the package:
+\code{system.file("templates", "elisa_curated_template.xlsx",
+package = "JanisHelpers")}.
 }
 \examples{
 \dontrun{

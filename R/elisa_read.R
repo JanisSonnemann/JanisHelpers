@@ -114,6 +114,10 @@ elisa_read_results <- function(path, cytokine = NULL) {
 #' analyte cells become \code{NA} with status \code{"ok"}; any other
 #' non-numeric text is an error.
 #'
+#' A blank template with a README sheet ships with the package:
+#' \code{system.file("templates", "elisa_curated_template.xlsx",
+#' package = "JanisHelpers")}.
+#'
 #' @param path path to the curated \code{.xlsx} file
 #' @param tissue character; tissue used where the sheet has no \code{tissue}
 #'   column or the cell is empty. Default \code{NA_character_} (error if the

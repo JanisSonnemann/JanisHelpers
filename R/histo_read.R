@@ -8,6 +8,10 @@
 #' without \code{mouse_ID} are dropped; mice with empty cells are kept with
 #' \code{NA} values. Any non-numeric text in a metric cell is an error.
 #'
+#' A blank template with a README sheet ships with the package:
+#' \code{system.file("templates", "histo_curated_template.xlsx",
+#' package = "JanisHelpers")}.
+#'
 #' @param path path to the curated \code{.xlsx} file
 #' @param tissue character; tissue used where the sheet has no \code{tissue}
 #'   column or the cell is empty. Default \code{NA_character_} (error if the
