@@ -18,6 +18,8 @@ dimension/fact schema exists, creating any missing tables, sequences, and
 seed rows. Safe to call repeatedly -- existing tables and data are left
 untouched. This includes \code{import_log} and \code{import_exclusions} (the
 exclusion-sheet rows applied by each \code{\link[=db_export_facs]{db_export_facs()}} call).
+Additive columns introduced later (\code{facs_measurements.population_order})
+are added to an existing file on open; its earlier rows stay \code{NULL}.
 }
 \details{
 Errors if the file was created by an older schema (one whose

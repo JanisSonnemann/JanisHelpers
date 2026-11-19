@@ -138,3 +138,27 @@ test_that("db_connect errors on an elisa_measurements table without analyte", {
   err <- expect_error(db_connect(path), "older schema")
   expect_match(conditionMessage(err), "analyte")
 })
+
+test_that("facs_measurements has a nullable population_order column", {
+  con <- local_test_db()
+  expect_true("population_order" %in% DBI::dbListFields(con, "facs_measurements"))
+})
+
+test_that("db_connect adds population_order to an existing database, keeping rows", {
+  path <- tempfile(fileext = ".duckdb")
+  con <- db_connect(path)
+  if ("population_order" %in% DBI::dbListFields(con, "facs_measurements")) {
+    DBI::dbExecute(con, "ALTER TABLE facs_measurements DROP COLUMN population_order")
+  }
+  DBI::dbExecute(con, "INSERT INTO facs_measurements
+    (facs_stain_id, population_full_path, population, metric, value)
+    VALUES (1, 'root/CD4+', 'CD4+', 'count', 10)")
+  DBI::dbDisconnect(con, shutdown = TRUE)
+
+  con <- db_connect(path)
+  withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
+  rows <- DBI::dbGetQuery(con, "SELECT * FROM facs_measurements")
+  expect_equal(rows$population, "CD4+")
+  expect_true("population_order" %in% names(rows))
+  expect_true(is.na(rows$population_order))
+})

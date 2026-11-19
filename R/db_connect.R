@@ -5,6 +5,8 @@
 #' seed rows. Safe to call repeatedly -- existing tables and data are left
 #' untouched. This includes `import_log` and `import_exclusions` (the
 #' exclusion-sheet rows applied by each [db_export_facs()] call).
+#' Additive columns introduced later (`facs_measurements.population_order`)
+#' are added to an existing file on open; its earlier rows stay `NULL`.
 #'
 #' Errors if the file was created by an older schema (one whose
 #' `facs_stains` table has no `wsp_root` or `condition` column, or whose
@@ -163,8 +165,16 @@ create_schema_ <- function(con) {
       value                DOUBLE,
       source_file          VARCHAR,
       imported_at          TIMESTAMP DEFAULT current_timestamp,
+      -- position of `population` in the panel's display order (prep factor
+      -- levels); last column so new and migrated files have the same layout
+      population_order     INTEGER,
       UNIQUE(facs_stain_id, population_full_path, metric)
     )
+  ")
+  # Additive migration for files created before population_order existed;
+  # their rows stay NULL until the panel is re-exported.
+  DBI::dbExecute(con, "
+    ALTER TABLE facs_measurements ADD COLUMN IF NOT EXISTS population_order INTEGER
   ")
 
   DBI::dbExecute(con, "CREATE SEQUENCE IF NOT EXISTS seq_elisa_measurements START 1")
