@@ -11,7 +11,11 @@ Status: current schema (updated 2026-11-18)
 > **2026-11-18:** `samples` keyed by mouse x tissue x collection date;
 > `elisa_measurements` / `histo_measurements` reshaped (`import_unit`,
 > replace-on-reimport); `import_exclusions.collected_at` added -- see
-> `2026-11-18-elisa-histo-prep-qc-export-design.md`. The DDL below is current.
+> `2026-11-18-elisa-histo-prep-qc-export-design.md`.
+>
+> **2026-11-19:** `facs_measurements.population_order` added (additive,
+> `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` on open) -- see
+> `2026-11-19-population-order-plot-helpers-design.md`. The DDL below is current.
 Related: `docs/superpowers/specs/2026-07-17-facs-db-schema-diagram.html` (visual companion — entity cards, relationships, workflow diagram)
 
 ## Context
@@ -165,6 +169,9 @@ CREATE TABLE facs_measurements (
   value                DOUBLE,
   source_file          VARCHAR,            -- provenance: which .wsp
   imported_at          TIMESTAMP DEFAULT current_timestamp,
+  population_order     INTEGER,            -- display position within the panel
+                                           -- (prep factor level); NULL for imports
+                                           -- before 2026-11-19; added on open
   UNIQUE(facs_stain_id, population_full_path, metric)
 );
 
