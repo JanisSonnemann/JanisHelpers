@@ -74,8 +74,12 @@ knitr::kable(overview, caption = "Samples per tissue x timepoint")
 
 ## Completeness
 
+End-point samples count only at the mouse's end date: a date with end-point
+samples only expects the mice ending that day; a sampled (serial) date expects
+every mouse still alive then.
+
 ```{r completeness, results = "asis"}
-comp <- JanisHelpers:::qc_table_completeness_(data, qc$expected_mice)
+comp <- JanisHelpers:::qc_table_completeness_(prep$data, qc$expected_mice, end_dates)
 unknown <- attr(comp, "unknown")
 missing <- comp[comp$missing != "", ]
 if (nrow(missing) == 0) {

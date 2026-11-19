@@ -118,6 +118,46 @@ test_that("qc_table_completeness_ lists missing mice per tissue x timepoint", {
   expect_equal(attr(unk, "unknown"), "M2")
 })
 
+test_that("qc_table_completeness_ expects end-point mice only at their end date", {
+  d1 <- as.Date("2026-06-01")
+  d2 <- as.Date("2026-06-02")
+  d <- tibble::tibble(
+    mouse_ID = c("A", "B", "C", "D", "A", "C", "D"),
+    tissue = "serum",
+    collected_at = as.Date(c(NA, NA, NA, NA, "2026-05-20", "2026-05-20",
+                             "2026-05-20")),
+    value = 1
+  )
+  ends <- c(A = d1, B = d1, C = d2, D = d2)
+  comp <- qc_table_completeness_(d, c("A", "B", "C", "D", "E"), ends)
+  miss <- stats::setNames(comp$missing, comp$timepoint)
+  # end points: d1 column only expects A + B, d2 only C + D
+  expect_equal(miss[["2026-06-01"]], "")
+  expect_equal(miss[["2026-06-02"]], "")
+  # serial bleed: everyone alive that day -> B (and E, no end date) missing
+  expect_equal(miss[["2026-05-20"]], "B, E")
+
+  # D's end-point sample missing -> only listed on d2
+  comp <- qc_table_completeness_(d[d$mouse_ID != "D" | !is.na(d$collected_at), ],
+                                 c("A", "B", "C", "D"), ends)
+  miss <- stats::setNames(comp$missing, comp$timepoint)
+  expect_equal(miss[["2026-06-01"]], "")
+  expect_equal(miss[["2026-06-02"]], "D")
+
+  # serial date after a mouse's death: not expected there
+  late <- tibble::tibble(mouse_ID = "C", tissue = "serum",
+                         collected_at = as.Date("2026-06-02"), value = 1)
+  comp <- qc_table_completeness_(late, c("A", "C"), ends)
+  expect_equal(comp$missing, "")
+
+  # end dates unknown for some mice -> they stay in the "end" column
+  comp <- qc_table_completeness_(d[is.na(d$collected_at), ], c("A", "E"),
+                                 ends["A"])
+  miss <- stats::setNames(comp$missing, comp$timepoint)
+  expect_equal(miss[["end"]], "E")
+  expect_equal(miss[["2026-06-01"]], "")
+})
+
 test_that("qc_table_empty_ counts NA values", {
   d <- fixture_data()
   e <- qc_table_empty_(d, "analyte")

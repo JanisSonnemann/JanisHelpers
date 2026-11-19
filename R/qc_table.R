@@ -95,16 +95,51 @@ qc_timepoint_levels_ <- function(timepoint) {
 }
 
 # Missing expected mice per tissue x timepoint (comma-joined `missing`);
-# attribute `unknown` = mice in `data` that are not expected.
-qc_table_completeness_ <- function(data, expected_mice) {
-  data <- dplyr::mutate(data, timepoint = qc_timepoint_(collected_at),
-                        mouse_ID = as.character(mouse_ID))
+# attribute `unknown` = mice in `data` that are not expected. `data` has the
+# sheet's dates (empty = end point, not yet resolved); `end_dates` (named Date
+# vector, see qc_end_dates_()) places end-point samples at the end date. A
+# mouse is expected only where it could have a sample:
+# - a column of end-point samples only: mice whose end date is that day (the
+#   "end" column: mice without a known end date);
+# - a column with sheet-dated (serial) samples: mice alive that day (end date
+#   unknown or not before it).
+qc_table_completeness_ <- function(data, expected_mice, end_dates = NULL) {
+  data <- data |>
+    dplyr::mutate(end_point = is.na(as.Date(collected_at))) |>
+    qc_resolve_end_dates_(end_dates) |>
+    dplyr::mutate(timepoint = qc_timepoint_(collected_at),
+                  mouse_ID = as.character(mouse_ID))
   expected <- as.character(expected_mice)
+  end_of <- if (length(end_dates) > 0L) {
+    unname(end_dates[expected])
+  } else {
+    rep(as.Date(NA), length(expected))
+  }
+  expected_at <- function(timepoint, end_point_only) {
+    if (end_point_only) {
+      if (timepoint == "end") {
+        return(expected[is.na(end_of)])
+      }
+      return(expected[!is.na(end_of) & end_of == as.Date(timepoint)])
+    }
+    if (timepoint == "end") {
+      return(expected)
+    }
+    expected[is.na(end_of) | end_of >= as.Date(timepoint)]
+  }
   out <- data |>
     dplyr::summarise(
-      missing = paste(setdiff(expected, mouse_ID), collapse = ", "),
+      end_point_only = all(end_point),
+      ids = list(unique(mouse_ID)),
       .by = c(tissue, timepoint)
     ) |>
+    dplyr::mutate(missing = purrr::pmap_chr(
+      list(timepoint, end_point_only, ids),
+      function(tp, only, ids) {
+        paste(setdiff(expected_at(tp, only), ids), collapse = ", ")
+      }
+    )) |>
+    dplyr::select(tissue, timepoint, missing) |>
     dplyr::arrange(tissue, match(timepoint, qc_timepoint_levels_(timepoint)))
   attr(out, "unknown") <- sort(setdiff(unique(data$mouse_ID), expected))
   out
