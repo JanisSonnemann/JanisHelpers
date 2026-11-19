@@ -120,6 +120,27 @@ test_that("histo_prep_run(final = FALSE) saves and renders the report", {
   expect_equal(prep$info$qc$group_col, "group")
   expect_equal(prep$info$qc$rules, "crescents <= gloms")
   expect_true("pct_crescents" %in% prep$data$metric)
+  html <- paste(readLines(out, warn = FALSE), collapse = "\n")
+  expect_true(grepl("Comments", html, fixed = TRUE))
+  expect_false(grepl("By batch", html, fixed = TRUE))
+  expect_false(grepl("Over time", html, fixed = TRUE))
+})
+
+test_that("the QC report lists comments from the curated sheet", {
+  skip_if_not(rmarkdown::pandoc_available())
+  skip_if_not_installed("writexl")
+  d <- withr::local_tempdir()
+  path <- file.path(d, "histo_c.xlsx")
+  writexl::write_xlsx(list(values = data.frame(
+    mouse_ID = c("M1", "M2"), gloms = c(80, 70), crescents = c(8, 7),
+    comment = c("section torn at edge", NA)
+  )), path)
+  out <- suppressMessages(histo_prep_run(
+    FALSE, path, "PAS", tissue = "kidney",
+    prepare = function(d) histo_calc_ratio(d, c(pct_cresc = "crescents"), "gloms")
+  ))
+  html <- paste(readLines(out, warn = FALSE), collapse = "\n")
+  expect_true(grepl("section torn at edge", html, fixed = TRUE))
 })
 
 test_that("histo_prep_run(final = TRUE) needs a connection", {

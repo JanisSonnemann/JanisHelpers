@@ -21,11 +21,13 @@ histo_prep_paths_ <- function(path) {
 #'
 #' @param data Tibble from [histo_read_curated()] (optionally with ratio
 #'   metrics from [histo_calc_ratio()] and group / batch columns joined on) --
-#'   needs `mouse_ID`, `tissue`, `collected_at`, `metric`, `value`.
+#'   needs `mouse_ID`, `tissue`, `collected_at`, `metric`, `value`. An
+#'   optional `comment` column is listed in the QC report and not exported.
 #' @param path Path of the curated `.xlsx` the data came from.
 #' @param assay Assay name the data is exported under.
 #' @param group_col Optional column of `data` used to group the outlier plots.
-#' @param batch_col Optional column of `data` for batch plots.
+#' @param batch_col Optional batch column of `data`, shown in the QC report
+#'   overview.
 #' @param expected_mice Character vector of mice expected in the data.
 #'   Default: the mice in `data`.
 #' @param rules Character vector of plausibility rules for the QC report.

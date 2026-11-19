@@ -139,6 +139,20 @@ cat(sum(empty$n_empty), " of ", nrow(data), " values empty.\n\n", sep = "")
 print(knitr::kable(empty))
 ```
 
+## Comments
+
+Free text from the curated sheet's `comment` column (not exported to the
+database).
+
+```{r comments, results = "asis"}
+comments <- JanisHelpers:::histo_qc_comments_(data, excluded_keys)
+if (nrow(comments) == 0) {
+  cat("No comments.\n")
+} else {
+  print(knitr::kable(comments))
+}
+```
+
 ## Sanity rules
 
 ```{r rules, results = "asis"}
@@ -174,24 +188,6 @@ if (is.null(group_col)) {
 
 ```{r outliers, results = "asis"}
 emit_plot(JanisHelpers:::qc_table_plot_(scored, "metric", group_col, log_scale))
-```
-
-### By batch
-
-```{r batch, results = "asis"}
-if (is.null(batch_col)) {
-  note("Batch column not set -- rerun the prep script with `batch_col`.")
-} else {
-  emit_plot(JanisHelpers:::qc_table_plot_(scored, "metric", group_col,
-                                          log_scale, batch_col = batch_col))
-}
-```
-
-### Over time
-
-```{r time, results = "asis"}
-p <- JanisHelpers:::qc_table_time_plot_(data, "metric", group_col)
-if (is.null(p)) note("Fewer than two sampling dates -- no time course.") else emit_plot(p)
 ```
 
 ## Flagged samples

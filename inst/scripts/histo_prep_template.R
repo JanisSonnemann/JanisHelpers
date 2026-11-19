@@ -35,13 +35,24 @@ assay     <- "PAS"                              # assay name in the database
 tissue    <- "kidney"                           # tissue of every sample in the file
 
 # Changes to the long table before saving: derived ratio metrics, dropping a metric.
+# New score columns in the sheet are picked up as metrics automatically; a
+# `comment` column is free text shown in the QC report (not exported).
+# Ratios: one named entry per new metric (new name = numerator), all over
+# `denominator` (or give one denominator per ratio). Every metric named here
+# must exist in the sheet.
 prepare <- function(data) {
-  histo_calc_ratio(data, "crescents", "gloms", "pct_crescents")
+  histo_calc_ratio(
+    data,
+    numerator = c(pct_cresc    = "crescents",
+                  pct_necrosis = "necrosis",
+                  pct_abnormal = "abnormal_gloms"),
+    denominator = "gloms"
+  )
 }
 
 # Plausibility rules for the QC report (one TRUE / FALSE per sample, metrics
 # as variable names; FALSE = violation, NA = not checked).
-rules <- c("crescents <= gloms", "necrosis <= gloms")
+rules <- c("crescents <= gloms", "necrosis <= gloms", "abnormal_gloms <= gloms")
 
 # ---- run ------------------------------------------------------------------------
 
@@ -58,8 +69,8 @@ histo_prep_run(
   mice       = mice,
   exclusions = meta$exclusions,                 # NULL if the sheet doesn't exist
   con        = con,
-  # QC report: outliers scored within groups, batch plots per day,
-  # completeness against all mice minus dropouts (`early`).
+  # QC report: outliers scored within groups (batch column shown in the
+  # overview), completeness against all mice minus dropouts (`early`).
   group_col     = "group",
   batch_col     = "death_date",
   expected_mice = mice$mouse_ID[is.na(mice$early)],

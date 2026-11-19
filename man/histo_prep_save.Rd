@@ -18,7 +18,8 @@ histo_prep_save(
 \arguments{
 \item{data}{Tibble from \code{\link[=histo_read_curated]{histo_read_curated()}} (optionally with ratio
 metrics from \code{\link[=histo_calc_ratio]{histo_calc_ratio()}} and group / batch columns joined on) --
-needs \code{mouse_ID}, \code{tissue}, \code{collected_at}, \code{metric}, \code{value}.}
+needs \code{mouse_ID}, \code{tissue}, \code{collected_at}, \code{metric}, \code{value}. An
+optional \code{comment} column is listed in the QC report and not exported.}
 
 \item{path}{Path of the curated \code{.xlsx} the data came from.}
 
@@ -26,7 +27,8 @@ needs \code{mouse_ID}, \code{tissue}, \code{collected_at}, \code{metric}, \code{
 
 \item{group_col}{Optional column of \code{data} used to group the outlier plots.}
 
-\item{batch_col}{Optional column of \code{data} for batch plots.}
+\item{batch_col}{Optional batch column of \code{data}, shown in the QC report
+overview.}
 
 \item{expected_mice}{Character vector of mice expected in the data.
 Default: the mice in \code{data}.}
