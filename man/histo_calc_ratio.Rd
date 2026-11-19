@@ -2,16 +2,22 @@
 % Please edit documentation in R/histo_calc.R
 \name{histo_calc_ratio}
 \alias{histo_calc_ratio}
-\title{Add a ratio metric to long histology data}
+\title{Add ratio metrics to long histology data}
 \usage{
-histo_calc_ratio(data, numerator, denominator, name, scale = 100)
+histo_calc_ratio(data, numerator, denominator, name = NULL, scale = 100)
 }
 \arguments{
 \item{data}{long tibble from \code{histo_read_curated()}}
 
-\item{numerator, denominator}{character; metric names in \code{data}}
+\item{numerator}{character; metric name(s) in \code{data}. Either one
+metric (with \code{name}) or a named vector, one element per new ratio
+(names = new metric names; \code{name} must then be \code{NULL}).}
 
-\item{name}{character; metric name of the new rows (must not exist yet)}
+\item{denominator}{character; metric name(s) in \code{data}, length 1
+(used for every ratio) or one per numerator}
+
+\item{name}{character; metric name of the new rows when \code{numerator}
+is a single unnamed metric. Default \code{NULL}.}
 
 \item{scale}{numeric; multiplier, default 100 (percent)}
 }
@@ -20,13 +26,20 @@ histo_calc_ratio(data, numerator, denominator, name, scale = 100)
 }
 \description{
 Computes \code{numerator / denominator * scale} per
-\code{mouse_ID x tissue x collected_at} and appends it as new rows with
-\code{metric = name}. The result is \code{NA} when either value is
-\code{NA} or the denominator is 0.
+\code{mouse_ID x tissue x collected_at} and appends it as new rows. The
+result is \code{NA} when either value is \code{NA} or the denominator is 0.
+Several ratios can be added in one call by passing a named
+\code{numerator} vector; the names become the new metric names. Other
+columns of \code{data} (e.g. \code{comment}, group columns) are copied
+from the numerator rows.
 }
 \examples{
 \dontrun{
   histo_read_curated("kidney_26-1.xlsx", tissue = "kidney") |>
-    histo_calc_ratio("crescents", "gloms", "pct_crescents")
+    histo_calc_ratio(
+      c(pct_cresc = "crescents", pct_necrosis = "necrosis",
+        pct_abnormal = "abnormal_gloms"),
+      denominator = "gloms"
+    )
 }
 }
