@@ -11,7 +11,10 @@
 #'   0-1 fractions) or `"log"` (log10 y axis with log ticks; values must be
 #'   positive -- no offset is added here, see [plot_population()]).
 #' @param colors Optional named character vector of fill colours
-#'   (`c(MPO409 = "#00BFC4", irrel = "#F8766D")`); `NULL` = ggplot2 default.
+#'   (`c(MPO409 = "#00BFC4", irrel = "#F8766D")`). Defaults to the option
+#'   `JanisHelpers.group_colors`, so a document can set its group colours
+#'   once with `options(JanisHelpers.group_colors = c(...))`. `NULL` (option
+#'   unset, or passed explicitly) = ggplot2 default fills.
 #' @returns A `ggplot` object.
 #' @examples
 #' d <- data.frame(group = rep(c("a", "b"), each = 4), tissue = "kidney",
@@ -19,7 +22,7 @@
 #' plot_box(d, x = tissue, y = value, fill = group)
 #' @export
 plot_box <- function(data, x, y, fill, scale = c("linear", "percent", "log"),
-                     colors = NULL) {
+                     colors = getOption("JanisHelpers.group_colors")) {
   scale <- match.arg(scale)
   p <- ggplot2::ggplot(data, ggplot2::aes(x = {{ x }}, y = {{ y }}, fill = {{ fill }})) +
     ggplot2::geom_boxplot(position = ggplot2::position_dodge(width = 0.75),
@@ -59,7 +62,8 @@ plot_box <- function(data, x, y, fill, scale = c("linear", "percent", "log"),
 #'   plot.
 #' @param p_val `TRUE` adds `ggpubr::stat_compare_means()` p-values (Wilcoxon
 #'   for two groups, Kruskal-Wallis for more) per facet.
-#' @param colors Optional named fill colours, see [plot_box()].
+#' @param colors Optional named fill colours; defaults to the option
+#'   `JanisHelpers.group_colors`, see [plot_box()].
 #' @param pseudocount Number added to `value` for `scale = "log"`. Default 1.
 #' @returns A `ggplot` object.
 #' @examples
@@ -71,7 +75,9 @@ plot_box <- function(data, x, y, fill, scale = c("linear", "percent", "log"),
 plot_population <- function(data, populations, metric, tissues = NULL,
                             x = tissue, fill = group, facet = population,
                             scale = c("linear", "percent", "log"),
-                            p_val = FALSE, colors = NULL, pseudocount = 1) {
+                            p_val = FALSE,
+                            colors = getOption("JanisHelpers.group_colors"),
+                            pseudocount = 1) {
   scale <- match.arg(scale)
   if (!is.null(tissues)) {
     data <- dplyr::filter(data, .data$tissue %in% .env$tissues)
@@ -113,7 +119,8 @@ plot_population <- function(data, populations, metric, tissues = NULL,
 #'   (default `population`) and values (default `value`).
 #' @param scale `"percent"` (default, for 0-1 fractions), `"linear"` or
 #'   `"log"`, see [plot_box()].
-#' @param colors Optional named fill colours, see [plot_box()].
+#' @param colors Optional named fill colours; defaults to the option
+#'   `JanisHelpers.group_colors`, see [plot_box()].
 #' @returns A `ggplot` object.
 #' @examples
 #' \dontrun{
@@ -125,7 +132,8 @@ plot_population <- function(data, populations, metric, tissues = NULL,
 #' @export
 plot_paired <- function(data, levels, condition = condition, fill = group,
                         pair = mouse_id, facet = population, y = value,
-                        scale = c("percent", "linear", "log"), colors = NULL) {
+                        scale = c("percent", "linear", "log"),
+                        colors = getOption("JanisHelpers.group_colors")) {
   scale <- match.arg(scale)
   cond_col <- names(dplyr::select(data, {{ condition }}))
   absent <- setdiff(levels, unique(as.character(data[[cond_col]])))

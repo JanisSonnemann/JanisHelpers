@@ -70,3 +70,34 @@ test_that("every plot helper renders without ggpubr attached", {
 test_that("plot_paired errors on a level not in the data", {
   expect_error(plot_paired(paired_data, levels = c("unstim", "OVA")), "OVA")
 })
+
+paired_colour_data_ <- tibble::tibble(
+  mouse_id = rep(c("m1", "m2"), each = 2), group = rep(c("a", "b"), each = 2),
+  condition = rep(c("unstim", "MPO"), 2), population = "CD4+", value = c(0.1, 0.2, 0.3, 0.4)
+)
+colour_data_ <- dplyr::mutate(pop_data, group = ifelse(group == "irrel", "a", "b"))
+box_fills_ <- function(p) unique(ggplot2::ggplot_build(p)$data[[1]]$fill)
+three_plots_ <- function(...) list(
+  plot_box(colour_data_, x = tissue, y = value, fill = group, ...),
+  plot_population(colour_data_, populations = "CD4+", metric = "count_per_g", ...),
+  plot_paired(paired_colour_data_, levels = c("unstim", "MPO"), ...)
+)
+
+test_that("plot helpers use the group colour option when colors is missing", {
+  withr::local_options(JanisHelpers.group_colors = c(a = "#111111", b = "#222222"))
+  for (p in three_plots_()) expect_setequal(box_fills_(p), c("#111111", "#222222"))
+})
+
+test_that("explicit colors beat the option", {
+  withr::local_options(JanisHelpers.group_colors = c(a = "#111111", b = "#222222"))
+  for (p in three_plots_(colors = c(a = "#333333", b = "#444444"))) {
+    expect_setequal(box_fills_(p), c("#333333", "#444444"))
+  }
+})
+
+test_that("explicit NULL gives ggplot default fills", {
+  withr::local_options(JanisHelpers.group_colors = c(a = "#111111", b = "#222222"))
+  for (p in three_plots_(colors = NULL)) {
+    expect_length(intersect(box_fills_(p), c("#111111", "#222222")), 0)
+  }
+})
