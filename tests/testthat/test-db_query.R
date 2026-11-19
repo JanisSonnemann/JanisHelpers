@@ -83,3 +83,24 @@ test_that("db_write_facs stores population_order when Population is a factor", {
   expect_equal(result$population_order, 2L)
   expect_equal(result$population, "CD4+")
 })
+
+test_that("db_query_subjects returns one row per mouse with group", {
+  con <- local_test_db()
+  db_write_experiment(con, experiment_code = "25-7")
+  db_write_subjects(con, tibble::tibble(
+    mouse_id = c("25-7-1", "25-7-2"), experiment_code = "25-7",
+    treatment_group = c("irrel", "MPO409"), end_date = as.Date("2026-06-10")
+  ))
+
+  lazy <- db_query_subjects(con)
+  expect_s3_class(lazy, "tbl_lazy")
+  irrel <- lazy |> dplyr::filter(group == "irrel") |> dplyr::collect()
+  expect_equal(irrel$mouse_id, "25-7-1")
+
+  all <- dplyr::collect(lazy)
+  expect_equal(names(all), c("experiment_code", "mouse_id", "group",
+    "mouse_treatment", "sex", "cage", "mouse_strain", "generation", "dob",
+    "start_date", "bmt_date", "end_date"))
+  expect_equal(nrow(all), 2)
+  expect_false("treatment_group" %in% names(all))
+})

@@ -73,3 +73,49 @@ db_query_histo <- function(con) {
       import_unit, metric, value, source_file, imported_at
     )
 }
+
+#' Query subject (mouse) meta data
+#'
+#' Returns a lazy `dbplyr` `tbl` with one row per mouse: `subjects` joined to
+#' `experiments`, natural keys only. The stored `treatment_group` column is
+#' returned as `group` (the database keeps `treatment_group` because `group`
+#' is an SQL reserved word; dbplyr quotes it, so `dplyr::filter(group == ...)`
+#' works on the lazy table). Call [dplyr::collect()] to materialize.
+#'
+#' Intended use in an analysis document: connect read-only, query the subjects
+#' once, filter to the experiment, collect, and set the group factor levels
+#' once. Then join only the columns a dataset needs with the checked join
+#' [meta_annotate()], by `experiment_code` and `mouse_id` (mouse IDs are only
+#' unique within an experiment). The measurement queries ([db_query_facs()],
+#' [db_query_elisa()], [db_query_histo()]) carry no subject meta.
+#'
+#' @param con A `DBI` connection -- [db_connect()], or for analysis a
+#'   read-only `DBI::dbConnect(duckdb::duckdb(), path, read_only = TRUE)`.
+#' @returns A lazy `tbl` with columns `experiment_code`, `mouse_id`, `group`,
+#'   `mouse_treatment`, `sex`, `cage`, `mouse_strain`, `generation`, `dob`,
+#'   `start_date`, `bmt_date`, `end_date`.
+#' @examples
+#' \dontrun{
+#' con <- DBI::dbConnect(duckdb::duckdb(), "~/databases/lab.duckdb",
+#'                       read_only = TRUE)
+#' subjects <- db_query_subjects(con) |>
+#'   dplyr::filter(experiment_code == "26-1") |>
+#'   dplyr::collect() |>
+#'   dplyr::mutate(group = factor(group, levels = c("MPO409", "irrel")))
+#' facs <- db_query_facs(con) |>
+#'   dplyr::filter(experiment_code == "26-1") |>
+#'   dplyr::collect() |>
+#'   meta_annotate(dplyr::select(subjects, experiment_code, mouse_id, group),
+#'                 by = c("experiment_code", "mouse_id")) |>
+#'   facs_order_populations()
+#' DBI::dbDisconnect(con, shutdown = TRUE)
+#' }
+#' @export
+db_query_subjects <- function(con) {
+  dplyr::tbl(con, "subjects") |>
+    dplyr::left_join(dplyr::tbl(con, "experiments"), by = "experiment_id") |>
+    dplyr::select(
+      experiment_code, mouse_id, group = treatment_group, mouse_treatment,
+      sex, cage, mouse_strain, generation, dob, start_date, bmt_date, end_date
+    )
+}
