@@ -33,7 +33,7 @@ elisa_readme <- readme(c(
 histo_values <- data.frame(
   mouse_ID = character(), ID = character(), tissue = character(),
   date = as.Date(character()), gloms = numeric(), crescents = numeric(),
-  necrosis = numeric()
+  necrosis = numeric(), comment = character()
 )
 histo_readme <- readme(c(
   "Curated histology sheet -- read by JanisHelpers::histo_read_curated(); one file per scoring set.",
@@ -46,8 +46,9 @@ histo_readme <- readme(c(
   "  date      optional column and cell; collection date. Empty = the mouse's end (death) date.",
   "  one numeric column per score -- rename/add/remove gloms, crescents, necrosis as needed. Headers must be unique and non-empty.",
   "  Leave a cell empty if not scored; a mouse with all cells empty is kept (shows as missing in the QC report).",
-  "  Any text in a score cell stops the import. Other text columns (notes, ...) are not allowed.",
-  "  Derived values (e.g. % crescents) are calculated in the prep script (histo_calc_ratio()), not in the sheet.",
+  "  Any text in a score cell stops the import.",
+  "  comment   optional free text per row (column named comment or comments); shown in the QC report, not exported to the database. Other text columns are not allowed.",
+  "  Derived values (e.g. % crescents) are calculated in the prep script (histo_calc_ratio(), several at once with a named numerator vector), not in the sheet.",
   "",
   "This README sheet is ignored by the reader."
 ))

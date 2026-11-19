@@ -16,7 +16,8 @@ sheet gives no tissue either).}
 \value{
 tibble, one row per mouse x metric, with columns \code{mouse_ID},
 \code{tissue}, \code{collected_at} (Date, \code{NA} = end-point),
-\code{metric}, \code{value}; returned invisibly -- assign the result
+\code{metric}, \code{value} (+ \code{comment} when the sheet has a
+comment column); returned invisibly -- assign the result
 explicitly
 }
 \description{
@@ -26,6 +27,11 @@ column per scored metric (numeric). Columns named \code{ID} or ending in
 \code{_ID} (other than \code{mouse_ID}) are slide labels and ignored. Rows
 without \code{mouse_ID} are dropped; mice with empty cells are kept with
 \code{NA} values. Any non-numeric text in a metric cell is an error.
+
+An optional free-text column named \code{comment} or \code{comments} (any
+case) is not a metric: it is returned as a \code{comment} column (repeated
+on every metric row of the sample, \code{NA} when empty), shown in the QC
+report and not exported to the database.
 
 A blank template with a README sheet ships with the package:
 \code{system.file("templates", "histo_curated_template.xlsx",

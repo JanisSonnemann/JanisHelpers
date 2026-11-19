@@ -8,6 +8,11 @@
 #' without \code{mouse_ID} are dropped; mice with empty cells are kept with
 #' \code{NA} values. Any non-numeric text in a metric cell is an error.
 #'
+#' An optional free-text column named \code{comment} or \code{comments} (any
+#' case) is not a metric: it is returned as a \code{comment} column (repeated
+#' on every metric row of the sample, \code{NA} when empty), shown in the QC
+#' report and not exported to the database.
+#'
 #' A blank template with a README sheet ships with the package:
 #' \code{system.file("templates", "histo_curated_template.xlsx",
 #' package = "JanisHelpers")}.
@@ -19,7 +24,8 @@
 #'
 #' @returns tibble, one row per mouse x metric, with columns \code{mouse_ID},
 #'   \code{tissue}, \code{collected_at} (Date, \code{NA} = end-point),
-#'   \code{metric}, \code{value}; returned invisibly -- assign the result
+#'   \code{metric}, \code{value} (+ \code{comment} when the sheet has a
+#'   comment column); returned invisibly -- assign the result
 #'   explicitly
 #' @export
 #'
@@ -34,7 +40,14 @@ histo_read_curated <- function(path, tissue = NA_character_) {
 
   nm <- names(raw)
   id_col <- nm == "ID" | (grepl("_ID$", nm) & nm != "mouse_ID")
-  metrics <- nm[!id_col & !nm %in% c("mouse_ID", "tissue", "date")]
+  comment_col <- !is.na(nm) & grepl("^comments?$", nm, ignore.case = TRUE)
+  if (sum(comment_col) > 1L) {
+    stop(glue::glue(
+      "Sheet 'values' of '{path}' has more than one comment column: ",
+      "{paste(nm[comment_col], collapse = ', ')} -- keep one."
+    ), call. = FALSE)
+  }
+  metrics <- nm[!id_col & !comment_col & !nm %in% c("mouse_ID", "tissue", "date")]
   check_curated_headers_(metrics, path, "metric")
   if (length(metrics) == 0L) {
     stop(glue::glue("Sheet 'values' of '{path}' has no metric columns."))
@@ -42,6 +55,11 @@ histo_read_curated <- function(path, tissue = NA_character_) {
 
   base <- tibble::tibble(mouse_ID = mouse, tissue = cv$tissue,
                          collected_at = cv$collected_at)
+  has_comment <- any(comment_col)
+  if (has_comment) {
+    cm <- stringr::str_trim(curated_cell_(raw[[which(comment_col)]]))
+    cm[!is.na(cm) & !nzchar(cm)] <- NA_character_
+  }
   long <- purrr::map(metrics, function(m) {
     txt <- stringr::str_trim(curated_cell_(raw[[m]]))
     num <- suppressWarnings(as.numeric(txt))
@@ -52,7 +70,9 @@ histo_read_curated <- function(path, tissue = NA_character_) {
         "expected a number."
       ), call. = FALSE)
     }
-    dplyr::mutate(base, metric = m, value = num)
+    out <- dplyr::mutate(base, metric = m, value = num)
+    if (has_comment) out$comment <- cm
+    out
   }) |>
     purrr::list_rbind()
 
