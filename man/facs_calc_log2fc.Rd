@@ -9,7 +9,8 @@ facs_calc_log2fc(
   ref_pop,
   restim_col = "restimulation",
   ref_level = "unstim",
-  pseudocount = 0.5
+  pseudocount = 0.5,
+  mouse_col = "mouse_ID"
 )
 }
 \arguments{
@@ -31,6 +32,11 @@ baseline; every other distinct value is compared against it. Default
 \item{pseudocount}{numeric; added to every \code{value} before computing
 the \code{ref_pop} proportion, avoiding \code{log2(0)}. Default
 \code{0.5}.}
+
+\item{mouse_col}{character; column holding the mouse ID. Default
+\code{"mouse_ID"} (\code{facs_read_wsp()} keyword); use \code{"mouse_id"}
+(with \code{restim_col = "condition"}) for \code{db_query_facs()} output.
+The output keeps the column under this name.}
 }
 \value{
 A tibble with one row per \code{mouse_ID} x \code{tissue} x

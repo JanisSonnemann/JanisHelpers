@@ -261,12 +261,18 @@ facs_calc_count_per_g <- function(
 # columns (mouse_ID, tissue, population, plus any auto-detected passthrough
 # columns) is attached as an "id_cols" attribute for callers to use when
 # computing which pivoted columns are stimulation conditions.
-calc_restim_proportions_ <- function(data, ref_pop, restim_col, ref_level, pseudocount) {
+calc_restim_proportions_ <- function(data, ref_pop, restim_col, ref_level, pseudocount,
+                                     mouse_col = "mouse_ID") {
   if (!restim_col %in% names(data)) {
     stop(glue::glue("`restim_col` ('{restim_col}') not found in `data`."))
   }
+  if (!mouse_col %in% names(data)) {
+    stop(glue::glue(
+      "`mouse_col` ('{mouse_col}') not found in `data` -- use mouse_col = \"mouse_id\" for db_query_facs() output."
+    ))
+  }
 
-  group_cols <- c("mouse_ID", "tissue", restim_col)
+  group_cols <- c(mouse_col, "tissue", restim_col)
 
   ref_counts <- data |>
     dplyr::filter(population == ref_pop, metric == "count") |>
@@ -279,7 +285,7 @@ calc_restim_proportions_ <- function(data, ref_pop, restim_col, ref_level, pseud
   if (nrow(dup_combos) > 0L) {
     dup_desc <- purrr::pmap_chr(dup_combos[group_cols], function(...) paste(..., sep = "/"))
     stop(glue::glue(
-      "ref_pop '{ref_pop}' matches more than one population for mouse_ID/tissue/{restim_col} combo(s): ",
+      "ref_pop '{ref_pop}' matches more than one population for {mouse_col}/tissue/{restim_col} combo(s): ",
       "{paste(dup_desc, collapse = ', ')}. Leaf population name is ambiguous."
     ))
   }
@@ -295,24 +301,27 @@ calc_restim_proportions_ <- function(data, ref_pop, restim_col, ref_level, pseud
   if (nrow(missing_ref_pop) > 0L) {
     missing_desc <- purrr::pmap_chr(missing_ref_pop[group_cols], function(...) paste(..., sep = "/"))
     warning(glue::glue(
-      "ref_pop '{ref_pop}' not found for mouse_ID/tissue/{restim_col} combo(s): ",
+      "ref_pop '{ref_pop}' not found for {mouse_col}/tissue/{restim_col} combo(s): ",
       "{paste(missing_desc, collapse = ', ')}. Result filled with NA."
     ))
   }
 
   id_candidates <- setdiff(
     names(data),
-    c("mouse_ID", "tissue", restim_col, "population", "population_full_path", "metric", "value", "file_name")
+    # population_order is a per-population attribute (db_query_facs()), never
+    # a per-mouse passthrough, even when only one population is left
+    c(mouse_col, "tissue", restim_col, "population", "population_full_path",
+      "population_order", "metric", "value", "file_name")
   )
   is_constant_ <- function(col) {
     n_distinct_per_group <- proportions |>
-      dplyr::group_by(mouse_ID, tissue) |>
+      dplyr::group_by(dplyr::across(dplyr::all_of(c(mouse_col, "tissue")))) |>
       dplyr::summarise(n_distinct = dplyr::n_distinct(.data[[col]]), .groups = "drop") |>
       dplyr::pull(n_distinct)
     all(n_distinct_per_group == 1L)
   }
   passthrough_cols <- id_candidates[purrr::map_lgl(id_candidates, is_constant_)]
-  id_cols <- c("mouse_ID", "tissue", "population", passthrough_cols)
+  id_cols <- c(mouse_col, "tissue", "population", passthrough_cols)
 
   wide <- proportions |>
     tidyr::pivot_wider(
@@ -328,11 +337,11 @@ calc_restim_proportions_ <- function(data, ref_pop, restim_col, ref_level, pseud
   missing_ref_level <- dplyr::filter(wide, is.na(.data[[ref_level]]))
   if (nrow(missing_ref_level) > 0L) {
     missing_desc <- purrr::pmap_chr(
-      missing_ref_level[c("mouse_ID", "tissue")],
+      missing_ref_level[c(mouse_col, "tissue")],
       function(...) paste(..., sep = "/")
     )
     warning(glue::glue(
-      "ref_level '{ref_level}' missing for mouse_ID/tissue combo(s): ",
+      "ref_level '{ref_level}' missing for {mouse_col}/tissue combo(s): ",
       "{paste(unique(missing_desc), collapse = ', ')}. Result filled with NA."
     ))
   }
@@ -364,6 +373,10 @@ calc_restim_proportions_ <- function(data, ref_pop, restim_col, ref_level, pseud
 #' @param pseudocount numeric; added to every \code{value} before computing
 #'   the \code{ref_pop} proportion, avoiding \code{log2(0)}. Default
 #'   \code{0.5}.
+#' @param mouse_col character; column holding the mouse ID. Default
+#'   \code{"mouse_ID"} (\code{facs_read_wsp()} keyword); use \code{"mouse_id"}
+#'   (with \code{restim_col = "condition"}) for \code{db_query_facs()} output.
+#'   The output keeps the column under this name.
 #'
 #' @returns A tibble with one row per \code{mouse_ID} x \code{tissue} x
 #'   \code{population} x non-reference \code{restim_col} level: columns
@@ -390,9 +403,11 @@ facs_calc_log2fc <- function(
     ref_pop,
     restim_col = "restimulation",
     ref_level = "unstim",
-    pseudocount = 0.5
+    pseudocount = 0.5,
+    mouse_col = "mouse_ID"
 ) {
-  wide <- calc_restim_proportions_(data, ref_pop, restim_col, ref_level, pseudocount)
+  wide <- calc_restim_proportions_(data, ref_pop, restim_col, ref_level, pseudocount,
+                                   mouse_col)
   id_cols <- attr(wide, "id_cols")
   stim_cols <- setdiff(names(wide), c(id_cols, ref_level))
 
@@ -434,6 +449,10 @@ facs_calc_log2fc <- function(
 #'   \code{facs_calc_log2fc()}, subtraction has no divide-by-zero/log-of-zero
 #'   failure mode, so no pseudocount is needed unless comparable proportions
 #'   to a \code{facs_calc_log2fc()} call are desired.
+#' @param mouse_col character; column holding the mouse ID. Default
+#'   \code{"mouse_ID"} (\code{facs_read_wsp()} keyword); use \code{"mouse_id"}
+#'   (with \code{restim_col = "condition"}) for \code{db_query_facs()} output.
+#'   The output keeps the column under this name.
 #'
 #' @returns A tibble with one row per \code{mouse_ID} x \code{tissue} x
 #'   \code{population} x non-reference \code{restim_col} level: columns
@@ -460,9 +479,11 @@ facs_calc_diff <- function(
     ref_pop,
     restim_col = "restimulation",
     ref_level = "unstim",
-    pseudocount = 0
+    pseudocount = 0,
+    mouse_col = "mouse_ID"
 ) {
-  wide <- calc_restim_proportions_(data, ref_pop, restim_col, ref_level, pseudocount)
+  wide <- calc_restim_proportions_(data, ref_pop, restim_col, ref_level, pseudocount,
+                                   mouse_col)
   id_cols <- attr(wide, "id_cols")
   stim_cols <- setdiff(names(wide), c(id_cols, ref_level))
 

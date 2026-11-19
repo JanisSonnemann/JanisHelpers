@@ -525,6 +525,44 @@ test_that("facs_calc_diff() warns and fills NA when ref_level is missing for a m
   expect_true(is.na(result$diff))
 })
 
+# ── DB-shaped input (db_query_facs() column names) ───────────────────────────
+
+db_log2fc_data <- log2fc_data |>
+  dplyr::rename(mouse_id = mouse_ID, condition = restimulation) |>
+  dplyr::select(!file_name) |>
+  dplyr::mutate(
+    experiment_code = "26-1", collected_at = as.Date("2026-06-16"),
+    assay_name = "mpo-restim", wsp_root = "MPO-Restim_26-1",
+    condition_keyword = "restimulation", source_file = "x.wsp",
+    imported_at = as.POSIXct("2026-11-19 08:00:00"),
+    population_order = ifelse(population == "CD3+", 1L, 2L),
+    group = "irrel"
+  )
+
+test_that("facs_calc_log2fc runs on DB-shaped data with mouse_col/restim_col", {
+  ref <- facs_calc_log2fc(log2fc_data, ref_pop = "CD3+")
+  out <- facs_calc_log2fc(db_log2fc_data, ref_pop = "CD3+",
+                          mouse_col = "mouse_id", restim_col = "condition")
+  expect_equal(out$log2fc, ref$log2fc)
+  expect_equal(out$mouse_id, "m1")
+  expect_equal(out$group, "irrel")
+  expect_false("population_order" %in% names(out))
+})
+
+test_that("facs_calc_diff runs on DB-shaped data with mouse_col/restim_col", {
+  ref <- facs_calc_diff(log2fc_data, ref_pop = "CD3+")
+  out <- facs_calc_diff(db_log2fc_data, ref_pop = "CD3+",
+                        mouse_col = "mouse_id", restim_col = "condition")
+  expect_equal(out$diff, ref$diff)
+})
+
+test_that("facs_calc_log2fc errors naming a missing mouse_col", {
+  expect_error(
+    facs_calc_log2fc(db_log2fc_data, ref_pop = "CD3+", restim_col = "condition"),
+    "mouse_ID"
+  )
+})
+
 # ── facs_order_populations ───────────────────────────────────────────────────
 
 db_shaped <- function(root, pops, order) {
