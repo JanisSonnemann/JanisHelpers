@@ -30,11 +30,12 @@ matched <- JanisHelpers:::match_sample_exclusions_(prep$data, params$exclusions,
 excluded_keys <- JanisHelpers:::qc_excluded_keys_(matched$excluded_samples, end_dates)
 means <- JanisHelpers:::elisa_qc_means_(data)
 scored <- JanisHelpers:::qc_table_score_(means, "analyte", group_col, log_scale)
+bar_h <- JanisHelpers:::elisa_qc_bar_height_(length(unique(data$analyte)))
 or_unset <- function(x) if (is.null(x)) "not set" else paste0("`", x, "`")
 
-emit_plot <- function(p) {
+emit_plot <- function(p, h = NULL) {
   if (is.null(p)) return(invisible(NULL))
-  h <- JanisHelpers:::qc_fig_height_(length(unique(p$data$.row)))
+  if (is.null(h)) h <- JanisHelpers:::qc_fig_height_(length(unique(p$data$.row)))
   env <- new.env()
   env$p <- p
   wd <- getwd()
@@ -132,29 +133,42 @@ if (nrow(matched$unmatched) > 0) {
 ## Empty values
 
 Empty (`NA`) values are out-of-range readings or missing measurements.
+Bars count replicate values per analyte.
 
 ```{r empty, results = "asis"}
 empty <- JanisHelpers:::qc_table_empty_(data, "analyte")
 cat(sum(empty$n_empty), " of ", nrow(data), " values empty.\n\n", sep = "")
+emit_plot(JanisHelpers:::elisa_qc_empty_plot_(data), bar_h)
 print(knitr::kable(empty))
 ```
 
 ## Range
 
 OOR = reported out of range by the instrument software; LLOQ / ULOQ = numeric
-values below / above the quantification limits.
+values below / above the quantification limits. Bars count replicate values
+per analyte.
 
-```{r range}
-knitr::kable(JanisHelpers:::elisa_qc_range_(data))
+```{r range, results = "asis"}
+emit_plot(JanisHelpers:::elisa_qc_range_plot_(data), bar_h)
+print(knitr::kable(JanisHelpers:::elisa_qc_range_(data)))
 ```
 
 ## Replicate agreement
 
+CV = sd / mean x 100 of the numeric replicates of each sample x analyte;
+labelled points lie above the `r qc$max_cv`% limit (dashed line).
+
 ```{r replicates, results = "asis"}
+cv <- JanisHelpers:::elisa_qc_cv_(data)
+p <- JanisHelpers:::elisa_qc_cv_plot_(cv, qc$max_cv)
 reps <- JanisHelpers:::elisa_qc_replicates_(data, qc$max_cv)
-if (nrow(reps) == 0) {
+if (is.null(p)) {
+  note("No sample has two or more numeric replicates.")
+} else if (nrow(reps) == 0) {
+  emit_plot(p, 4)
   cat("All replicate CVs are within ", qc$max_cv, "%.\n", sep = "")
 } else {
+  emit_plot(p, 4)
   cat("**Warning: replicate CV above ", qc$max_cv, "%.**\n\n", sep = "")
   reps$cv <- round(reps$cv, 1)
   print(knitr::kable(reps))
@@ -173,28 +187,8 @@ if (is.null(group_col)) {
 }
 ```
 
-### By group
-
 ```{r outliers, results = "asis"}
 emit_plot(JanisHelpers:::qc_table_plot_(scored, "analyte", group_col, log_scale))
-```
-
-### By batch
-
-```{r batch, results = "asis"}
-if (is.null(batch_col)) {
-  note("Batch column not set -- rerun the prep script with `batch_col`.")
-} else {
-  emit_plot(JanisHelpers:::qc_table_plot_(scored, "analyte", group_col,
-                                          log_scale, batch_col = batch_col))
-}
-```
-
-### Over time
-
-```{r time, results = "asis"}
-p <- JanisHelpers:::qc_table_time_plot_(means, "analyte", group_col)
-if (is.null(p)) note("Fewer than two sampling dates -- no time course.") else emit_plot(p)
 ```
 
 ## Flagged samples

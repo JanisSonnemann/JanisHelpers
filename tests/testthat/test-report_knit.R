@@ -235,6 +235,10 @@ test_that("report_knit_elisa_qc renders into qc/ and names the sections", {
               "M7", "M9")) {
     expect_match(html, s, fixed = TRUE)
   }
+  expect_no_match(html, "By batch", fixed = TRUE)
+  expect_no_match(html, "Over time", fixed = TRUE)
+  # empty-values, range, CV and outlier plots
+  expect_gte(lengths(regmatches(html, gregexpr("<img src=\"data:image", html))), 4L)
 })
 
 test_that("report_knit_elisa_qc resolves end dates and warns on duplicates", {

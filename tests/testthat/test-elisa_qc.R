@@ -29,6 +29,63 @@ test_that("elisa_qc_replicates_ lists samples above the CV threshold", {
   expect_equal(nrow(elisa_qc_replicates_(d, max_cv = 20)), 0L)
 })
 
+test_that("elisa_qc_range_class_ classifies every replicate value", {
+  d <- fixture_data()
+  d$value[d$mouse_ID == "M2" & d$analyte == "IL-2" & d$replicate == 2] <- NA
+  d$value[d$mouse_ID == "M2" & d$analyte == "IL-2" & d$replicate == 1] <- 300
+  r <- elisa_qc_range_class_(d)
+  expect_s3_class(r$range, "factor")
+  expect_equal(levels(r$range),
+               c("OOR<", "< LLOQ", "in range", "> ULOQ", "OOR>", "empty"))
+  il2 <- r[r$analyte == "IL-2", ]
+  expect_equal(as.character(il2$range),
+               c("OOR<", "< LLOQ", "> ULOQ", "empty", "< LLOQ"))
+  expect_true(all(r$range[r$analyte == "TNFa"] == "< LLOQ"))
+  expect_true(all(r$timepoint %in% c("end", "2026-05-06")))
+})
+
+test_that("elisa_qc_empty_plot_ stacks value / OOR / missing per analyte", {
+  d <- fixture_data()
+  d$value[d$mouse_ID == "M2" & d$analyte == "TNFa" & d$replicate == 1] <- NA
+  p <- elisa_qc_empty_plot_(d)
+  expect_s3_class(p, "ggplot")
+  n <- p$data |>
+    dplyr::summarise(n = sum(n), .by = c(analyte, status))
+  expect_equal(n$n[n$analyte == "IL-2" & n$status == "empty: OOR"], 1L)
+  expect_equal(n$n[n$analyte == "TNFa" & n$status == "empty: missing"], 1L)
+  expect_equal(sum(p$data$n), nrow(d))
+})
+
+test_that("elisa_qc_range_plot_ counts range classes per panel", {
+  d <- fixture_data()
+  p <- elisa_qc_range_plot_(d)
+  expect_s3_class(p, "ggplot")
+  expect_equal(sum(p$data$n), nrow(d))
+  il2_end <- p$data[p$data$analyte == "IL-2" & p$data$timepoint == "end", ]
+  expect_equal(il2_end$n[il2_end$range == "OOR<"], 1L)
+  expect_equal(il2_end$n[il2_end$range == "in range"], 2L)
+})
+
+test_that("elisa_qc_cv_ returns every sample with >= 2 numeric replicates", {
+  d <- fixture_data()
+  cv <- elisa_qc_cv_(d)
+  # M1 x IL-2 x end has one numeric replicate; dated samples have one
+  expect_equal(nrow(cv), 3L)
+  expect_setequal(paste(cv$mouse_ID, cv$analyte),
+                  c("M1 TNFa", "M2 TNFa", "M2 IL-2"))
+  expect_equal(cv$cv[cv$mouse_ID == "M1" & cv$analyte == "TNFa"],
+               stats::sd(c(4.2, 3.9)) / mean(c(4.2, 3.9)) * 100)
+})
+
+test_that("elisa_qc_cv_plot_ labels only samples above the CV limit", {
+  d <- fixture_data()
+  p <- elisa_qc_cv_plot_(elisa_qc_cv_(d), max_cv = 5)
+  expect_s3_class(p, "ggplot")
+  expect_equal(p$data$.label[p$data$.label != ""], "M1")
+  expect_true(all(p$data$.label[p$data$cv <= 5] == ""))
+  expect_null(elisa_qc_cv_plot_(elisa_qc_cv_(d[d$replicate == 1, ]), 20))
+})
+
 test_that("elisa_qc_means_ averages replicates per sample x analyte", {
   m <- elisa_qc_means_(fixture_data())
   v <- m$value[m$mouse_ID == "M1" & m$analyte == "TNFa" & is.na(m$collected_at)]
