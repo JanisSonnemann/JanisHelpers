@@ -143,3 +143,61 @@ test_that("works on a read-only connection", {
   dat <- load_quiet_(ro, "26-1")
   expect_equal(nrow(dat$meta), 3)
 })
+
+# Import log + exclusions on top of seed_load_fixture():
+# 26-1-1 excluded mouse-wide in the current import of all four units;
+# 26-1-2 excluded mouse-wide only in a superseded overview import, and only
+# for kidney in the current imports.
+seed_exclusions_ <- function(con) {
+  log_ <- function(domain, unit) {
+    JanisHelpers:::write_import_log_(con, domain, "26-1", unit,
+                                     source_file = paste0(unit, ".x"), rows_written = 1)
+  }
+  old <- log_("facs", "overview-26-1")
+  ids <- c(
+    log_("facs", "overview-26-1"), log_("facs", "Treg_26-1"),
+    log_("elisa", "anti-mpo-titer_26-1_long"), log_("histo", "histo_26-1")
+  )
+  ex <- function(id, mouse, tissue = NA_character_) {
+    DBI::dbExecute(con, "INSERT INTO import_exclusions
+      (import_id, mouse_id, tissue, reason, decided_on, n_files_matched)
+      VALUES (?, ?, ?, ?, ?, 1)",
+      params = list(id, mouse, tissue, "bad", as.Date("2026-11-17")))
+  }
+  for (id in ids) ex(id, "26-1-1")
+  ex(old, "26-1-2")
+  for (id in ids) ex(id, "26-1-2", "kidney")
+  invisible(con)
+}
+
+test_that("exclusions lists current-import rows only", {
+  con <- local_load_db(); seed_exclusions_(con)
+  dat <- load_quiet_(con, "26-1")
+  expect_named(dat$exclusions, c("import_unit", "mouse_id", "tissue", "panel",
+    "condition", "file_name", "collected_at", "reason", "decided_on"))
+  expect_equal(nrow(dat$exclusions), 8)
+  expect_equal(sum(dat$exclusions$mouse_id == "26-1-1"), 4)
+  expect_true(all(dat$exclusions$tissue[dat$exclusions$mouse_id == "26-1-2"] == "kidney"))
+  expect_setequal(unique(dat$exclusions$import_unit),
+    c("overview-26-1", "Treg_26-1", "anti-mpo-titer_26-1_long", "histo_26-1"))
+})
+
+test_that("keep_excluded = FALSE drops mice excluded mouse-wide everywhere", {
+  con <- local_load_db(); seed_exclusions_(con)
+  expect_message(dat <- db_load_experiment(con, "26-1"), "26-1-1")
+  expect_false("26-1-1" %in% dat$meta$mouse_id)
+  expect_true("26-1-2" %in% dat$meta$mouse_id)
+})
+
+test_that("keep_excluded = TRUE keeps all subjects", {
+  con <- local_load_db(); seed_exclusions_(con)
+  dat <- load_quiet_(con, "26-1", keep_excluded = TRUE)
+  expect_equal(nrow(dat$meta), 3)
+})
+
+test_that("no import_log rows -> empty exclusions, all mice kept", {
+  con <- local_load_db()
+  dat <- load_quiet_(con, "26-1")
+  expect_equal(nrow(dat$exclusions), 0)
+  expect_equal(nrow(dat$meta), 3)
+})

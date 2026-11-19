@@ -171,17 +171,41 @@ unit_names_ <- function(units, experiment) {
   out
 }
 
-# Internal: exclusion rows of the experiment's current imports (Task 3).
+# Internal: distinct exclusion rows of the experiment's current imports
+# (current = latest import_id per import unit in import_log).
 load_exclusions_ <- function(con, experiment) {
-  tibble::tibble(
-    import_unit = character(), mouse_id = character(), tissue = character(),
-    panel = character(), condition = character(), file_name = character(),
-    collected_at = as.Date(character()), reason = character(),
-    decided_on = as.Date(character())
-  )
+  current <- dplyr::tbl(con, "import_log") |>
+    dplyr::filter(.data$experiment_code == !!experiment) |>
+    dplyr::group_by(.data$import_unit) |>
+    dplyr::filter(.data$import_id == max(.data$import_id, na.rm = TRUE)) |>
+    dplyr::ungroup() |>
+    dplyr::select("import_id", "import_unit")
+  dplyr::tbl(con, "import_exclusions") |>
+    dplyr::inner_join(current, by = "import_id") |>
+    dplyr::select(
+      "import_unit", "mouse_id", "tissue", "panel", "condition", "file_name",
+      "collected_at", "reason", "decided_on"
+    ) |>
+    dplyr::distinct() |>
+    dplyr::collect() |>
+    dplyr::mutate(
+      collected_at = as.Date(.data$collected_at),
+      decided_on = as.Date(.data$decided_on)
+    ) |>
+    dplyr::arrange(.data$import_unit, .data$mouse_id)
 }
 
-# Internal: mice excluded mouse-wide in every import unit (Task 3).
+# Internal: mice with a mouse-wide exclusion (no tissue / panel / condition /
+# file / date restriction) in every one of `units`.
 fully_excluded_mice_ <- function(exclusions, units) {
-  character()
+  if (length(units) == 0 || nrow(exclusions) == 0) return(character())
+  mouse_wide <- exclusions |>
+    dplyr::filter(
+      is.na(.data$tissue), is.na(.data$panel), is.na(.data$condition),
+      is.na(.data$file_name), is.na(.data$collected_at)
+    ) |>
+    dplyr::distinct(mouse_id, import_unit) |>
+    dplyr::filter(import_unit %in% units) |>
+    dplyr::count(mouse_id)
+  sort(mouse_wide$mouse_id[mouse_wide$n == length(units)])
 }
