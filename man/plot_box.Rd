@@ -10,7 +10,7 @@ plot_box(
   y,
   fill,
   scale = c("linear", "percent", "log"),
-  colors = NULL
+  colors = getOption("JanisHelpers.group_colors")
 )
 }
 \arguments{
@@ -24,7 +24,10 @@ fill (e.g. treatment group).}
 positive -- no offset is added here, see \code{\link[=plot_population]{plot_population()}}).}
 
 \item{colors}{Optional named character vector of fill colours
-(\code{c(MPO409 = "#00BFC4", irrel = "#F8766D")}); \code{NULL} = ggplot2 default.}
+(\code{c(MPO409 = "#00BFC4", irrel = "#F8766D")}). Defaults to the option
+\code{JanisHelpers.group_colors}, so a document can set its group colours
+once with \code{options(JanisHelpers.group_colors = c(...))}. \code{NULL} (option
+unset, or passed explicitly) = ggplot2 default fills.}
 }
 \value{
 A \code{ggplot} object.

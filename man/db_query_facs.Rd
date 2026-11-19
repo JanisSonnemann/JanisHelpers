@@ -23,5 +23,7 @@ instead of surrogate IDs. Call \code{\link[dplyr:collect]{dplyr::collect()}} to 
 order (the prep's \code{\link[=facs_select_populations]{facs_select_populations()}} order); \code{NA} for imports
 made before the column existed. Positions are only comparable within one
 \code{wsp_root}. After collecting, \code{\link[=facs_order_populations]{facs_order_populations()}} turns
-\code{population} back into an ordered factor.
+\code{population} back into an ordered factor. On a database file created
+before the column existed and opened read-only (so \code{\link[=db_connect]{db_connect()}} could not
+add it), \code{population_order} is returned as all \code{NA}.
 }

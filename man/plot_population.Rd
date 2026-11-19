@@ -14,7 +14,7 @@ plot_population(
   facet = population,
   scale = c("linear", "percent", "log"),
   p_val = FALSE,
-  colors = NULL,
+  colors = getOption("JanisHelpers.group_colors"),
   pseudocount = 1
 )
 }
@@ -41,7 +41,8 @@ plot.}
 \item{p_val}{\code{TRUE} adds \code{ggpubr::stat_compare_means()} p-values (Wilcoxon
 for two groups, Kruskal-Wallis for more) per facet.}
 
-\item{colors}{Optional named fill colours, see \code{\link[=plot_box]{plot_box()}}.}
+\item{colors}{Optional named fill colours; defaults to the option
+\code{JanisHelpers.group_colors}, see \code{\link[=plot_box]{plot_box()}}.}
 
 \item{pseudocount}{Number added to \code{value} for \code{scale = "log"}. Default 1.}
 }

@@ -1,0 +1,5 @@
+name: Experiment analysis (lab DB)
+description: >
+   Exploration doc for one experiment, loaded from the lab DuckDB with
+   db_load_experiment() into one list (dat) plus population vectors (pops).
+create_dir: FALSE

@@ -1,0 +1,102 @@
+---
+title: "Quick analysis - <experiment>"
+author: "Janis Sonnemann"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: yes
+    toc_float: true
+    code_folding: hide
+  pdf_document:
+    toc: yes
+    toc_depth: 3
+editor_options:
+  chunk_output_type: console
+knit: (function(input, ...) {JanisHelpers::report_knit_exp(input, format = "html_document")})
+---
+
+```{r setup, include = knitr::is_html_output(), error = FALSE, message = FALSE, warning = FALSE}
+# Save this file in the experiment's analysis/ folder before knitting.
+# Quick route straight from .wsp files -- for data not (yet) in the lab DB.
+# Builds the same `dat` / `pops` shape (mouse_id, condition, group) as the
+# lab-DB template, so plot chunks can move between the two.
+
+####DO NOT CHANGE----
+knitr::opts_chunk$set(
+  fig.path = paste0("output/", xfun::sans_ext(knitr::current_input()), "/figs/", Sys.Date(), "/"),
+  dev = "png",
+  dpi = 300,
+  warning = FALSE,
+  message = FALSE,
+  fig.width = 10,
+  fig.height = 10,
+  # hides code in pdf file
+  echo = knitr::is_html_output()
+)
+####----
+
+library(here)
+library(tidyverse)
+library(JanisHelpers)
+
+# group colours, used by plot_box() / plot_population() / plot_paired()
+options(JanisHelpers.group_colors = c(treated = "#00BFC4", control = "#F8766D"))
+
+dat <- local({
+  group_levels <- c("treated", "control")
+  meta <- meta_read(here("data", "<experiment folder>", "meta", "meta_<experiment>.xlsx"))
+  calc_meta <- meta_clean(meta)
+  subjects <- meta$meta |>
+    mutate(group = factor(group, levels = group_levels))
+
+  overview <- facs_read_wsp(
+    path = here("data", "<experiment folder>", "raw", "FACS", "<overview>.wsp"),
+    group = "Samples",
+    keywords = c("mouse_ID", "tissue")
+  )$data |>
+    facs_select_populations(populations = c("live_CD45+", "CD4+", "CD8+")) |>
+    facs_calc_pct_of(ref_pop = "live_CD45+") |>
+    facs_calc_count_per_g(
+      meta = calc_meta,
+      vol_total = "total_vol",
+      vol_stained = "ov_vol",
+      vol_resuspended = "resuspended_vol",
+      vol_measured = "measured_vol",
+      organ_piece_weight = "facs_weight"
+    ) |>
+    meta_annotate(select(subjects, mouse_ID, group)) |>
+    # DB column names, so chunks match the lab-DB template; for a restim
+    # panel also rename the keyword column: condition = restimulation
+    rename(mouse_id = mouse_ID)
+
+  list(
+    meta = rename(subjects, mouse_id = mouse_ID),
+    overview = overview
+  )
+})
+
+# Derived data goes back into dat, e.g. dat$restim_fc <- ...
+
+# Population selections used in the plots
+pops <- list(
+  # t_cells = c("CD4+", "CD8+")
+)
+```
+
+# Overview
+
+```{r overview}
+dat$meta |>
+  count(group, sex)
+```
+
+# FACS
+
+```{r facs-example}
+# dat$overview |>
+#   plot_population(
+#     populations = pops$t_cells, metric = "count_per_g",
+#     tissues = "kidney", x = group, scale = "log", p_val = TRUE
+#   ) +
+#   labs(title = "Kidney - infiltration", x = "", y = "cells per g")
+```

@@ -1,0 +1,104 @@
+---
+title: "Analysis - <experiment>"
+author: "Janis Sonnemann"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: yes
+    toc_float: true
+    code_folding: hide
+  pdf_document:
+    toc: yes
+    toc_depth: 3
+editor_options:
+  chunk_output_type: console
+knit: (function(input, ...) {JanisHelpers::report_knit_exp(input, format = "html_document")})
+---
+
+```{r setup, include = knitr::is_html_output(), error = FALSE, message = FALSE, warning = FALSE}
+# Save this file in the experiment's analysis/ folder before knitting.
+
+####DO NOT CHANGE----
+knitr::opts_chunk$set(
+  fig.path = paste0("output/", xfun::sans_ext(knitr::current_input()), "/figs/", Sys.Date(), "/"),
+  dev = "png",
+  dpi = 300,
+  warning = FALSE,
+  message = FALSE,
+  fig.width = 10,
+  fig.height = 10,
+  # hides code in pdf file
+  echo = knitr::is_html_output()
+)
+####----
+
+library(tidyverse)
+library(JanisHelpers)
+
+# group colours, used by plot_box() / plot_population() / plot_paired()
+options(JanisHelpers.group_colors = c(treated = "#00BFC4", control = "#F8766D"))
+
+# Everything loaded from the DB lives in one list. The connection is opened
+# read-only and closed again inside local(), so only `dat` is left behind.
+dat <- local({
+  db_path <- "~/databases/<project>/<project>.duckdb"
+  con <- DBI::dbConnect(duckdb::duckdb(), path.expand(db_path), read_only = TRUE)
+  on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  db_load_experiment(
+    con,
+    experiment = "<experiment code>",
+    group_levels = c("treated", "control"),
+    # rename long import units: c(new_name = "import_unit")
+    names = NULL
+  )
+})
+# names(dat): meta, exclusions, then one tibble per FACS panel / ELISA / histology file
+
+# Derived data goes back into dat, e.g.:
+# dat$restim_fc <- dat$restim |>
+#   facs_calc_log2fc(ref_pop = "CD4+", restim_col = "condition",
+#                    ref_level = "unstim", mouse_col = "mouse_id")
+
+# Population selections used in the plots
+pops <- list(
+  # t_cells = c("CD4+", "CD8+")
+)
+```
+
+# Overview
+
+```{r overview}
+dat$meta |>
+  count(group, sex)
+
+dat$exclusions |>
+  distinct(mouse_id, reason)
+```
+
+# FACS
+
+```{r facs-example}
+# dat$overview |>
+#   plot_population(
+#     populations = pops$t_cells, metric = "count_per_g",
+#     tissues = "kidney", x = group, scale = "log", p_val = TRUE
+#   ) +
+#   labs(title = "Kidney - infiltration", x = "", y = "cells per g")
+```
+
+# ELISA
+
+```{r elisa-example}
+# dat$titer |>
+#   plot_box(x = factor(collected_at), y = value, fill = group, scale = "log") +
+#   labs(x = "", y = "titer")
+```
+
+# Histology
+
+```{r histo-example}
+# dat$histo |>
+#   filter(metric == "pct_crescents") |>
+#   plot_box(x = group, y = value, fill = group) +
+#   labs(x = "", y = "% crescents")
+```

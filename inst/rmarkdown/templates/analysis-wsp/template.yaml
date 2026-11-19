@@ -1,0 +1,5 @@
+name: Experiment analysis (quick, .wsp)
+description: >
+   Quick exploration doc straight from FlowJo workspaces and the meta
+   workbook, building the same dat / pops lists as the lab-DB template.
+create_dir: FALSE

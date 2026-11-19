@@ -13,7 +13,7 @@ plot_paired(
   facet = population,
   y = value,
   scale = c("percent", "linear", "log"),
-  colors = NULL
+  colors = getOption("JanisHelpers.group_colors")
 )
 }
 \arguments{
@@ -31,7 +31,8 @@ plot, with the columns named below.}
 \item{scale}{\code{"percent"} (default, for 0-1 fractions), \code{"linear"} or
 \code{"log"}, see \code{\link[=plot_box]{plot_box()}}.}
 
-\item{colors}{Optional named fill colours, see \code{\link[=plot_box]{plot_box()}}.}
+\item{colors}{Optional named fill colours; defaults to the option
+\code{JanisHelpers.group_colors}, see \code{\link[=plot_box]{plot_box()}}.}
 }
 \value{
 A \code{ggplot} object.
