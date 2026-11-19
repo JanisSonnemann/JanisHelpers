@@ -12,13 +12,20 @@ NULL
 #' order (the prep's [facs_select_populations()] order); `NA` for imports
 #' made before the column existed. Positions are only comparable within one
 #' `wsp_root`. After collecting, [facs_order_populations()] turns
-#' `population` back into an ordered factor.
+#' `population` back into an ordered factor. On a database file created
+#' before the column existed and opened read-only (so [db_connect()] could not
+#' add it), `population_order` is returned as all `NA`.
 #'
 #' @param con A `DBI` connection from [db_connect()].
 #' @returns A lazy `tbl` -- filter/collect as needed.
 #' @export
 db_query_facs <- function(con) {
-  dplyr::tbl(con, "facs_measurements") |>
+  measurements <- dplyr::tbl(con, "facs_measurements")
+  if (!"population_order" %in% DBI::dbListFields(con, "facs_measurements")) {
+    measurements <- measurements |>
+      dplyr::mutate(population_order = dbplyr::sql("CAST(NULL AS INTEGER)"))
+  }
+  measurements |>
     dplyr::left_join(dplyr::tbl(con, "facs_stains"), by = "facs_stain_id") |>
     dplyr::left_join(dplyr::tbl(con, "samples"), by = "sample_id") |>
     dplyr::left_join(dplyr::tbl(con, "subjects"), by = "subject_id") |>

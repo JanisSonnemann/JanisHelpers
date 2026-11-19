@@ -104,3 +104,26 @@ test_that("db_query_subjects returns one row per mouse with group", {
   expect_equal(nrow(all), 2)
   expect_false("treatment_group" %in% names(all))
 })
+
+test_that("db_query_facs falls back when population_order is missing (read-only)", {
+  path <- tempfile(fileext = ".duckdb")
+  con <- db_connect(path)
+  seed_minimal_fixture(con)
+  db_write_facs(
+    con,
+    tibble::tibble(PopulationFullPath = "root/CD4+", Population = "CD4+",
+                   metric = "count", value = 1),
+    mouse_id = "25-7-1", tissue = "spleen", assay_name = "overview",
+    wsp_root = "overview_25-7", source_file = "25-7/overview_25-7_20261112.wsp"
+  )
+  DBI::dbExecute(con, "ALTER TABLE facs_measurements DROP COLUMN population_order")
+  DBI::dbDisconnect(con, shutdown = TRUE)
+
+  ro <- DBI::dbConnect(duckdb::duckdb(), path, read_only = TRUE)
+  withr::defer(DBI::dbDisconnect(ro, shutdown = TRUE))
+  res <- dplyr::collect(db_query_facs(ro))
+  expect_true("population_order" %in% names(res))
+  expect_true(all(is.na(res$population_order)))
+  expect_type(res$population_order, "integer")
+  expect_equal(res$population, "CD4+")
+})
