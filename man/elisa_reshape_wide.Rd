@@ -55,8 +55,11 @@ text) are timepoints; columns named like \code{end_labels} (any case) are
 the end-point. Optional \code{analyte} / \code{tissue} columns (any case)
 give each row's analyte and tissue; the arguments of the same name fill a
 missing column or empty cells. All other columns are dropped (listed in a
-message). Repeated mouse x tissue x analyte rows are replicates. Rows
-without an ID are dropped. Cell values are passed through unchanged, so
+message). Date headers may be Excel dates (a time part is ignored),
+\code{YYYY-MM-DD} or \code{dd.mm.yyyy} text. Repeated mouse x tissue x
+analyte rows are replicates. Empty cells give no row (no sample is
+created for an unsampled date). Rows without an ID are dropped, with a
+warning if they hold values. Cell values are passed through unchanged, so
 \code{elisa_read_curated()} still validates them.
 
 The output is only written when it is missing or its content would

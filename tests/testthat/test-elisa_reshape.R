@@ -10,10 +10,10 @@ test_that("single analyte: date headers become rows, final is end-point, extras 
   r <- elisa_reshape_wide_table_(wide_raw_(), analyte = "anti-MPO-titer")
   expect_named(r$values, c("mouse_ID", "date", "anti-MPO-titer"))
   expect_equal(r$values$date, as.Date(c("2026-05-05", "2026-05-05", "2026-05-19",
-                                        "2026-05-19", NA, NA)))
-  expect_equal(r$values$mouse_ID, rep(c("26-1-1", "26-1-2"), 3))
+                                        NA, NA)))
+  expect_equal(r$values$mouse_ID, c("26-1-1", "26-1-2", "26-1-1", "26-1-1", "26-1-2"))
   expect_equal(r$values$`anti-MPO-titer`,
-               c("2.6658", "2.6729", "2.6712", NA, "2.5228", "OOR<"))
+               c("2.6658", "2.6729", "2.6712", "2.5228", "OOR<"))
   expect_setequal(r$dropped, c("ID", "group"))
   expect_null(r$range)
 })
@@ -96,9 +96,33 @@ test_that("default id_col accepts mouse_ID or Lab ID (first found)", {
                "mouse_ID, Lab ID")
 })
 
-test_that("rows without an ID are dropped", {
+test_that("rows without an ID are dropped (silently when empty)", {
   raw <- tibble::tibble(`Lab ID` = c("m1", NA, " "), `46147` = c("1", "2", "3"))
-  r <- elisa_reshape_wide_table_(raw, analyte = "a")
+  expect_warning(r <- elisa_reshape_wide_table_(raw, analyte = "a"), "2 row")
+  expect_equal(r$values$mouse_ID, "m1")
+  pad <- tibble::tibble(`Lab ID` = c("m1", NA), `46147` = c("1", NA))
+  expect_no_warning(elisa_reshape_wide_table_(pad, analyte = "a"))
+})
+
+test_that("empty cells give no row (no fake samples)", {
+  r <- elisa_reshape_wide_table_(wide_raw_(), analyte = "a")
+  expect_equal(nrow(r$values), 5)
+  expect_false(any(r$values$mouse_ID == "26-1-2" & r$values$date %in% as.Date("2026-05-19")))
+  raw <- tibble::tibble(`Lab ID` = c("m1", "m1"), analyte = c("A", "B"),
+                        `46147` = c("1", NA), final = c(NA, NA))
+  r2 <- elisa_reshape_wide_table_(raw)
+  expect_equal(nrow(r2$values), 1)
+  expect_equal(r2$values$A, 1)
+})
+
+test_that("date-time serial and dd.mm.yyyy headers are timepoints", {
+  expect_equal(parse_wide_date_header_(c("46161.4375", "19.05.2026")),
+               as.Date(c("2026-05-19", "2026-05-19")))
+})
+
+test_that("rows without an ID but with values warn", {
+  raw <- tibble::tibble(`Lab ID` = c("m1", NA, NA), `46147` = c("1", "2", NA))
+  expect_warning(r <- elisa_reshape_wide_table_(raw, analyte = "a"), "1 row")
   expect_equal(r$values$mouse_ID, "m1")
 })
 
@@ -119,7 +143,7 @@ test_that("round trip through elisa_read_curated", {
   p <- suppressMessages(elisa_reshape_wide(f, analyte = "anti-MPO-titer"))
   expect_equal(basename(p), "titer_long.xlsx")
   d <- suppressMessages(elisa_read_curated(p, tissue = "serum"))
-  expect_equal(nrow(d), 6)
+  expect_equal(nrow(d), 5)
   expect_equal(sum(is.na(d$collected_at)), 2)
   expect_true("OOR<" %in% d$result_status)
   expect_equal(unique(d$analyte), "anti-MPO-titer")

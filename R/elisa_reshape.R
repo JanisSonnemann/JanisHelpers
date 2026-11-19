@@ -16,8 +16,11 @@
 #' the end-point. Optional \code{analyte} / \code{tissue} columns (any case)
 #' give each row's analyte and tissue; the arguments of the same name fill a
 #' missing column or empty cells. All other columns are dropped (listed in a
-#' message). Repeated mouse x tissue x analyte rows are replicates. Rows
-#' without an ID are dropped. Cell values are passed through unchanged, so
+#' message). Date headers may be Excel dates (a time part is ignored),
+#' \code{YYYY-MM-DD} or \code{dd.mm.yyyy} text. Repeated mouse x tissue x
+#' analyte rows are replicates. Empty cells give no row (no sample is
+#' created for an unsampled date). Rows without an ID are dropped, with a
+#' warning if they hold values. Cell values are passed through unchanged, so
 #' \code{elisa_read_curated()} still validates them.
 #'
 #' The output is only written when it is missing or its content would
@@ -66,6 +69,9 @@ elisa_reshape_wide <- function(path, analyte = NULL, tissue = NULL,
   if (length(r$dropped) > 0L) {
     message(glue::glue("Dropped columns: {paste(r$dropped, collapse = ', ')}"))
   }
+  if (r$n_empty > 0L) {
+    message(glue::glue("Left out {r$n_empty} mouse x date row(s) without any value."))
+  }
   sheets <- list(values = r$values)
   if (!is.null(r$range)) sheets$range <- r$range
 
@@ -97,14 +103,17 @@ read_xlsx_text_ <- function(path) {
 }
 
 # Header text -> Date: Excel serial numbers (as readxl returns date headers,
-# five digits) or YYYY-MM-DD text; anything else -> NA.
+# five digits; a time part is dropped), YYYY-MM-DD or dd.mm.yyyy text;
+# anything else -> NA.
 parse_wide_date_header_ <- function(x) {
   x <- stringr::str_trim(as.character(x))
   out <- rep(NA_real_, length(x))
-  serial <- !is.na(x) & grepl("^\\d{5}(\\.0+)?$", x)
-  out[serial] <- as.numeric(as.Date(as.numeric(x[serial]), origin = "1899-12-30"))
+  serial <- !is.na(x) & grepl("^\\d{5}(\\.\\d+)?$", x)
+  out[serial] <- as.numeric(as.Date(floor(as.numeric(x[serial])), origin = "1899-12-30"))
   iso <- !is.na(x) & grepl("^\\d{4}-\\d{2}-\\d{2}$", x)
   out[iso] <- as.numeric(as.Date(x[iso], format = "%Y-%m-%d"))
+  de <- !is.na(x) & grepl("^\\d{1,2}\\.\\d{1,2}\\.\\d{4}$", x)
+  out[de] <- as.numeric(as.Date(x[de], format = "%d.%m.%Y"))
   as.Date(out, origin = "1970-01-01")
 }
 
@@ -130,7 +139,8 @@ range_values_ <- function(x, analytes, arg) {
 # `raw`: tibble of character columns (readxl col_types = "text", minimal
 # names). Returns list(values, range, dropped) -- `values` in the curated
 # layout (`date` = Date, NA = end-point), `range` NULL unless any of
-# unit/lloq/uloq is given, `dropped` = ignored column names.
+# unit/lloq/uloq is given, `dropped` = ignored column names, `n_empty` =
+# mouse x date rows left out because every analyte cell was empty.
 elisa_reshape_wide_table_ <- function(raw, analyte = NULL, tissue = NULL,
                                       id_col = c("mouse_ID", "Lab ID"),
                                       end_labels = c("final", "end", "endpoint"),
@@ -173,6 +183,13 @@ elisa_reshape_wide_table_ <- function(raw, analyte = NULL, tissue = NULL,
 
   mouse <- stringr::str_trim(raw[[id_col]])
   keep <- !is.na(mouse) & nzchar(mouse)
+  lost <- sum(!keep & rowSums(!is_empty_cell_(raw[tp_cols])) > 0)
+  if (lost > 0L) {
+    warning(glue::glue(
+      "Dropped {lost} row(s) with values but no ID in '{id_col}' ",
+      "(merged ID cells?) -- fill in the ID on every row."
+    ), call. = FALSE)
+  }
   raw <- raw[keep, , drop = FALSE]
   mouse <- mouse[keep]
 
@@ -205,6 +222,8 @@ elisa_reshape_wide_table_ <- function(raw, analyte = NULL, tissue = NULL,
     dplyr::arrange(match(.data$tissue, tissues), is.na(.data$date), .data$date,
                    match(.data$mouse_ID, mice), .data$replicate) |>
     dplyr::select("mouse_ID", "tissue", "date", dplyr::all_of(analytes))
+  empty <- rowSums(!is_empty_cell_(values[analytes])) == 0
+  values <- values[!empty, , drop = FALSE]
   if (!has_tissue) values <- dplyr::select(values, !"tissue")
 
   for (a in analytes) {
@@ -228,5 +247,11 @@ elisa_reshape_wide_table_ <- function(raw, analyte = NULL, tissue = NULL,
     range[-1] <- lapply(range[-1], function(x) { x[x %in% "NA"] <- NA; x })
   }
 
-  list(values = values, range = range, dropped = dropped)
+  list(values = values, range = range, dropped = dropped, n_empty = sum(empty))
+}
+
+# TRUE for NA or blank cells of a data frame of character columns (as matrix).
+is_empty_cell_ <- function(df) {
+  m <- as.matrix(df)
+  is.na(m) | !nzchar(stringr::str_trim(m))
 }
