@@ -67,8 +67,10 @@ elisa_reshape_wide(path, analyte = NULL, tissue = NULL, id_col = "Lab ID", out =
   date (end-point last), then input row order.
   If any of `unit`/`lloq`/`uloq` is given, a `range` sheet is written too;
   each is a single value (all analytes) or a vector named by analyte.
-- Only rewrites when `out` is missing or older than `path`; otherwise messages
-  "up to date" and does nothing. This keeps the prep stale check intact.
+- Only rewrites when `out` is missing or its content would change (so
+  changed arguments take effect); otherwise messages "up to date" and leaves
+  the file and its modification time alone. This keeps the prep stale check
+  intact.
 - Returns `out` invisibly, so the script can do
   `path <- elisa_reshape_wide(raw_path, analyte = "anti-MPO-titer")`.
 

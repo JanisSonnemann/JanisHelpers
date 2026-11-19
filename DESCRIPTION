@@ -39,13 +39,13 @@ Imports:
     tools,
     utils,
     uwot,
+    writexl,
     xml2,
     xfun
 Suggests:
     ggrepel,
     testthat (>= 3.0.0),
-    withr,
-    writexl
+    withr
 Remotes:
     Close-your-eyes/fcexpr
 biocViews:

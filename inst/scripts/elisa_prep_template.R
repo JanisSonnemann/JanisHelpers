@@ -31,6 +31,9 @@ db_path   <- "~/databases/MPO_mRNA/MPO_mRNA.duckdb"
 # ---- assay --------------------------------------------------------------------
 
 path      <- file.path(exp_path, "raw", "ELISA", "spleen-restim-48h_26-1.xlsx")  # curated workbook
+# Wide sheet (one column per date, `final` = end-point)? Reshape it first:
+# path <- elisa_reshape_wide(file.path(exp_path, "raw", "ELISA", "anti-mpo-titer_26-1_wide.xlsx"),
+#                            analyte = "anti-MPO-titer")
 assay     <- "restim"                           # assay name in the database
 tissue    <- "spleen"                           # tissue of every sample in the file
 

@@ -88,6 +88,14 @@ test_that("errors: missing id column, no timepoints, duplicate timepoints", {
   expect_error(elisa_reshape_wide_table_(dup2, analyte = "a"), "final.*End")
 })
 
+test_that("default id_col accepts mouse_ID or Lab ID (first found)", {
+  raw <- tibble::tibble(mouse_ID = c("m1", "m2"), `46147` = c("1", "2"))
+  r <- elisa_reshape_wide_table_(raw, analyte = "a")
+  expect_equal(r$values$mouse_ID, c("m1", "m2"))
+  expect_error(elisa_reshape_wide_table_(dplyr::rename(raw, id = mouse_ID), analyte = "a"),
+               "mouse_ID, Lab ID")
+})
+
 test_that("rows without an ID are dropped", {
   raw <- tibble::tibble(`Lab ID` = c("m1", NA, " "), `46147` = c("1", "2", "3"))
   r <- elisa_reshape_wide_table_(raw, analyte = "a")
@@ -97,4 +105,56 @@ test_that("rows without an ID are dropped", {
 test_that("parse_wide_date_header_ reads serials and ISO text only", {
   expect_equal(parse_wide_date_header_(c("46147", "2026-05-19", "final", "ID", NA)),
                as.Date(c("2026-05-05", "2026-05-19", NA, NA, NA)))
+})
+
+wide_file_ <- function(name = "titer_wide", env = parent.frame()) {
+  testthat::skip_if_not_installed("writexl")
+  f <- file.path(withr::local_tempdir(.local_envir = env), paste0(name, ".xlsx"))
+  writexl::write_xlsx(list(Tabelle1 = wide_raw_()), f)
+  f
+}
+
+test_that("round trip through elisa_read_curated", {
+  f <- wide_file_()
+  p <- suppressMessages(elisa_reshape_wide(f, analyte = "anti-MPO-titer"))
+  expect_equal(basename(p), "titer_long.xlsx")
+  d <- suppressMessages(elisa_read_curated(p, tissue = "serum"))
+  expect_equal(nrow(d), 6)
+  expect_equal(sum(is.na(d$collected_at)), 2)
+  expect_true("OOR<" %in% d$result_status)
+  expect_equal(unique(d$analyte), "anti-MPO-titer")
+  expect_equal(sort(unique(d$collected_at)), as.Date(c("2026-05-05", "2026-05-19")))
+})
+
+test_that("out without _wide gets _long appended; explicit out honoured", {
+  f <- wide_file_("titer")
+  p <- suppressMessages(elisa_reshape_wide(f, analyte = "a"))
+  expect_equal(basename(p), "titer_long.xlsx")
+  o <- file.path(dirname(f), "custom.xlsx")
+  expect_equal(suppressMessages(elisa_reshape_wide(f, analyte = "a", out = o)), o)
+  expect_true(file.exists(o))
+})
+
+test_that("unchanged content is not rewritten", {
+  f <- wide_file_()
+  p <- suppressMessages(elisa_reshape_wide(f, analyte = "a"))
+  Sys.setFileTime(p, Sys.time() - 60)
+  before <- file.mtime(p)
+  expect_message(elisa_reshape_wide(f, analyte = "a"), "up to date")
+  expect_equal(file.mtime(p), before)
+})
+
+test_that("changed arguments rewrite the file", {
+  f <- wide_file_()
+  p <- suppressMessages(elisa_reshape_wide(f, analyte = "a"))
+  expect_false("range" %in% readxl::excel_sheets(p))
+  suppressMessages(elisa_reshape_wide(f, analyte = "a", lloq = 0.1))
+  expect_true("range" %in% readxl::excel_sheets(p))
+  d <- suppressMessages(elisa_read_curated(p, tissue = "serum"))
+  expect_equal(unique(d$lloq), 0.1)
+})
+
+test_that("dropped columns are messaged", {
+  f <- wide_file_()
+  expect_message(elisa_reshape_wide(f, analyte = "a"), "ID, group")
 })
