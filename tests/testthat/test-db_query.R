@@ -52,3 +52,34 @@ test_that("db_query_elisa and db_query_histo return flat tibbles keyed by natura
     "assay_name", "import_unit", "metric", "value", "source_file", "imported_at"))
   expect_equal(histo$metric, "damage_score")
 })
+
+test_that("db_query_facs returns population_order (NA for character labels)", {
+  con <- local_test_db()
+  seed_minimal_fixture(con)
+  db_write_facs(
+    con,
+    tibble::tibble(PopulationFullPath = "root/CD4+", Population = "CD4+",
+                   metric = "count", value = 1),
+    mouse_id = "25-7-1", tissue = "spleen", assay_name = "overview",
+    wsp_root = "overview_25-7", source_file = "25-7/overview_25-7_20261112.wsp"
+  )
+  result <- dplyr::collect(db_query_facs(con))
+  expect_true("population_order" %in% names(result))
+  expect_true(is.na(result$population_order))
+})
+
+test_that("db_write_facs stores population_order when Population is a factor", {
+  con <- local_test_db()
+  seed_minimal_fixture(con)
+  db_write_facs(
+    con,
+    tibble::tibble(PopulationFullPath = "root/CD3+/CD4+",
+                   Population = factor("CD4+", levels = c("CD3+", "CD4+")),
+                   metric = "count", value = 1),
+    mouse_id = "25-7-1", tissue = "spleen", assay_name = "overview",
+    wsp_root = "overview_25-7", source_file = "25-7/overview_25-7_20261112.wsp"
+  )
+  result <- dplyr::collect(db_query_facs(con))
+  expect_equal(result$population_order, 2L)
+  expect_equal(result$population, "CD4+")
+})

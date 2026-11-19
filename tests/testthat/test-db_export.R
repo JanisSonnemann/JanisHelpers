@@ -257,3 +257,39 @@ test_that("exclusion panel naming a registered assay of another domain passes", 
     db_export_facs(con, prep, ex, data_dir = d$data_dir, overwrite = TRUE)
   ), "not registered")
 })
+
+test_that("export stores each population's display position", {
+  con <- local_test_db(); seed_export_fixture(con)
+  d <- local_prep_dirs()
+  prep <- suppressMessages(local_loaded_prep(d, two_mice))
+  suppressMessages(db_export_facs(con, prep, data_dir = d$data_dir))
+  rows <- DBI::dbGetQuery(con,
+    "SELECT DISTINCT population, population_order FROM facs_measurements ORDER BY 2")
+  expect_equal(rows$population, c("live_CD45+", "CD4+"))
+  expect_equal(rows$population_order, c(1L, 2L))
+})
+
+test_that("character population exports with NULL population_order", {
+  con <- local_test_db(); seed_export_fixture(con)
+  d <- local_prep_dirs()
+  prep <- suppressMessages(local_loaded_prep(d, two_mice))
+  prep$data$population <- as.character(prep$data$population)
+  suppressMessages(db_export_facs(con, prep, data_dir = d$data_dir))
+  rows <- DBI::dbGetQuery(con, "SELECT population_order FROM facs_measurements")
+  expect_equal(nrow(rows), 8)
+  expect_true(all(is.na(rows$population_order)))
+})
+
+test_that("re-exporting a root stored without order fills population_order", {
+  con <- local_test_db(); seed_export_fixture(con)
+  d <- local_prep_dirs()
+  prep <- suppressMessages(local_loaded_prep(d, two_mice))
+  suppressMessages(db_export_facs(con, prep, data_dir = d$data_dir))
+  DBI::dbExecute(con, "UPDATE facs_measurements SET population_order = NULL")
+  suppressMessages(db_export_facs(con, prep, data_dir = d$data_dir, overwrite = TRUE))
+  expect_equal(
+    DBI::dbGetQuery(con,
+      "SELECT COUNT(*) AS n FROM facs_measurements WHERE population_order IS NULL")$n,
+    0
+  )
+})

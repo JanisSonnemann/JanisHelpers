@@ -18,3 +18,10 @@ Returns a lazy \code{dbplyr} \code{tbl} joining \code{facs_measurements} back th
 natural keys (\code{mouse_id}, \code{tissue}, \code{experiment_code}, \code{assay_name})
 instead of surrogate IDs. Call \code{\link[dplyr:collect]{dplyr::collect()}} to materialize.
 }
+\details{
+\code{population_order} is the population's position in its panel's display
+order (the prep's \code{\link[=facs_select_populations]{facs_select_populations()}} order); \code{NA} for imports
+made before the column existed. Positions are only comparable within one
+\code{wsp_root}. After collecting, \code{\link[=facs_order_populations]{facs_order_populations()}} turns
+\code{population} back into an ordered factor.
+}

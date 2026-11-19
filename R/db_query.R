@@ -8,6 +8,12 @@ NULL
 #' natural keys (`mouse_id`, `tissue`, `experiment_code`, `assay_name`)
 #' instead of surrogate IDs. Call [dplyr::collect()] to materialize.
 #'
+#' `population_order` is the population's position in its panel's display
+#' order (the prep's [facs_select_populations()] order); `NA` for imports
+#' made before the column existed. Positions are only comparable within one
+#' `wsp_root`. After collecting, [facs_order_populations()] turns
+#' `population` back into an ordered factor.
+#'
 #' @param con A `DBI` connection from [db_connect()].
 #' @returns A lazy `tbl` -- filter/collect as needed.
 #' @export
@@ -20,7 +26,7 @@ db_query_facs <- function(con) {
     dplyr::left_join(dplyr::tbl(con, "assays"), by = "assay_id") |>
     dplyr::select(
       experiment_code, mouse_id, tissue, collected_at, assay_name,
-      population_full_path, population, metric, value,
+      population_full_path, population, population_order, metric, value,
       wsp_root, condition, condition_keyword, source_file, imported_at
     )
 }

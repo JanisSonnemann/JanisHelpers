@@ -301,14 +301,22 @@ db_write_facs <- function(con, data, mouse_id, tissue, assay_name, wsp_root,
 # Internal: insert one stain (if new) and its measurements. Opens NO
 # transaction -- callers wrap it (db_write_facs() per stain, db_export_facs()
 # around a whole root), since DuckDB doesn't nest transactions. `data` has
-# snake-case columns population_full_path, population, metric, value.
+# snake-case columns population_full_path, population, metric, value. A
+# factor `population` also stores each label's position in the display order
+# (`population_order`); a character one stores NULL.
 # Returns the number of measurement rows inserted.
 insert_facs_stain_ <- function(con, sample_id, assay_id, data, wsp_root,
                                source_file, condition, condition_keyword,
                                stain_date = NA) {
+  population_order <- if (is.factor(data$population)) {
+    as.integer(data$population)
+  } else {
+    rep(NA_integer_, length(data$population))
+  }
   to_write <- tibble::tibble(
     population_full_path = as.character(data$population_full_path),
     population = as.character(data$population),
+    population_order = population_order,
     metric = as.character(data$metric),
     value = as.double(data$value),
     source_file = source_file
@@ -338,9 +346,11 @@ insert_facs_stain_ <- function(con, sample_id, assay_id, data, wsp_root,
 
   DBI::dbExecute(con, "
     INSERT INTO facs_measurements (
-      facs_stain_id, population_full_path, population, metric, value, source_file
+      facs_stain_id, population_full_path, population, population_order,
+      metric, value, source_file
     )
-    SELECT ?, population_full_path, population, metric, value, source_file
+    SELECT ?, population_full_path, population, population_order,
+      metric, value, source_file
     FROM tmp_facs_measurements
     ON CONFLICT (facs_stain_id, population_full_path, metric) DO NOTHING
   ", params = list(facs_stain_id))
