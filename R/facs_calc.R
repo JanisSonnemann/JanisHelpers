@@ -478,3 +478,60 @@ facs_calc_diff <- function(
       values_to = "diff"
     )
 }
+
+#' Restore population display order after a database query
+#'
+#' Turns `population` of collected [db_query_facs()] output back into a factor
+#' in the display order chosen in each panel's prep script (stored as
+#' `population_order`). Positions are only meaningful within one panel
+#' (`wsp_root`); the same label may sit at different positions in different
+#' panels.
+#'
+#' With several panels, panels are taken in alphabetical `wsp_root` order and
+#' populations within a panel by `population_order`; a label already placed by
+#' an earlier panel keeps that position. Labels whose rows have no order
+#' (panels imported before the column existed) go last, alphabetically, with a
+#' message naming those panels -- re-export the panel to fix.
+#'
+#' @param data A collected tibble with columns `population`,
+#'   `population_order` and `wsp_root`, e.g. from
+#'   `dplyr::collect(db_query_facs(con))`.
+#' @returns `data` with `population` as a factor; nothing else changes.
+#' @examples
+#' \dontrun{
+#' facs <- db_query_facs(con) |>
+#'   dplyr::filter(experiment_code == "26-1", assay_name == "treg") |>
+#'   dplyr::collect() |>
+#'   facs_order_populations()
+#' }
+#' @export
+facs_order_populations <- function(data) {
+  needed <- c("population", "population_order", "wsp_root")
+  missing_cols <- setdiff(needed, names(data))
+  if (length(missing_cols) > 0) {
+    stop(
+      "`data` lacks column(s) ", paste(missing_cols, collapse = ", "),
+      " -- expected collected db_query_facs() output.",
+      call. = FALSE
+    )
+  }
+
+  pops <- data |>
+    dplyr::distinct(wsp_root, population = as.character(population), population_order)
+  ordered <- pops |>
+    dplyr::filter(!is.na(population_order)) |>
+    dplyr::arrange(wsp_root, population_order)
+  unordered <- pops |>
+    dplyr::filter(is.na(population_order)) |>
+    dplyr::arrange(population)
+  if (nrow(unordered) > 0) {
+    message(
+      "No stored population order for ", paste(unique(sort(unordered$wsp_root)), collapse = ", "),
+      " (imported before population_order existed) -- its populations go last, ",
+      "alphabetically. Re-export the panel to fix."
+    )
+  }
+
+  levels <- unique(c(ordered$population, unordered$population))
+  dplyr::mutate(data, population = factor(as.character(population), levels = levels))
+}

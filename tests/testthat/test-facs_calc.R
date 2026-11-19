@@ -524,3 +524,40 @@ test_that("facs_calc_diff() warns and fills NA when ref_level is missing for a m
   )
   expect_true(is.na(result$diff))
 })
+
+# ── facs_order_populations ───────────────────────────────────────────────────
+
+db_shaped <- function(root, pops, order) {
+  tibble::tibble(wsp_root = root, population = pops, population_order = order,
+                 metric = "count", value = 1)
+}
+
+test_that("facs_order_populations orders one panel by population_order", {
+  d <- db_shaped("ov_26-1", c("CD8+", "live", "CD4+"), c(3L, 1L, 2L))
+  out <- facs_order_populations(d)
+  expect_equal(levels(out$population), c("live", "CD4+", "CD8+"))
+  expect_equal(as.character(out$population), d$population)
+})
+
+test_that("a label shared by two panels keeps the first panel's position", {
+  d <- dplyr::bind_rows(
+    db_shaped("a_panel", c("live", "PMN", "CD4+"), 1:3),
+    db_shaped("b_panel", c("PMN", "Tc"), 1:2)
+  )
+  expect_no_error(out <- facs_order_populations(d))
+  expect_equal(levels(out$population), c("live", "PMN", "CD4+", "Tc"))
+})
+
+test_that("NA orders go last alphabetically with a message", {
+  d <- dplyr::bind_rows(
+    db_shaped("a_panel", c("live", "CD4+"), 1:2),
+    db_shaped("old_panel", c("Zeta", "Beta"), NA_integer_)
+  )
+  expect_message(out <- facs_order_populations(d), "old_panel")
+  expect_equal(levels(out$population), c("live", "CD4+", "Beta", "Zeta"))
+})
+
+test_that("facs_order_populations errors naming a missing column", {
+  d <- db_shaped("a", "live", 1L) |> dplyr::select(!wsp_root)
+  expect_error(facs_order_populations(d), "wsp_root")
+})
