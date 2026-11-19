@@ -53,6 +53,20 @@ test_that("plot_paired keeps only the requested conditions, in order", {
   expect_true(any(vapply(p$layers, function(l) inherits(l$geom, "GeomLine"), logical(1))))
 })
 
+test_that("every plot helper renders without ggpubr attached", {
+  expect_false("package:ggpubr" %in% search())
+  expect_no_error(ggplot2::ggplot_build(
+    plot_box(pop_data, tissue, value, group, scale = "log")
+  ))
+  p <- plot_population(pop_data, "CD4+", "count_per_g", x = group, p_val = TRUE)
+  built <- expect_no_error(ggplot2::ggplot_build(p))
+  p_layer <- which(vapply(p$layers, function(l) inherits(l$stat, "StatCompareMeans"), logical(1)))
+  expect_match(built$data[[p_layer]]$label, "^p = ")
+  expect_no_error(ggplot2::ggplot_build(
+    plot_paired(paired_data, levels = c("unstim", "MPO"))
+  ))
+})
+
 test_that("plot_paired errors on a level not in the data", {
   expect_error(plot_paired(paired_data, levels = c("unstim", "OVA")), "OVA")
 })

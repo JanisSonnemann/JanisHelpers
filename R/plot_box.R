@@ -88,7 +88,11 @@ plot_population <- function(data, populations, metric, tissues = NULL,
                 scale = scale, colors = colors) +
     ggplot2::facet_wrap(ggplot2::vars({{ facet }}), scales = "free_y")
   if (isTRUE(p_val)) {
-    p <- p + ggpubr::stat_compare_means(label = "p.format")
+    # label built here, not via label = "p.format": that expands to ggpubr's
+    # unexported create_p_label(), which only resolves when ggpubr is attached
+    p <- p + ggpubr::stat_compare_means(
+      ggplot2::aes(label = ggplot2::after_stat(paste0("p = ", p.format)))
+    )
   }
   p
 }
