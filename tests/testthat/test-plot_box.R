@@ -95,6 +95,17 @@ test_that("explicit colors beat the option", {
   }
 })
 
+test_that("group colour option is skipped when fill is not the group", {
+  withr::local_options(JanisHelpers.group_colors = c(a = "#111111", b = "#222222"))
+  by_tissue <- box_fills_(plot_box(colour_data_, x = group, y = value, fill = tissue))
+  by_cond <- box_fills_(plot_paired(paired_colour_data_, levels = c("unstim", "MPO"),
+                                    fill = condition))
+  for (f in list(by_tissue, by_cond)) {
+    expect_length(f, 2)
+    expect_false(any(f %in% c("grey50", "#7F7F7F")))
+  }
+})
+
 test_that("explicit NULL gives ggplot default fills", {
   withr::local_options(JanisHelpers.group_colors = c(a = "#111111", b = "#222222"))
   for (p in three_plots_(colors = NULL)) {

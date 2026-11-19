@@ -26,8 +26,9 @@ positive -- no offset is added here, see \code{\link[=plot_population]{plot_popu
 \item{colors}{Optional named character vector of fill colours
 (\code{c(MPO409 = "#00BFC4", irrel = "#F8766D")}). Defaults to the option
 \code{JanisHelpers.group_colors}, so a document can set its group colours
-once with \code{options(JanisHelpers.group_colors = c(...))}. \code{NULL} (option
-unset, or passed explicitly) = ggplot2 default fills.}
+once with \code{options(JanisHelpers.group_colors = c(...))}; the option is
+ignored when no fill value is one of its names (fill by condition, tissue,
+...). \code{NULL} (option unset, or passed explicitly) = ggplot2 default fills.}
 }
 \value{
 A \code{ggplot} object.

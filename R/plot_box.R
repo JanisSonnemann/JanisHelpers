@@ -13,8 +13,9 @@
 #' @param colors Optional named character vector of fill colours
 #'   (`c(MPO409 = "#00BFC4", irrel = "#F8766D")`). Defaults to the option
 #'   `JanisHelpers.group_colors`, so a document can set its group colours
-#'   once with `options(JanisHelpers.group_colors = c(...))`. `NULL` (option
-#'   unset, or passed explicitly) = ggplot2 default fills.
+#'   once with `options(JanisHelpers.group_colors = c(...))`; the option is
+#'   ignored when no fill value is one of its names (fill by condition, tissue,
+#'   ...). `NULL` (option unset, or passed explicitly) = ggplot2 default fills.
 #' @returns A `ggplot` object.
 #' @examples
 #' d <- data.frame(group = rep(c("a", "b"), each = 4), tissue = "kidney",
@@ -34,10 +35,7 @@ plot_box <- function(data, x, y, fill, scale = c("linear", "percent", "log"),
     ggplot2::scale_x_discrete(guide = ggplot2::guide_axis(n.dodge = 2)) +
     ggplot2::theme_bw()
   p <- add_y_scale_(p, scale)
-  if (!is.null(colors)) {
-    p <- p + ggplot2::scale_fill_manual(values = colors)
-  }
-  p
+  add_fill_scale_(p, colors, dplyr::transmute(data, .fill = {{ fill }})$.fill)
 }
 
 #' Plot selected populations of long FACS data by group
@@ -158,10 +156,20 @@ plot_paired <- function(data, levels, condition = condition, fill = group,
     ggplot2::facet_wrap(ggplot2::vars({{ facet }}), scales = "free_y", nrow = 2) +
     ggplot2::theme_bw()
   p <- add_y_scale_(p, scale)
-  if (!is.null(colors)) {
-    p <- p + ggplot2::scale_fill_manual(values = colors)
+  add_fill_scale_(p, colors, dplyr::transmute(data, .fill = {{ fill }})$.fill)
+}
+
+# Internal: manual fill scale. The document-wide group colours
+# (option JanisHelpers.group_colors) are skipped when none of the fill values
+# is named in them -- the plot is filled by something other than the group
+# (condition, tissue, ...), and a manual scale would grey out every box.
+add_fill_scale_ <- function(p, colors, fill_values) {
+  if (is.null(colors)) return(p)
+  from_option <- identical(colors, getOption("JanisHelpers.group_colors"))
+  if (from_option && !any(as.character(unique(fill_values)) %in% names(colors))) {
+    return(p)
   }
-  p
+  p + ggplot2::scale_fill_manual(values = colors)
 }
 
 # Internal: y scale shared by plot_box() and plot_paired().
