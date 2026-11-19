@@ -19,8 +19,9 @@ plots and text. The next experiment gets the same fixes for free.
 
 1. `db_query_facs()` output can be put back into the display order chosen in
    the panel's prep script (`facs_select_populations()`), per panel.
-2. `db_query_facs()` / `db_query_elisa()` / `db_query_histo()` return the
-   subject's `treatment_group`.
+2. Subject meta (including the treatment group) is queried once with a new
+   `db_query_subjects()` and joined to each dataset as needed, instead of
+   every measurement query carrying meta columns.
 3. The two generic plot helpers from the Rmd (`plot_cells()`,
    `plot_population()`) and the copy-pasted paired stim-vs-unstim plot are
    package functions.
@@ -38,6 +39,9 @@ plots and text. The next experiment gets the same fixes for free.
   in the doc.
 - A separate populations table (approach B below).
 - Storing display labels anywhere other than the existing `population` column.
+- Renaming `subjects.treatment_group` in the DB. It was renamed away from
+  `group` on purpose (SQL reserved word, see the schema spec); only the
+  query output calls it `group`.
 
 ## Anti-goals
 
@@ -88,11 +92,25 @@ plots and text. The next experiment gets the same fixes for free.
 - Legacy `db_write_facs()` does the same when `data$Population` is a factor,
   else writes `NULL`.
 
-### 3. Query returns it, plus `treatment_group`
+### 3. Queries: `population_order` in FACS, new `db_query_subjects()`
 
-- `db_query_facs()` adds `population_order` and `treatment_group` to its
-  `select()`. `db_query_elisa()` and `db_query_histo()` add `treatment_group`.
-  The `subjects` join already exists; only the select list changes.
+- `db_query_facs()` adds `population_order` to its `select()`. The ELISA and
+  histology queries are unchanged. No measurement query gets meta columns.
+- **`db_query_subjects(con)`** (new, `R/db_query.R`): lazy `tbl` of
+  `subjects` joined to `experiments`, one row per mouse, columns
+  `experiment_code`, `mouse_id`, `group` (= `subjects.treatment_group`,
+  renamed in the select; dbplyr quotes the reserved word), `mouse_treatment`,
+  `sex`, `cage`, `mouse_strain`, `generation`, `dob`, `start_date`,
+  `bmt_date`, `end_date`. No surrogate IDs, no `created_at`.
+- Intended workflow (the analysis doc's setup chunk, next step): query
+  `db_query_subjects()` once, filter to the experiment, `collect()`, set the
+  group factor levels once; then per dataset join only the needed columns
+  with the existing checked join
+  `meta_annotate(data, subjects_cols, by = c("experiment_code", "mouse_id"))`
+  (errors on missing keys / name collisions, warns on unmatched rows).
+  Connect with `DBI::dbConnect(duckdb::duckdb(), path, read_only = TRUE)`,
+  not `db_connect()` (which writes the schema). Document this in the
+  `db_query_subjects()` roxygen `@details` / example.
 
 ### 4. `facs_order_populations(data)` (new, `facs_` domain, `R/facs_calc.R`)
 
@@ -115,7 +133,7 @@ Turns a collected `db_query_facs()` result's `population` into a factor.
 - The passthrough-column detection must not break on the extra DB columns
   (`experiment_code`, `collected_at`, `assay_name`, `wsp_root`,
   `condition_keyword`, `source_file`, `imported_at`, `population_order`,
-  `treatment_group`): columns that are constant per mouse x tissue pass
+  joined `group`): columns that are constant per mouse x tissue pass
   through, others drop -- as today. Add a test on a DB-shaped tibble.
 - A `population` factor survives (as it does today via `pivot_wider` id cols).
 
@@ -131,15 +149,15 @@ sites keep their shape. Returned objects are `ggplot`s the caller extends with
   `scale = "percent"` -> percent y labels; `"log"` -> `scale_y_log10()` with
   log ticks (no offset added here). `colors` = named vector for
   `scale_fill_manual()`; `NULL` = ggplot default fill scale.
-- **`plot_population(data, populations, metric, tissues = NULL, x = tissue, fill = treatment_group, facet = population, scale = "linear", p_val = FALSE, colors = NULL, pseudocount = 1)`**
+- **`plot_population(data, populations, metric, tissues = NULL, x = tissue, fill = group, facet = population, scale = "linear", p_val = FALSE, colors = NULL, pseudocount = 1)`**
   -- the Rmd's `plot_population()`: filters `metric`, `population`, optional
   `tissue`; for `scale = "log"` adds `pseudocount` to `value`; calls
   `plot_box()`; `facet_wrap(free_y)` by `facet`; `p_val = TRUE` adds
-  `ggpubr::stat_compare_means(label = "p.format")`. `fill` defaults to the DB
-  column name `treatment_group` (the Rmd used `group`).
+  `ggpubr::stat_compare_means(label = "p.format")`. `fill` defaults to `group`
+  (the column `db_query_subjects()` returns and the Rmd already uses).
 - **`plot_paired()`** -- replaces the five copies of the paired plot.
   Signature:
-  `plot_paired(data, condition = condition, levels, fill = treatment_group, pair = mouse_id, facet = population, y = value, scale = "percent", colors = NULL)`.
+  `plot_paired(data, condition = condition, levels, fill = group, pair = mouse_id, facet = population, y = value, scale = "percent", colors = NULL)`.
   Filters `condition` to `levels` and orders it by them; x =
   `interaction(condition, fill)`; boxplot (alpha 0.6, no outliers) filled by
   `fill`; grey lines joining each `pair` across conditions; points shape 21;
@@ -162,8 +180,8 @@ current imports (6, 2, 3 -- see `import_log`), `population_order` non-NULL.
   keeps rows (`NULL` order), and `db_old_schema_()` returns nothing.
 - `db_export_facs()` stores `population_order` matching the prep factor;
   character `population` -> `NULL`.
-- `db_query_facs()` returns `population_order` and `treatment_group`;
-  ELISA/histo queries return `treatment_group`.
+- `db_query_facs()` returns `population_order`; `db_query_subjects()` returns
+  one row per mouse with `group` = stored `treatment_group`, filterable lazily.
 - `facs_order_populations()`: single panel; two panels with a shared label at
   different positions (first panel wins, no error); `NA` order -> message.
 - `facs_calc_log2fc()` / `facs_calc_diff()` with `mouse_col = "mouse_id"`,
