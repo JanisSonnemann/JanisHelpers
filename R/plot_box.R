@@ -93,6 +93,65 @@ plot_population <- function(data, populations, metric, tissues = NULL,
   p
 }
 
+#' Paired plot of conditions per subject (e.g. stim vs unstim)
+#'
+#' Boxplots per condition x group with one grey line per subject joining its
+#' values across conditions -- for wells of the same sample that differ in one
+#' variable (restimulation). Returns a `ggplot` to extend with `+ labs()` etc.
+#'
+#' @param data Long tibble, already filtered to the metric (and tissue) to
+#'   plot, with the columns named below.
+#' @param levels Character vector of conditions to keep, in x-axis order
+#'   (e.g. `c("unstim", "MPO")`). Errors if one is absent from the data.
+#' @param condition,fill,pair,facet,y Bare column names: condition (default
+#'   `condition`, as in [db_query_facs()]), box fill / group (default
+#'   `group`), subject joined by lines (default `mouse_id`), facet variable
+#'   (default `population`) and values (default `value`).
+#' @param scale `"percent"` (default, for 0-1 fractions), `"linear"` or
+#'   `"log"`, see [plot_box()].
+#' @param colors Optional named fill colours, see [plot_box()].
+#' @returns A `ggplot` object.
+#' @examples
+#' \dontrun{
+#' restim |>
+#'   dplyr::filter(metric == "fraction_of_parent", tissue == "kidney") |>
+#'   plot_paired(levels = c("unstim", "MPO")) +
+#'   ggplot2::labs(y = "% of CD4+")
+#' }
+#' @export
+plot_paired <- function(data, levels, condition = condition, fill = group,
+                        pair = mouse_id, facet = population, y = value,
+                        scale = c("percent", "linear", "log"), colors = NULL) {
+  scale <- match.arg(scale)
+  cond_col <- names(dplyr::select(data, {{ condition }}))
+  absent <- setdiff(levels, unique(as.character(data[[cond_col]])))
+  if (length(absent) > 0) {
+    stop(
+      "Condition level(s) not in `", cond_col, "`: ",
+      paste0("'", absent, "'", collapse = ", "), ".",
+      call. = FALSE
+    )
+  }
+  data <- data[as.character(data[[cond_col]]) %in% levels, , drop = FALSE]
+  data[[cond_col]] <- factor(as.character(data[[cond_col]]), levels = levels)
+
+  p <- ggplot2::ggplot(data, ggplot2::aes(
+    x = interaction({{ condition }}, {{ fill }}), y = {{ y }}, fill = {{ fill }}
+  )) +
+    ggplot2::geom_boxplot(outlier.shape = NA, alpha = 0.6) +
+    ggplot2::geom_line(ggplot2::aes(group = {{ pair }}),
+                       colour = "grey40", alpha = 0.4, linewidth = 0.3) +
+    ggplot2::geom_point(shape = 21, colour = "black", alpha = 0.8, size = 2) +
+    ggplot2::scale_x_discrete(guide = ggplot2::guide_axis(n.dodge = 2)) +
+    ggplot2::facet_wrap(ggplot2::vars({{ facet }}), scales = "free_y", nrow = 2) +
+    ggplot2::theme_bw()
+  p <- add_y_scale_(p, scale)
+  if (!is.null(colors)) {
+    p <- p + ggplot2::scale_fill_manual(values = colors)
+  }
+  p
+}
+
 # Internal: y scale shared by plot_box() and plot_paired().
 add_y_scale_ <- function(p, scale) {
   switch(scale,

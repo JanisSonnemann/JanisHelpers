@@ -36,3 +36,23 @@ test_that("plot_population adds a p-value layer on request", {
   p0 <- plot_population(pop_data, "CD4+", "count_per_g", x = group)
   expect_false(any(vapply(p0$layers, function(l) inherits(l$stat, "StatCompareMeans"), logical(1))))
 })
+
+paired_data <- tibble::tibble(
+  mouse_id = rep(c("m1", "m2"), each = 3),
+  group = rep(c("irrel", "MPO409"), each = 3),
+  condition = rep(c("unstim", "MPO", "PMA-Iono"), 2),
+  population = "CD4+_CD44+_IFNg+", value = c(0.01, 0.03, 0.2, 0.02, 0.05, 0.3)
+)
+
+test_that("plot_paired keeps only the requested conditions, in order", {
+  p <- plot_paired(paired_data, levels = c("unstim", "MPO"))
+  expect_s3_class(p, "ggplot")
+  expect_equal(levels(p$data$condition), c("unstim", "MPO"))
+  expect_false("PMA-Iono" %in% p$data$condition)
+  expect_equal(nrow(p$data), 4)
+  expect_true(any(vapply(p$layers, function(l) inherits(l$geom, "GeomLine"), logical(1))))
+})
+
+test_that("plot_paired errors on a level not in the data", {
+  expect_error(plot_paired(paired_data, levels = c("unstim", "OVA")), "OVA")
+})
