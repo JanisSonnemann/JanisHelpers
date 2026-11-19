@@ -86,6 +86,21 @@ test_that("elisa_qc_cv_plot_ labels only samples above the CV limit", {
   expect_null(elisa_qc_cv_plot_(elisa_qc_cv_(d[d$replicate == 1, ]), 20))
 })
 
+test_that("elisa_qc_add_lloq_ draws one dashed LLOQ line per analyte", {
+  m <- elisa_qc_means_(fixture_data())
+  m$grp <- "g"
+  s <- qc_table_score_(m, "analyte", "grp", FALSE)
+  p <- elisa_qc_add_lloq_(qc_table_plot_(s, "analyte", "grp", FALSE), s)
+  hl <- p$layers[[length(p$layers)]]
+  expect_s3_class(hl$geom, "GeomHline")
+  expect_equal(hl$aes_params$linetype, "dashed")
+  expect_equal(hl$data$lloq[order(hl$data$.row)], c(15.6, 7.81))
+  expect_null(elisa_qc_add_lloq_(NULL, s))
+  s$lloq <- NA_real_
+  p0 <- qc_table_plot_(s, "analyte", "grp", FALSE)
+  expect_identical(length(elisa_qc_add_lloq_(p0, s)$layers), length(p0$layers))
+})
+
 test_that("elisa_qc_means_ averages replicates per sample x analyte", {
   m <- elisa_qc_means_(fixture_data())
   v <- m$value[m$mouse_ID == "M1" & m$analyte == "TNFa" & is.na(m$collected_at)]

@@ -160,6 +160,27 @@ elisa_qc_cv_plot_ <- function(cv, max_cv = 20) {
     ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 30, hjust = 1))
 }
 
+# Adds a dashed LLOQ line per analyte facet (per tissue too when the plot
+# splits by tissue) to the outlier plot from qc_table_plot_(). `scored` must
+# carry `lloq`; missing or non-positive LLOQs (log axis) draw nothing.
+elisa_qc_add_lloq_ <- function(p, scored, log_scale = FALSE) {
+  if (is.null(p) || !"lloq" %in% names(scored)) {
+    return(p)
+  }
+  by <- if (length(unique(p$data$tissue)) > 1) c("analyte", "tissue") else "analyte"
+  lines <- scored |>
+    dplyr::filter(!is.na(lloq), !isTRUE(log_scale) | lloq > 0) |>
+    dplyr::distinct(dplyr::across(dplyr::all_of(c(by, "lloq"))))
+  if (nrow(lines) == 0) {
+    return(p)
+  }
+  lines$.row <- as.character(lines$analyte)
+  p + ggplot2::geom_hline(
+    data = lines, ggplot2::aes(yintercept = lloq),
+    linetype = "dashed", colour = "grey30", inherit.aes = FALSE
+  )
+}
+
 # Replicate means per sample x analyte; keeps every other column that is
 # constant per sample (unit, LLOQ / ULOQ, joined group / batch columns).
 elisa_qc_means_ <- function(data) {

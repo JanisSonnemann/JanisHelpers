@@ -179,7 +179,7 @@ if (is.null(p)) {
 
 Replicate means; labelled points lie outside their boxplot's whiskers (more
 than 1.5 x IQR beyond the quartiles) within group x tissue x timepoint x
-analyte.
+analyte. The dashed line marks the LLOQ.
 
 ```{r no-group, results = "asis"}
 if (is.null(group_col)) {
@@ -188,7 +188,8 @@ if (is.null(group_col)) {
 ```
 
 ```{r outliers, results = "asis"}
-emit_plot(JanisHelpers:::qc_table_plot_(scored, "analyte", group_col, log_scale))
+p <- JanisHelpers:::qc_table_plot_(scored, "analyte", group_col, log_scale)
+emit_plot(JanisHelpers:::elisa_qc_add_lloq_(p, scored, log_scale))
 ```
 
 ## Flagged samples
