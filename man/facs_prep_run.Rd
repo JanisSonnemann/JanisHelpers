@@ -43,7 +43,9 @@ panel. Default: unchanged.}
 columns are joined into \code{data} with \code{\link[=meta_annotate]{meta_annotate()}}.}
 
 \item{exclusions}{Optional tibble -- the meta workbook's \code{exclusions}
-sheet (see \code{\link[=facs_match_exclusions]{facs_match_exclusions()}}). \code{NULL} = nothing excluded.}
+sheet (see \code{\link[=facs_match_exclusions]{facs_match_exclusions()}}). With \code{final = TRUE} it is stored as the experiment's
+rule set (\code{\link[=db_write_exclusions]{db_write_exclusions()}}); \code{NULL} leaves the stored rule set
+unchanged (with a message), a zero-row sheet clears it.}
 
 \item{con}{A \code{DBI} connection from \code{\link[=db_connect]{db_connect()}}, with the experiment and
 subjects registered. Required when \code{final = TRUE}; left open.}

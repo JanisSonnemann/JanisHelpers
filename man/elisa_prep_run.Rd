@@ -39,7 +39,9 @@ has a \code{death_date} column, that becomes the prep's \code{end_dates} (unless
 \code{end_dates} is passed in \code{...}).}
 
 \item{exclusions}{Optional tibble -- the meta workbook's \code{exclusions}
-sheet. \code{NULL} = nothing excluded.}
+sheet. With \code{final = TRUE} it is stored as the experiment's
+rule set (\code{\link[=db_write_exclusions]{db_write_exclusions()}}); \code{NULL} leaves the stored rule set
+unchanged (with a message), a zero-row sheet clears it.}
 
 \item{con}{A \code{DBI} connection from \code{\link[=db_connect]{db_connect()}}, required when
 \code{final = TRUE}; left open.}

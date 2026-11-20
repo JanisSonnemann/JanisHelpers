@@ -99,12 +99,16 @@ test_that("an empty sheet writes an empty set", {
   con <- local_test_db()
   seed_exclusion_fixture(con)
   suppressMessages(db_write_exclusions(con, ex_sheet, "E1"))
-  expect_identical(db_write_exclusions(con, ex_sheet[0, ], "E1"), 2L)
+  expect_warning(suppressMessages(id <- db_write_exclusions(con, ex_sheet[0, ], "E1")),
+                 "empty set")
+  expect_identical(id, 2L)
   expect_equal(nrow(current_exclusion_rules_(con, "E1")), 0)
   expect_message(db_write_exclusions(con, NULL, "E1"), "unchanged")
   expect_equal(count_rows_(con, "exclusion_sets"), 2)
   suppressMessages(db_write_exclusions(con, ex_sheet, "E1"))
-  expect_identical(db_write_exclusions(con, NULL, "E1"), 4L)
+  expect_warning(suppressMessages(id <- db_write_exclusions(con, NULL, "E1")),
+                 "empty set")
+  expect_identical(id, 4L)
   expect_equal(nrow(current_exclusion_rules_(con, "E1")), 0)
 })
 
@@ -188,4 +192,51 @@ test_that("rules_without_match_ is empty without rules or set", {
   expect_equal(nrow(rules_without_match_(con, "E1")), 0)
   suppressMessages(db_write_exclusions(con, NULL, "E1"))
   expect_equal(nrow(rules_without_match_(con, "E1")), 0)
+})
+
+# ---- set messages, empty-set warning, runner NULL guard ----------------------
+
+test_that("writing a set messages its id and rule counts", {
+  con <- local_test_db()
+  seed_exclusion_fixture(con)
+  msgs <- capture_messages(db_write_exclusions(con, ex_sheet, "E1"))
+  expect_true(any(grepl("Exclusion rules of E1: set 1 written, 1 rule(s) (was 0).",
+                        msgs, fixed = TRUE)))
+  two <- tibble::tibble(mouse_ID = c("m1", "m2"), reason = "r")
+  msgs <- capture_messages(db_write_exclusions(con, two, "E1"))
+  expect_true(any(grepl("Exclusion rules of E1: set 2 written, 2 rule(s) (was 1).",
+                        msgs, fixed = TRUE)))
+})
+
+test_that("replacing a non-empty set by an empty one warns; an empty first set does not", {
+  con <- local_test_db()
+  seed_exclusion_fixture(con)
+  expect_no_warning(suppressMessages(db_write_exclusions(con, NULL, "E1")))
+  suppressMessages(db_write_exclusions(con, ex_sheet, "E1"))
+  expect_warning(
+    suppressMessages(id <- db_write_exclusions(con, NULL, "E1")),
+    "Exclusion rules of E1 replaced by an empty set -- every previously excluded row is now included.",
+    fixed = TRUE
+  )
+  expect_identical(id, 3L)
+  expect_equal(nrow(current_exclusion_rules_(con, "E1")), 0)
+})
+
+test_that("the prep helper leaves the rule set unchanged when exclusions is NULL", {
+  con <- local_test_db()
+  seed_exclusion_fixture(con)
+  suppressMessages(db_write_exclusions(con, ex_sheet, "E1"))
+  prep <- list(data = tibble::tibble(mouse_ID = "m1"))
+  expect_message(
+    res <- write_prep_exclusions_(con, prep, NULL, NULL, "data"),
+    "exclusions not given -- rule set of E1 left unchanged.", fixed = TRUE
+  )
+  expect_null(res)
+  expect_equal(count_rows_(con, "exclusion_sets"), 1)
+  expect_equal(nrow(current_exclusion_rules_(con, "E1")), 1)
+  # an explicit zero-row sheet still writes an empty set
+  expect_warning(suppressMessages(
+    write_prep_exclusions_(con, prep, ex_sheet[0, ], NULL, "data")), "empty set")
+  expect_equal(count_rows_(con, "exclusion_sets"), 2)
+  expect_equal(nrow(current_exclusion_rules_(con, "E1")), 0)
 })

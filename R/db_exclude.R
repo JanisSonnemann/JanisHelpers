@@ -108,8 +108,12 @@ match_sample_exclusions_ <- function(data, exclusions, assay) {
 #'
 #' A new set is only written when the rules differ from the current one
 #' (blank strings count as `NA`, row order is ignored); otherwise a message
-#' says "unchanged". An empty or `NULL` sheet writes an empty set, which
-#' re-includes everything. Rules naming a panel that is not registered yet, or
+#' says "unchanged". Writing a set always gives a message with the new set id
+#' and its number of rules (and the previous set's). An empty or `NULL` sheet
+#' writes an empty set, which re-includes everything; replacing a non-empty
+#' set by an empty one also gives a warning. (The prep runners, e.g.
+#' [facs_prep_run()], skip this call when their `exclusions` is `NULL`, so a
+#' final run without the sheet leaves the rule set unchanged.) Rules naming a panel that is not registered yet, or
 #' matching no stored row, are reported as messages, not errors, because the
 #' data of that unit may not be imported yet. `file_name` rules can't match
 #' FACS stains exported before file names were stored; the message then asks
@@ -161,6 +165,7 @@ db_write_exclusions <- function(con, exclusions, experiment_code,
   }
 
   current_id <- current_exclusion_set_id_(con, exp_id)
+  n_before <- 0L
   if (!is.na(current_id)) {
     current <- current_exclusion_rules_(con, experiment_code) |>
       dplyr::select(!exclusion_set_id)
@@ -169,6 +174,7 @@ db_write_exclusions <- function(con, exclusions, experiment_code,
               current_id, ").")
       return(invisible(current_id))
     }
+    n_before <- nrow(current)
   }
 
   known_panels <- DBI::dbGetQuery(con, "SELECT DISTINCT assay_name FROM assays")$assay_name
@@ -201,6 +207,12 @@ db_write_exclusions <- function(con, exclusions, experiment_code,
       ")
     }
   })
+  message("Exclusion rules of ", experiment_code, ": set ", new_id, " written, ",
+          nrow(rules), " rule(s) (was ", n_before, ").")
+  if (nrow(rules) == 0 && n_before > 0) {
+    warning("Exclusion rules of ", experiment_code, " replaced by an empty set ",
+            "-- every previously excluded row is now included.", call. = FALSE)
+  }
 
   unmatched <- rules_without_match_(con, experiment_code)
   show <- function(x) format_rows_(dplyr::select(x, !needs_reexport))
@@ -363,13 +375,22 @@ experiment_code_of_prep_ <- function(con, prep) {
   found
 }
 
-# Internal: record the exclusions sheet as the experiment's rule set.
+# Internal: record the exclusions sheet as the experiment's rule set. A NULL
+# sheet (not given to the runner) leaves the stored set alone -- only an
+# explicit (possibly zero-row) sheet replaces it. Returns the set id, or NULL
+# (invisibly) when nothing was written.
 write_prep_exclusions_ <- function(con, prep, exclusions, meta_path, data_dir) {
+  experiment_code <- experiment_code_of_prep_(con, prep)
+  if (is.null(exclusions)) {
+    message("exclusions not given -- rule set of ", experiment_code,
+            " left unchanged.")
+    return(invisible(NULL))
+  }
   source_file <- if (is.null(meta_path)) {
     NA_character_
   } else {
     relative_to_data_dir_(meta_path, data_dir)
   }
-  db_write_exclusions(con, exclusions, experiment_code_of_prep_(con, prep),
+  db_write_exclusions(con, exclusions, experiment_code,
                       source_file = source_file)
 }

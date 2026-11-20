@@ -308,7 +308,9 @@ facs_prep_load <- function(wsp_path, panel_dir) {
 #'   `batch_col` columns (e.g. the meta workbook's `meta` sheet); those two
 #'   columns are joined into `data` with [meta_annotate()].
 #' @param exclusions Optional tibble -- the meta workbook's `exclusions`
-#'   sheet (see [facs_match_exclusions()]). `NULL` = nothing excluded.
+#'   sheet (see [facs_match_exclusions()]). With `final = TRUE` it is stored as the experiment's
+#'   rule set ([db_write_exclusions()]); `NULL` leaves the stored rule set
+#'   unchanged (with a message), a zero-row sheet clears it.
 #' @param con A `DBI` connection from [db_connect()], with the experiment and
 #'   subjects registered. Required when `final = TRUE`; left open.
 #' @param condition_keyword Character scalar -- for panels with several wells

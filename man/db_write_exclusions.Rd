@@ -43,8 +43,12 @@ history of decisions stays visible.
 \details{
 A new set is only written when the rules differ from the current one
 (blank strings count as \code{NA}, row order is ignored); otherwise a message
-says "unchanged". An empty or \code{NULL} sheet writes an empty set, which
-re-includes everything. Rules naming a panel that is not registered yet, or
+says "unchanged". Writing a set always gives a message with the new set id
+and its number of rules (and the previous set's). An empty or \code{NULL} sheet
+writes an empty set, which re-includes everything; replacing a non-empty
+set by an empty one also gives a warning. (The prep runners, e.g.
+\code{\link[=facs_prep_run]{facs_prep_run()}}, skip this call when their \code{exclusions} is \code{NULL}, so a
+final run without the sheet leaves the rule set unchanged.) Rules naming a panel that is not registered yet, or
 matching no stored row, are reported as messages, not errors, because the
 data of that unit may not be imported yet. \code{file_name} rules can't match
 FACS stains exported before file names were stored; the message then asks

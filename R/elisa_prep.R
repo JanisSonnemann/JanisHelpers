@@ -153,7 +153,9 @@ elisa_prep_load <- function(path) {
 #'   has a `death_date` column, that becomes the prep's `end_dates` (unless
 #'   `end_dates` is passed in `...`).
 #' @param exclusions Optional tibble -- the meta workbook's `exclusions`
-#'   sheet. `NULL` = nothing excluded.
+#'   sheet. With `final = TRUE` it is stored as the experiment's
+#'   rule set ([db_write_exclusions()]); `NULL` leaves the stored rule set
+#'   unchanged (with a message), a zero-row sheet clears it.
 #' @param con A `DBI` connection from [db_connect()], required when
 #'   `final = TRUE`; left open.
 #' @param group_col,batch_col Character scalars or `NULL`, see

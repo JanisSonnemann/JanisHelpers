@@ -141,6 +141,19 @@ test_that("elisa_prep_run(final = TRUE) writes the exclusion set", {
     "bad plate")
 })
 
+test_that("elisa_prep_run(final = TRUE) without exclusions keeps the rule set", {
+  s <- elisa_final_setup()
+  suppressMessages(db_write_exclusions(
+    s$con, tibble::tibble(mouse_ID = "M2", reason = "bad plate"), "26-1"))
+  msgs <- capture_messages(
+    elisa_prep_run(TRUE, s$path, "restim", con = s$con, data_dir = s$data_dir))
+  expect_true(any(grepl("exclusions not given -- rule set of 26-1 left unchanged.",
+                        msgs, fixed = TRUE)))
+  expect_equal(count_rows_(s$con, "exclusion_sets"), 1)
+  expect_equal(count_rows_(s$con, "exclusion_rules"), 1)
+  expect_equal(count_rows_(s$con, "elisa_measurements") > 0, TRUE)
+})
+
 test_that("elisa_prep_run meta_path fills source_file", {
   s <- elisa_final_setup()
   meta_file <- file.path(s$data_dir, "meta.xlsx")
