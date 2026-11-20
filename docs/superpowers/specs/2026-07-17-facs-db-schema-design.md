@@ -16,6 +16,10 @@ Status: current schema (updated 2026-11-18)
 > **2026-11-19:** `facs_measurements.population_order` added (additive,
 > `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` on open) -- see
 > `2026-11-19-population-order-plot-helpers-design.md`. The DDL below is current.
+>
+> **2026-11-20:** exclusion rule sets, dropout / early subject columns and
+> `facs_stains.file_name` added (additive) -- see
+> `2026-11-20-exclusions-in-db-design.md`.
 Related: `docs/superpowers/specs/2026-07-17-facs-db-schema-diagram.html` (visual companion — entity cards, relationships, workflow diagram)
 
 ## Context
