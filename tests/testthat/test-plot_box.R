@@ -184,8 +184,8 @@ test_that("plot_paired x labels are the condition names, one cluster per group",
   b <- ggplot2::ggplot_build(p)
   expect_equal(b$layout$panel_params[[1]]$x$get_labels(), rep(c("unstim", "MPO"), 2))
   expect_equal(sort(unique(p$data$.x)), c(1, 2, 3.8, 4.8))
-  grp <- p$layers[[layer_idx_(p, "GeomText")]]$data
-  expect_setequal(grp$.grp, c("irrel", "MPO409"))
+  expect_length(layer_idx_(p, "GeomText"), 0)        # no group names in the panel
+  expect_equal(p$scales$get_scales("x")$guide$params$n.dodge, 2)
 })
 
 test_that("plot_paired shades conditions and shows excluded wells as red crosses", {

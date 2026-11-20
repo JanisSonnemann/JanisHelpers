@@ -141,8 +141,8 @@ plot_population <- function(data, populations, metric, tissues = NULL,
 #' One cluster of boxes per group, the conditions side by side inside it, and
 #' one grey line per subject joining its values across conditions -- for wells
 #' of the same sample that differ in one variable (restimulation). The x axis
-#' shows the condition names; the group name is printed above its cluster.
-#' Boxes take the group colour, conditions are shades of it (first level, the
+#' shows the condition names (in two staggered rows); the group is shown by the
+#' box colour (legend), conditions are shades of it (first level, the
 #' baseline, lightest). Returns a `ggplot` to extend with `+ labs()` etc.
 #'
 #' @param data Long tibble, already filtered to the metric (and tissue) to
@@ -204,8 +204,6 @@ plot_paired <- function(data, levels, condition = condition, fill = group,
   excl <- data[data$.excluded, , drop = FALSE]
   excl_lines <- excl[excl$.pair %in% excl$.pair[duplicated(excl$.pair)], , drop = FALSE]
   breaks <- as.vector(outer(seq_len(n_cond), (seq_along(groups) - 1) * step, `+`))
-  group_labels <- data.frame(.grp = groups,
-                             .x = (seq_along(groups) - 1) * step + (n_cond + 1) / 2)
 
   p <- ggplot2::ggplot(kept, ggplot2::aes(x = .data$.x, y = .data$.y, fill = .data$.grp)) +
     ggplot2::geom_boxplot(ggplot2::aes(group = .data$.x, alpha = .data$.cond),
@@ -234,12 +232,9 @@ plot_paired <- function(data, levels, condition = condition, fill = group,
       },
       "identity"
     ) +
-    ggplot2::geom_text(data = group_labels,
-                       ggplot2::aes(x = .data$.x, y = Inf, label = .data$.grp),
-                       inherit.aes = FALSE, vjust = 1.4, size = 3.5,
-                       fontface = "bold", colour = "grey20") +
     ggplot2::scale_x_continuous(breaks = breaks, labels = rep(levels, length(groups)),
-                                minor_breaks = NULL) +
+                                minor_breaks = NULL,
+                                guide = ggplot2::guide_axis(n.dodge = 2)) +
     ggplot2::scale_alpha_manual(
       values = stats::setNames(seq(0.3, 0.95, length.out = n_cond), levels),
       name = cond_col,
@@ -250,7 +245,7 @@ plot_paired <- function(data, levels, condition = condition, fill = group,
                   fill = names(dplyr::select(data, {{ fill }}))) +
     ggplot2::theme_bw() +
     ggplot2::theme(panel.grid.major.x = ggplot2::element_blank())
-  p <- add_y_scale_(p, scale, expand = ggplot2::expansion(mult = c(0.05, 0.15)))
+  p <- add_y_scale_(p, scale)
   add_fill_scale_(p, colors, kept$.grp)
 }
 
@@ -268,15 +263,12 @@ add_fill_scale_ <- function(p, colors, fill_values, aesthetics = "fill") {
   p + ggplot2::scale_discrete_manual(aesthetics = aesthetics, values = colors)
 }
 
-# Internal: y scale shared by plot_box() and plot_paired(); `expand` leaves
-# head room (plot_paired() group names).
-add_y_scale_ <- function(p, scale, expand = ggplot2::waiver()) {
+# Internal: y scale shared by plot_box() and plot_paired().
+add_y_scale_ <- function(p, scale) {
   switch(scale,
-    percent = p + ggplot2::scale_y_continuous(labels = scales::percent, expand = expand),
-    log = p + ggplot2::scale_y_log10(guide = "axis_logticks", minor_breaks = 0,
-                                     expand = expand),
-    linear = if (inherits(expand, "waiver")) p else
-      p + ggplot2::scale_y_continuous(expand = expand)
+    percent = p + ggplot2::scale_y_continuous(labels = scales::percent),
+    log = p + ggplot2::scale_y_log10(guide = "axis_logticks", minor_breaks = 0),
+    linear = p
   )
 }
 

@@ -50,8 +50,8 @@ A \code{ggplot} object.
 One cluster of boxes per group, the conditions side by side inside it, and
 one grey line per subject joining its values across conditions -- for wells
 of the same sample that differ in one variable (restimulation). The x axis
-shows the condition names; the group name is printed above its cluster.
-Boxes take the group colour, conditions are shades of it (first level, the
+shows the condition names (in two staggered rows); the group is shown by the
+box colour (legend), conditions are shades of it (first level, the
 baseline, lightest). Returns a \code{ggplot} to extend with \code{+ labs()} etc.
 }
 \examples{
