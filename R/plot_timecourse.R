@@ -28,6 +28,13 @@
 #' @param min_n Minimum number of mice for a time point to be part of the
 #'   group median line (default 2); the line bridges time points with fewer
 #'   mice (e.g. one early death), whose mice are still drawn.
+#' @param show_excluded Rows with `excluded == TRUE` (from
+#'   `db_load_experiment(keep_excluded = TRUE)`) are dropped with a message
+#'   (default, and always in [plot_timecourse_summary()]); `TRUE` draws them
+#'   as a red dashed line with red crosses per mouse, labelled with the mouse
+#'   ID at its last time point, outside the medians and p-values.
+#' @param label `TRUE` labels each mouse with its ID at its last time point
+#'   (in its group colour; uses `ggrepel` when installed).
 #' @returns A `ggplot` object.
 #' @examples
 #' d <- expand.grid(group = c("a", "b"), m = 1:3, week_num = c(-1, 1, 3))
@@ -39,12 +46,15 @@
 plot_timecourse <- function(data, x = week_num, y = value, fill = group, subject = mouse_id,
                             facet = NULL, scale = c("linear", "log"),
                             colors = getOption("JanisHelpers.group_colors"), p_val = FALSE,
-                            min_n = 2) {
+                            min_n = 2, show_excluded = FALSE, label = FALSE) {
   scale <- match.arg(scale)
   facet_name <- facet_name_(substitute(facet))
   x_name <- deparse(substitute(x))
-  d <- timecourse_prep_(data, {{ x }}, {{ y }}, {{ fill }}, {{ subject }}, facet_name)
-  check_log_values_(d, scale)
+  d_all <- timecourse_prep_(data, {{ x }}, {{ y }}, {{ fill }}, {{ subject }}, facet_name,
+                            show_excluded = show_excluded)
+  check_log_values_(d_all, scale)
+  d <- d_all[!d_all$.excluded, , drop = FALSE]
+  de <- d_all[d_all$.excluded, , drop = FALSE]
   med <- dplyr::summarise(d, .y = stats::median(.data$.y), n = dplyr::n_distinct(.data$.subject),
                           .by = dplyr::any_of(c(".fill", ".x", ".facet"))) |>
     dplyr::filter(.data$n >= min_n)
@@ -55,7 +65,16 @@ plot_timecourse <- function(data, x = week_num, y = value, fill = group, subject
     ggplot2::geom_line(data = med, ggplot2::aes(group = .data$.fill), linewidth = 1.2) +
     ggplot2::geom_point(data = med, size = 3) +
     ggplot2::labs(x = NULL, y = deparse(substitute(y)), colour = deparse(substitute(fill)))
-  timecourse_finish_(p, d, data, facet_name, x_name, scale, colors, p_val)
+  if (nrow(de) > 0) {
+    p <- p +
+      ggplot2::geom_line(data = de, ggplot2::aes(group = .data$.subject), colour = "red3",
+                         linetype = "dashed", linewidth = 0.4) +
+      ggplot2::geom_point(data = de, colour = "red3", shape = 4, size = 2)
+  }
+  lab_d <- if (isTRUE(label)) d_all else de
+  if (nrow(lab_d) > 0) p <- p + timecourse_label_layer_(lab_d, colors)
+  timecourse_finish_(p, d, data, facet_name, x_name, scale, colors, p_val,
+                     label_room = nrow(lab_d) > 0)
 }
 
 #' Timecourse plot of group medians and IQR
@@ -147,7 +166,9 @@ facet_name_ <- function(expr) {
 
 # Internal: standard columns .x, .y, .fill, .subject (.facet), missing values
 # dropped with a message, replicates averaged per subject x time (x facet).
-timecourse_prep_ <- function(data, x, y, fill, subject, facet_name = NULL) {
+timecourse_prep_ <- function(data, x, y, fill, subject, facet_name = NULL,
+                             show_excluded = FALSE) {
+  data <- plot_split_excluded_(data, show_excluded)
   d <- dplyr::mutate(data, .x = {{ x }}, .y = {{ y }}, .fill = {{ fill }},
                      .subject = {{ subject }})
   if (!is.null(facet_name)) d$.facet <- d[[facet_name]]
@@ -170,7 +191,38 @@ timecourse_prep_ <- function(data, x, y, fill, subject, facet_name = NULL) {
   d |>
     dplyr::filter(!is.na(.data$.y), !is.na(.data$.x)) |>
     dplyr::summarise(.y = mean(.data$.y),
-                     .by = dplyr::any_of(c(".subject", ".x", ".fill", ".facet")))
+                     .by = dplyr::any_of(c(".subject", ".x", ".fill", ".facet", ".excluded")))
+}
+
+# Internal: one label per subject (x facet) at its last time point, in one
+# layer so kept and excluded labels repel each other. Colour per row (a vector
+# parameter, not mapped: the colour scale stays the groups'): excluded red3,
+# kept the group colour (`colors` as add_fill_scale_() would apply them, else
+# ggplot2's default hues).
+timecourse_label_layer_ <- function(d, colors) {
+  last <- dplyr::slice_max(d, order_by = as.numeric(.data$.x), n = 1, with_ties = FALSE,
+                           by = dplyr::any_of(c(".subject", ".facet")))
+  kept_lv <- levels(droplevels(as.factor(d$.fill[!d$.excluded])))
+  pal <- if (length(kept_lv) == 0) {
+    character()
+  } else if (!is.null(colors) && any(kept_lv %in% names(colors))) {
+    colors
+  } else {
+    stats::setNames(scales::hue_pal()(length(kept_lv)), kept_lv)
+  }
+  col <- unname(pal[as.character(last$.fill)])
+  col[is.na(col)] <- "grey50"
+  col[last$.excluded] <- "red3"
+  args <- list(data = last,
+               mapping = ggplot2::aes(x = .data$.x, y = .data$.y, label = .data$.subject),
+               colour = col, size = 3, show.legend = FALSE, inherit.aes = FALSE)
+  if (qc_has_ggrepel_()) {
+    do.call(ggrepel::geom_text_repel,
+            c(args, list(nudge_x = 0.3, direction = "y", hjust = 0,
+                         min.segment.length = 0, max.overlaps = Inf)))
+  } else {
+    do.call(ggplot2::geom_text, c(args, list(hjust = -0.2)))
+  }
 }
 
 # Internal: log scale needs positive values.
@@ -183,12 +235,15 @@ check_log_values_ <- function(d, scale) {
 
 # Internal: axis, LLOQ line, y scale, colours, facets, stars, theme.
 timecourse_finish_ <- function(p, d, data, facet_name, x_name, scale, colors, p_val,
-                               x_labels = NULL) {
+                               x_labels = NULL, label_room = FALSE) {
   if (is.numeric(d$.x)) {
     br <- sort(unique(d$.x))
     labs <- if (!is.null(x_labels)) x_labels[br] else
       if (grepl("week", x_name)) paste("week", br) else format(br)
-    p <- p + ggplot2::scale_x_continuous(breaks = br, labels = labs, minor_breaks = NULL)
+    # mouse labels sit right of the last time point
+    expand <- if (label_room) ggplot2::expansion(mult = c(0.05, 0.15)) else ggplot2::waiver()
+    p <- p + ggplot2::scale_x_continuous(breaks = br, labels = labs, minor_breaks = NULL,
+                                         expand = expand)
   }
   lloq <- timecourse_lloq_(data, facet_name)
   if (!is.null(lloq)) {

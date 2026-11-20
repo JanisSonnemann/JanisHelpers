@@ -161,3 +161,38 @@ test_that("several analytes per mouse and time point error instead of averaging"
   expect_error(plot_timecourse_summary(tc2), "several analyte")
   expect_s3_class(plot_timecourse(tc2, facet = analyte), "ggplot")
 })
+
+tc_excl <- dplyr::mutate(tc, excluded = mouse_id == "MPO409-4")
+tc_text_layers <- function(p) {
+  p$layers[vapply(p$layers, function(l) inherits(l$geom, c("GeomText", "GeomTextRepel")),
+                  logical(1))]
+}
+
+test_that("excluded mice are dropped with a message by default", {
+  expect_message(p <- plot_timecourse(tc_excl), "Dropped 4 excluded")
+  expect_false("MPO409-4" %in% p$data$.subject)
+  expect_message(plot_timecourse_summary(tc_excl), "Dropped 4 excluded")
+})
+
+test_that("show_excluded draws excluded mice red, outside the medians", {
+  p <- plot_timecourse(tc_excl, show_excluded = TRUE)
+  p0 <- suppressMessages(plot_timecourse(tc_excl))
+  med <- function(p) p$layers[[3]]$data
+  expect_equal(med(p), med(p0))
+  red <- p$layers[vapply(p$layers, function(l) identical(l$aes_params$colour, "red3"),
+                         logical(1))]
+  expect_true(all(vapply(red, function(l) all(l$data$.subject == "MPO409-4"), logical(1))))
+  expect_true(any(vapply(red, function(l) identical(l$aes_params$linetype, "dashed"),
+                         logical(1))))
+  labs <- tc_text_layers(p)
+  expect_length(labs, 1)
+  expect_equal(nrow(labs[[1]]$data), 1)
+  expect_no_error(ggplot2::ggplot_build(p))
+})
+
+test_that("label = TRUE labels each mouse once at its last time point", {
+  p <- plot_timecourse(tc, label = TRUE)
+  lab <- tc_text_layers(p)[[1]]$data
+  expect_setequal(lab$.subject, unique(tc$mouse_id))
+  expect_true(all(lab$.x == 5))
+})
