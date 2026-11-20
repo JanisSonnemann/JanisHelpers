@@ -44,15 +44,22 @@ dat <- local({
   db_path <- "~/databases/<project>/<project>.duckdb"
   con <- DBI::dbConnect(duckdb::duckdb(), path.expand(db_path), read_only = TRUE)
   on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
-  db_load_experiment(
+  dat <- db_load_experiment(
     con,
     experiment = "<experiment code>",
     group_levels = c("treated", "control"),
     # rename long import units: c(new_name = "import_unit")
     names = NULL
   )
+  # whole cohort incl. dropouts without mouse_ID (the DB holds only the mice
+  # that made it); used by meta_summary_table() / meta_mouse_table()
+  # dat$workbook <- meta_read(here::here("data", "<exp>", "meta", "meta_<exp>.xlsx"))$meta
+  dat
 })
 # names(dat): meta, exclusions, then one tibble per FACS panel / ELISA / histology file
+
+# Serial ELISA samples labelled by week after BMT (week_num / week):
+# dat$titer <- meta_label_weeks(dat$titer, dat$meta)
 
 # Derived data goes back into dat, e.g.:
 # dat$restim_fc <- dat$restim |>
@@ -68,11 +75,13 @@ pops <- list(
 # Overview
 
 ```{r overview}
-dat$meta |>
-  count(group, sex)
+# cohort per group (without dat$workbook: DB mice only, with a message)
+meta_summary_table(dat$workbook, dat)
+```
 
-dat$exclusions |>
-  distinct(mouse_id, reason)
+```{r overview-mice}
+# every mouse, what data exist per import unit, and why a mouse is missing
+meta_mouse_table(dat, dat$workbook)
 ```
 
 # FACS
@@ -89,9 +98,15 @@ dat$exclusions |>
 # ELISA
 
 ```{r elisa-example}
+# timecourse (after meta_label_weeks() in the setup): each mouse + group median
 # dat$titer |>
-#   plot_box(x = factor(collected_at), y = value, fill = group, scale = "log") +
-#   labs(x = "", y = "titer")
+#   plot_timecourse(p_val = TRUE) +
+#   labs(title = "anti-MPO titer", y = "AU")
+#
+# group median and IQR only, n per group below
+# dat$titer |>
+#   plot_timecourse_summary(p_val = TRUE) +
+#   labs(title = "anti-MPO titer", y = "AU")
 ```
 
 # Histology

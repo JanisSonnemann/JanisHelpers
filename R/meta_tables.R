@@ -319,7 +319,7 @@ unit_cells_ <- function(u, ends) {
     }
   }
   ids <- unique(u$mouse_id)
-  stats::setNames(rep("✓", length(ids)), ids)
+  stats::setNames(rep("\u2713", length(ids)), ids)
 }
 
 # Internal: status string per cohort row.
