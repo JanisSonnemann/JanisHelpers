@@ -53,6 +53,75 @@ plot_timecourse <- function(data, x = week_num, y = value, fill = group, subject
   timecourse_finish_(p, d, data, facet_name, x_name, scale, colors, p_val)
 }
 
+#' Timecourse plot of group medians and IQR
+#'
+#' The group summary of [plot_timecourse()]: per group and time point the
+#' median of the mice with an error bar from the 25th to the 75th percentile
+#' (IQR), medians joined by a line, groups dodged side by side, and the number
+#' of mice per group printed at the bottom of each time point. No individual
+#' mice are drawn. Median and IQR suit small, skewed groups and match the
+#' rank-based tests of `p_val`. A group with fewer than `min_n` mice at a time
+#' point (e.g. one early death) is drawn as a hollow point without error bar
+#' and left out of the median line, which bridges it. Same data handling as
+#' [plot_timecourse()] (missing values dropped, replicates averaged per mouse).
+#'
+#' @inheritParams plot_timecourse
+#' @param min_n Minimum number of mice for a time point to get an error bar and
+#'   be part of the median line (default 2).
+#' @returns A `ggplot` object (caption `"median and IQR; n per group below"`,
+#'   override with `+ ggplot2::labs(caption = ...)`).
+#' @examples
+#' d <- expand.grid(group = c("a", "b"), m = 1:3, week_num = c(-1, 1, 3))
+#' d$mouse_id <- paste0(d$group, d$m)
+#' d$value <- d$week_num + d$m + ifelse(d$group == "a", 5, 0)
+#' plot_timecourse_summary(d)
+#' @export
+plot_timecourse_summary <- function(data, x = week_num, y = value, fill = group,
+                                    subject = mouse_id, facet = NULL,
+                                    scale = c("linear", "log"),
+                                    colors = getOption("JanisHelpers.group_colors"),
+                                    p_val = FALSE, min_n = 2) {
+  scale <- match.arg(scale)
+  facet_name <- facet_name_(substitute(facet))
+  x_name <- deparse(substitute(x))
+  d <- timecourse_prep_(data, {{ x }}, {{ y }}, {{ fill }}, {{ subject }}, facet_name)
+  check_log_values_(d, scale)
+  s <- timecourse_summary_(d, min_n)
+  ok <- s[!s$low_n, ]
+  dodge <- ggplot2::position_dodge(width = 0.4)
+
+  p <- ggplot2::ggplot(s, ggplot2::aes(x = .data$.x, y = .data$median, colour = .data$.fill,
+                                       group = .data$.fill)) +
+    ggplot2::geom_errorbar(data = ok, ggplot2::aes(ymin = .data$q25, ymax = .data$q75),
+                           width = 0.3, position = dodge) +
+    ggplot2::geom_line(data = ok, position = dodge, linewidth = 0.8) +
+    ggplot2::geom_point(data = ok, position = dodge, size = 2.5)
+  if (any(s$low_n)) {
+    p <- p + ggplot2::geom_point(data = s[s$low_n, ], position = dodge, size = 2.5,
+                                 shape = 21, fill = "white")
+  }
+  p <- p +
+    ggplot2::geom_text(data = s, ggplot2::aes(y = -Inf, label = .data$n), vjust = -0.5,
+                       position = dodge, size = 3, show.legend = FALSE) +
+    ggplot2::labs(x = NULL, y = deparse(substitute(y)), colour = deparse(substitute(fill)),
+                  caption = "median and IQR; n per group below")
+  timecourse_finish_(p, d, data, facet_name, x_name, scale, colors, p_val)
+}
+
+# Internal: per group x time point (x facet): n mice, median, quartiles,
+# low_n flag.
+timecourse_summary_ <- function(d, min_n) {
+  dplyr::summarise(
+    d,
+    n = dplyr::n_distinct(.data$.subject),
+    median = stats::median(.data$.y),
+    q25 = unname(stats::quantile(.data$.y, 0.25, type = 7)),
+    q75 = unname(stats::quantile(.data$.y, 0.75, type = 7)),
+    .by = dplyr::any_of(c(".fill", ".x", ".facet"))
+  ) |>
+    dplyr::mutate(low_n = .data$n < min_n)
+}
+
 # Internal: name of the facet column from substitute(facet), or NULL.
 facet_name_ <- function(expr) {
   if (is.null(expr)) return(NULL)

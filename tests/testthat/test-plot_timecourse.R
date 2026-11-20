@@ -72,3 +72,58 @@ test_that("factor x is drawn as categories", {
   b <- ggplot2::ggplot_build(plot_timecourse(tcf, x = week))
   expect_equal(b$layout$panel_params[[1]]$x$get_labels(), levels(tcf$week))
 })
+
+# one irrel mouse ends early at week 4 (the 26-1-17 case)
+tc_low <- dplyr::bind_rows(
+  tc,
+  tibble::tibble(group = factor("irrel", levels = c("MPO409", "irrel")),
+                 week_num = 4L, mouse_id = "irrel-9", value = 7)
+)
+tc_layer <- function(p, geom) {
+  p$layers[[which(vapply(p$layers, function(l) inherits(l$geom, geom), logical(1)))[1]]]
+}
+
+test_that("summary computes median and IQR over mice, not wells", {
+  tc_reps <- dplyr::bind_rows(tc, dplyr::mutate(tc, value = value + 2))
+  s <- timecourse_summary_(timecourse_prep_(tc_reps, week_num, value, group, mouse_id, NULL),
+                           min_n = 2)
+  one <- s[s$.fill == "irrel" & s$.x == 1, ]
+  expect_equal(one$n, 4L)
+  vals <- tc$value[tc$group == "irrel" & tc$week_num == 1] + 1
+  expect_equal(one$median, stats::median(vals))
+  expect_equal(one$q25, unname(stats::quantile(vals, 0.25, type = 7)))
+  expect_equal(one$q75, unname(stats::quantile(vals, 0.75, type = 7)))
+  expect_false(any(s$low_n))
+})
+
+test_that("low-n points are hollow, without error bar, and bridged by the line", {
+  p <- plot_timecourse_summary(tc_low, colors = tc_cols)
+  expect_s3_class(p, "ggplot")
+  bars <- tc_layer(p, "GeomErrorbar")$data
+  expect_false(any(bars$.x == 4 & bars$.fill == "irrel"))
+  line <- tc_layer(p, "GeomLine")$data
+  irrel_x <- line$.x[line$.fill == "irrel"]
+  expect_false(4 %in% irrel_x)
+  expect_true(all(c(3, 5) %in% irrel_x))
+  hollow <- Filter(function(l) inherits(l$geom, "GeomPoint") && identical(l$aes_params$shape, 21),
+                   p$layers)
+  expect_length(hollow, 1)
+  expect_equal(hollow[[1]]$data$.x, 4)
+})
+
+test_that("n labels are printed per group and week", {
+  p <- plot_timecourse_summary(tc_low)
+  txt <- tc_layer(p, "GeomText")$data
+  expect_equal(nrow(txt), 9)
+  expect_equal(txt$n[txt$.x == 4], 1L)
+})
+
+test_that("default caption names the measure", {
+  expect_equal(plot_timecourse_summary(tc)$labels$caption, "median and IQR; n per group below")
+})
+
+test_that("summary p_val adds stars without dropping the n labels", {
+  p <- plot_timecourse_summary(tc, p_val = TRUE)
+  n_text <- sum(vapply(p$layers, function(l) inherits(l$geom, "GeomText"), logical(1)))
+  expect_equal(n_text, 2)
+})
