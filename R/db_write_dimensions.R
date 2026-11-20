@@ -38,7 +38,9 @@ fill_missing_cols_ <- function(data, cols) {
 #' inserted again; their `early` / `early_reason` are updated when `data` has
 #' those columns, all other columns stay untouched. Errors (writing nothing)
 #' if a stored `end_date` differs from a non-`NA` incoming one -- end-point
-#' samples are keyed by it. Errors if any row's `experiment_code` isn't registered yet -- naming
+#' samples are keyed by it. Also errors if an incoming `mdc_id` is already
+#' stored for a different `mouse_id` (one facility ID = one subject; a dropout
+#' cannot be re-keyed). Errors if any row's `experiment_code` isn't registered yet -- naming
 #' every unresolved code -- rather than silently dropping those rows.
 #'
 #' @param con A `DBI` connection from [db_connect()].
@@ -88,6 +90,23 @@ db_write_subjects <- function(con, data) {
       "end_date differs from the stored value (end-point samples are keyed by it); nothing written:\n",
       paste0("  ", changed$mouse_id, ": stored ", changed$stored,
              ", new ", changed$new, collapse = "\n"),
+      call. = FALSE
+    )
+  }
+
+  rekeyed <- DBI::dbGetQuery(con, "
+    SELECT DISTINCT sub.mouse_id AS stored, s.mouse_id AS new, s.mdc_id
+    FROM tmp_subjects s
+    JOIN subjects sub ON sub.mdc_id = s.mdc_id
+    WHERE s.mdc_id IS NOT NULL AND sub.mouse_id <> s.mouse_id
+  ")
+  if (nrow(rekeyed) > 0) {
+    stop(
+      "Facility ID already registered under a different mouse_id; nothing written:\n",
+      paste0("  Facility ID '", rekeyed$mdc_id, "' is already registered as '",
+             rekeyed$stored, "' -- it now has mouse_ID '", rekeyed$new, "'",
+             collapse = "\n"),
+      "\nRe-keying a subject is not supported; correct the sheet or remove the old subject.",
       call. = FALSE
     )
   }

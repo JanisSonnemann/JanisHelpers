@@ -253,6 +253,17 @@ test_that("re-running db_write_meta updates early but refuses end_date changes",
   expect_equal(s2$end_date[1], as.Date("2025-06-01"))
 })
 
+test_that("db_write_meta refuses a dropout that later gets a mouse_ID", {
+  con <- local_test_db()
+  suppressMessages(db_write_meta(con, meta_sheet_(), "26-1"))
+  err <- expect_error(
+    db_write_meta(con, meta_sheet_(mouse_ID = c("m1", "m9")), "26-1"),
+    "already registered")
+  expect_match(conditionMessage(err), "'F2'")
+  expect_match(conditionMessage(err), "m9")
+  expect_equal(count_rows_(con, "subjects"), 2)
+})
+
 test_that("db_write_subjects still returns only newly inserted rows", {
   con <- local_test_db()
   db_write_experiment(con, "25-7")

@@ -28,6 +28,8 @@ Bulk-inserts subject rows. \code{data} must already be shaped to match the
 inserted again; their \code{early} / \code{early_reason} are updated when \code{data} has
 those columns, all other columns stay untouched. Errors (writing nothing)
 if a stored \code{end_date} differs from a non-\code{NA} incoming one -- end-point
-samples are keyed by it. Errors if any row's \code{experiment_code} isn't registered yet -- naming
+samples are keyed by it. Also errors if an incoming \code{mdc_id} is already
+stored for a different \code{mouse_id} (one facility ID = one subject; a dropout
+cannot be re-keyed). Errors if any row's \code{experiment_code} isn't registered yet -- naming
 every unresolved code -- rather than silently dropping those rows.
 }
