@@ -72,6 +72,11 @@ plot_bubble_fc <- function(data,
     glue::glue("{comparison_group} vs control: {control}")
   }
 
+  # symmetric limits: white = no change, ends labelled with the direction
+  lim <- suppressWarnings(max(abs(fc_data$log2fc), na.rm = TRUE))
+  if (!is.finite(lim) || lim == 0) lim <- 1
+  lim_txt <- format(signif(lim, 2))
+
   ggplot2::ggplot(fc_data, ggplot2::aes(x = .data[[x_col]], y = population)) +
     ggplot2::geom_point(ggplot2::aes(
       color = log2fc, size = abs(log2fc), shape = is.na(p_value)
@@ -79,9 +84,19 @@ plot_bubble_fc <- function(data,
     ggplot2::geom_text(ggplot2::aes(label = stars), vjust = -1.2, size = 3.5) +
     ggplot2::scale_color_gradient2(
       low = "#2a78d6", mid = "#f0efec", high = "#e34948", midpoint = 0,
-      name = "log2FC"
+      limits = c(-lim, lim), breaks = c(-lim, 0, lim),
+      labels = c(glue::glue("-{lim_txt}  lower than {control}"), "0  no change",
+                 glue::glue("+{lim_txt}  higher than {control}")),
+      name = glue::glue("log2FC vs {control}"),
+      guide = ggplot2::guide_colourbar(order = 1,
+                                       theme = ggplot2::theme(
+                                         legend.key.height = ggplot2::unit(4, "lines")))
     ) +
-    ggplot2::scale_size_continuous(range = c(2, 10), name = "|log2FC|") +
+    ggplot2::scale_size_continuous(
+      range = c(2, 10), name = "|log2FC|",
+      guide = ggplot2::guide_legend(order = 2,
+                                    override.aes = list(colour = "grey50"))
+    ) +
     ggplot2::scale_shape_manual(values = c(`FALSE` = 16, `TRUE` = 1), guide = "none") +
     ggplot2::labs(
       x = x_label,

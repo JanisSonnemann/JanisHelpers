@@ -498,3 +498,27 @@ test_that("plot_bubble_fc() builds with x_col = \"tissue\" and captions the sing
   expect_match(p$labels$caption, "control")
   expect_equal(p$labels$x, "Tissue")
 })
+
+test_that("plot_bubble_fc() legend names higher / lower than control", {
+  data <- make_data_(
+    control.CD4 = c(9.7, 9.9, 10.1, 10.3),
+    treated.CD4 = c(19.6, 19.9, 20.1, 20.4)
+  )
+  p <- plot_bubble_fc(data, control = "control")
+  col <- p$scales$get_scales("colour")
+  expect_equal(col$name, "log2FC vs control")
+  labs <- col$get_labels()
+  expect_match(labs[1], "lower than control")
+  expect_match(labs[3], "higher than control")
+  expect_equal(col$get_limits()[1], -col$get_limits()[2])
+})
+
+test_that("plot_bubble_fc() builds when every log2FC is 0", {
+  data <- make_data_(
+    control.CD4 = c(9.7, 9.9, 10.1, 10.3),
+    treated.CD4 = c(9.7, 9.9, 10.1, 10.3)
+  )
+  p <- plot_bubble_fc(data, control = "control")
+  expect_equal(p$scales$get_scales("colour")$get_limits(), c(-1, 1))
+  expect_no_error(ggplot2::ggplot_build(p))
+})
