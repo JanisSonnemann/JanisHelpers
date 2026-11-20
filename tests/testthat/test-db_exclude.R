@@ -54,3 +54,86 @@ test_that("NULL exclusions give empty results", {
   expect_equal(nrow(res$applicable), 0)
   expect_equal(nrow(res$excluded_samples), 0)
 })
+
+# ---- db_write_exclusions() ---------------------------------------------------
+
+seed_exclusion_fixture <- function(con) {
+  db_write_experiment(con, experiment_code = "E1")
+  db_write_subjects(con, tibble::tibble(
+    mouse_id = c("m1", "m2"), experiment_code = "E1",
+    end_date = as.Date("2026-06-10")
+  ))
+  db_write_assay(con, assay_name = "overview", domain = "facs")
+  invisible(con)
+}
+ex_sheet <- tibble::tibble(mouse_ID = "m1", reason = "r")
+
+test_that("db_write_exclusions writes a first set and returns its id", {
+  con <- local_test_db()
+  seed_exclusion_fixture(con)
+  id <- suppressMessages(db_write_exclusions(con, ex_sheet, "E1"))
+  expect_identical(id, 1L)
+  rules <- current_exclusion_rules_(con, "E1")
+  expect_equal(nrow(rules), 1)
+  expect_true(all(is.na(rules[c("tissue", "panel", "condition", "file_name", "collected_at")])))
+})
+
+test_that("an unchanged sheet writes no new set", {
+  con <- local_test_db()
+  seed_exclusion_fixture(con)
+  suppressMessages(db_write_exclusions(con, ex_sheet, "E1"))
+  expect_message(id <- db_write_exclusions(con, ex_sheet, "E1"), "unchanged")
+  expect_identical(id, 1L)
+  expect_equal(count_rows_(con, "exclusion_sets"), 1)
+})
+
+test_that("blank strings equal NA", {
+  con <- local_test_db()
+  seed_exclusion_fixture(con)
+  suppressMessages(db_write_exclusions(con, ex_sheet, "E1"))
+  expect_message(db_write_exclusions(con, dplyr::mutate(ex_sheet, tissue = ""), "E1"),
+                 "unchanged")
+})
+
+test_that("an empty sheet writes an empty set", {
+  con <- local_test_db()
+  seed_exclusion_fixture(con)
+  suppressMessages(db_write_exclusions(con, ex_sheet, "E1"))
+  expect_identical(db_write_exclusions(con, ex_sheet[0, ], "E1"), 2L)
+  expect_equal(nrow(current_exclusion_rules_(con, "E1")), 0)
+  suppressMessages(db_write_exclusions(con, ex_sheet, "E1"))
+  expect_identical(db_write_exclusions(con, NULL, "E1"), 4L)
+  expect_equal(nrow(current_exclusion_rules_(con, "E1")), 0)
+})
+
+test_that("db_write_exclusions validates and writes nothing on error", {
+  con <- local_test_db()
+  seed_exclusion_fixture(con)
+  expect_error(db_write_exclusions(con, tibble::tibble(mouse_ID = "m1"), "E1"), "reason")
+  expect_error(
+    db_write_exclusions(con, tibble::tibble(mouse_ID = c("m1", NA), reason = c("r", "r")), "E1"),
+    "mouse_ID")
+  expect_error(
+    db_write_exclusions(con, tibble::tibble(mouse_ID = "m1", reason = ""), "E1"),
+    "reason")
+  expect_error(
+    db_write_exclusions(con, tibble::tibble(mouse_ID = "zz", reason = "r"), "E1"), "zz")
+  expect_error(db_write_exclusions(con, ex_sheet, "nope"), "nope")
+  expect_equal(count_rows_(con, "exclusion_sets"), 0)
+  expect_equal(count_rows_(con, "exclusion_rules"), 0)
+})
+
+test_that("an unknown panel only messages", {
+  con <- local_test_db()
+  seed_exclusion_fixture(con)
+  expect_message(
+    db_write_exclusions(con, dplyr::mutate(ex_sheet, panel = "elisaX"), "E1"),
+    "not registered yet")
+  expect_equal(count_rows_(con, "exclusion_sets"), 1)
+})
+
+test_that("rules for mice without samples are reported", {
+  con <- local_test_db()
+  seed_exclusion_fixture(con)
+  expect_message(db_write_exclusions(con, ex_sheet, "E1"), "match no stored row")
+})
