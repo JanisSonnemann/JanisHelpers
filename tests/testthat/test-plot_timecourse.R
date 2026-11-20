@@ -196,3 +196,16 @@ test_that("label = TRUE labels each mouse once at its last time point", {
   expect_setequal(lab$.subject, unique(tc$mouse_id))
   expect_true(all(lab$.x == 5))
 })
+
+test_that("labels of mice ending early sit at the end of the timecourse", {
+  early <- dplyr::filter(tc, !(mouse_id == "irrel-1" & week_num > 1))
+  p <- plot_timecourse(early, label = TRUE)
+  b <- ggplot2::ggplot_build(p)
+  i <- which(vapply(p$layers, function(l) inherits(l$geom, c("GeomText", "GeomTextRepel")),
+                    logical(1)))
+  lab <- b$data[[i]]
+  # every label starts right of the last week; the early mouse's segment
+  # starts at its own last point (week 1)
+  expect_true(all(lab$x >= 5))
+  if ("x_orig" %in% names(lab)) expect_equal(lab$x_orig[lab$label == "irrel-1"], 1)
+})

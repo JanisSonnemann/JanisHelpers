@@ -50,9 +50,10 @@ mice (e.g. one early death), whose mice are still drawn.}
 \code{db_load_experiment(keep_excluded = TRUE)}) are dropped with a message
 (default, and always in \code{\link[=plot_timecourse_summary]{plot_timecourse_summary()}}); \code{TRUE} draws them
 as a red dashed line with red crosses per mouse, labelled with the mouse
-ID at its last time point, outside the medians and p-values.}
+ID at the end of the timecourse, outside the medians and p-values.}
 
-\item{label}{\code{TRUE} labels each mouse with its ID at its last time point
+\item{label}{\code{TRUE} labels each mouse with its ID in a column at the end
+of the timecourse, joined to its last point by a grey segment
 (in its group colour; uses \code{ggrepel} when installed).}
 }
 \value{

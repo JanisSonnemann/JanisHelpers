@@ -32,8 +32,9 @@
 #'   `db_load_experiment(keep_excluded = TRUE)`) are dropped with a message
 #'   (default, and always in [plot_timecourse_summary()]); `TRUE` draws them
 #'   as a red dashed line with red crosses per mouse, labelled with the mouse
-#'   ID at its last time point, outside the medians and p-values.
-#' @param label `TRUE` labels each mouse with its ID at its last time point
+#'   ID at the end of the timecourse, outside the medians and p-values.
+#' @param label `TRUE` labels each mouse with its ID in a column at the end
+#'   of the timecourse, joined to its last point by a grey segment
 #'   (in its group colour; uses `ggrepel` when installed).
 #' @returns A `ggplot` object.
 #' @examples
@@ -72,7 +73,7 @@ plot_timecourse <- function(data, x = week_num, y = value, fill = group, subject
       ggplot2::geom_point(data = de, colour = "red3", shape = 4, size = 2)
   }
   lab_d <- if (isTRUE(label)) d_all else de
-  if (nrow(lab_d) > 0) p <- p + timecourse_label_layer_(lab_d, colors)
+  if (nrow(lab_d) > 0) p <- p + timecourse_label_layer_(lab_d, colors, x_end = max(as.numeric(d_all$.x)))
   timecourse_finish_(p, d, data, facet_name, x_name, scale, colors, p_val,
                      label_room = nrow(lab_d) > 0)
 }
@@ -194,12 +195,13 @@ timecourse_prep_ <- function(data, x, y, fill, subject, facet_name = NULL,
                      .by = dplyr::any_of(c(".subject", ".x", ".fill", ".facet", ".excluded")))
 }
 
-# Internal: one label per subject (x facet) at its last time point, in one
+# Internal: one label per subject (x facet) for its last time point, placed in a
+# column right of `x_end` (the last time point of the plot), in one
 # layer so kept and excluded labels repel each other. Colour per row (a vector
 # parameter, not mapped: the colour scale stays the groups'): excluded red3,
 # kept the group colour (`colors` as add_fill_scale_() would apply them, else
 # ggplot2's default hues).
-timecourse_label_layer_ <- function(d, colors) {
+timecourse_label_layer_ <- function(d, colors, x_end) {
   last <- dplyr::slice_max(d, order_by = as.numeric(.data$.x), n = 1, with_ties = FALSE,
                            by = dplyr::any_of(c(".subject", ".facet")))
   kept_lv <- levels(droplevels(as.factor(d$.fill[!d$.excluded])))
@@ -213,14 +215,20 @@ timecourse_label_layer_ <- function(d, colors) {
   col <- unname(pal[as.character(last$.fill)])
   col[is.na(col)] <- "grey50"
   col[last$.excluded] <- "red3"
+  # all labels in one column right of the last time point (x_end), a segment
+  # back to each mouse's own last point (mice ending early included)
+  gap <- 0.03 * diff(range(as.numeric(d$.x), x_end))
+  if (gap == 0) gap <- 0.1
   args <- list(data = last,
                mapping = ggplot2::aes(x = .data$.x, y = .data$.y, label = .data$.subject),
                colour = col, size = 3, show.legend = FALSE, inherit.aes = FALSE)
   if (qc_has_ggrepel_()) {
     do.call(ggrepel::geom_text_repel,
-            c(args, list(nudge_x = 0.3, direction = "y", hjust = 0,
+            c(args, list(nudge_x = x_end - as.numeric(last$.x) + gap, direction = "y",
+                         hjust = 0, segment.colour = "grey60", segment.size = 0.3,
                          min.segment.length = 0, max.overlaps = Inf)))
   } else {
+    args$data$.x <- x_end
     do.call(ggplot2::geom_text, c(args, list(hjust = -0.2)))
   }
 }
@@ -241,7 +249,7 @@ timecourse_finish_ <- function(p, d, data, facet_name, x_name, scale, colors, p_
     labs <- if (!is.null(x_labels)) x_labels[br] else
       if (grepl("week", x_name)) paste("week", br) else format(br)
     # mouse labels sit right of the last time point
-    expand <- if (label_room) ggplot2::expansion(mult = c(0.05, 0.15)) else ggplot2::waiver()
+    expand <- if (label_room) ggplot2::expansion(mult = c(0.05, 0.2)) else ggplot2::waiver()
     p <- p + ggplot2::scale_x_continuous(breaks = br, labels = labs, minor_breaks = NULL,
                                          expand = expand)
   }
