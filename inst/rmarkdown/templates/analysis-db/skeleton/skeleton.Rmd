@@ -51,12 +51,12 @@ dat <- local({
     # rename long import units: c(new_name = "import_unit")
     names = NULL
   )
-  # whole cohort incl. dropouts without mouse_ID (the DB holds only the mice
-  # that made it); used by meta_summary_table() / meta_mouse_table()
+  # optional: take the cohort from the meta workbook instead of dat$cohort
+  # (then pass dat$workbook to meta_summary_table() / meta_mouse_table())
   # dat$workbook <- meta_read(here::here("data", "<exp>", "meta", "meta_<exp>.xlsx"))$meta
   dat
 })
-# names(dat): meta, exclusions, then one tibble per FACS panel / ELISA / histology file
+# names(dat): meta, cohort, exclusions, then one tibble per FACS panel / ELISA / histology file
 
 # Serial ELISA samples labelled by week after BMT (week_num / week):
 # dat$titer <- meta_label_weeks(dat$titer, dat$meta)
@@ -75,13 +75,13 @@ pops <- list(
 # Overview
 
 ```{r overview}
-# cohort per group (without dat$workbook: DB mice only, with a message)
-meta_summary_table(dat$workbook, dat)
+# cohort per group, incl. dropouts and excluded mice (dat$cohort)
+meta_summary_table(NULL, dat)
 ```
 
 ```{r overview-mice}
 # every mouse, what data exist per import unit, and why a mouse is missing
-meta_mouse_table(dat, dat$workbook)
+meta_mouse_table(dat)
 ```
 
 # FACS

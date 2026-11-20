@@ -28,7 +28,7 @@ tb_meta <- tibble::tibble(
 
 tb_excl <- function(tissue = NA_character_) {
   tibble::tibble(
-    import_unit = "titer_x", mouse_id = "x-4", tissue = tissue, panel = NA_character_,
+    exclusion_set_id = 1L, mouse_id = "x-4", tissue = tissue, panel = NA_character_,
     condition = NA_character_, file_name = NA_character_, collected_at = as.Date(NA),
     reason = "no response", decided_on = as.Date("2026-11-17")
   )
@@ -52,7 +52,8 @@ tb_total <- function(tbl, label) as.integer(sub("^([0-9]+).*", "\\1", tb_row(tbl
 
 test_that("cohort normaliser accepts workbook and DB names", {
   cols <- c("mouse_id", "ear_tag", "group", "sex", "cage", "strain", "generation",
-            "dob", "bmt_date", "end_date", "early", "reason")
+            "dob", "bmt_date", "end_date", "early", "reason", "excluded_mouse_wide",
+            "exclusion_reason")
   wb <- cohort_normalise_(tb_wb)
   expect_named(wb, cols, ignore.order = TRUE)
   expect_equal(wb$ear_tag, paste0("T", 1:7))
@@ -122,8 +123,6 @@ tb_overview <- tidyr::expand_grid(
   dplyr::mutate(experiment_code = "x", wsp_root = "ov_x", population = "CD4+",
                 metric = "count", value = 1)
 tb_dat3 <- c(tb_dat, list(overview = tb_overview))
-# an export writes the mouse-wide exclusion into every unit
-tb_dat3$exclusions <- dplyr::bind_rows(tb_excl(), dplyr::mutate(tb_excl(), import_unit = "ov_x"))
 
 test_that("mouse grid shows tissues, date counts and status", {
   tb <- meta_mouse_table(tb_dat3, tb_wb)
@@ -184,9 +183,9 @@ test_that("early mice without death_date warn and never print NA", {
   expect_false(any(grepl("NA", unlist(d[setdiff(names(d), "characteristic")]))))
 })
 
-test_that("mouse-wide exclusion in only some units shows as a note", {
+test_that("a mouse-wide rule excludes the mouse whatever units exist", {
   d <- meta_mouse_table(c(tb_dat, list(overview = tb_overview)), tb_wb)[["_data"]]
-  expect_equal(d$status[d$mouse_id %in% "x-4"], "ok; excl. titer_x (no response)")
+  expect_equal(d$status[d$mouse_id %in% "x-4"], "excluded: no response")
 })
 
 test_that("grid end dates come from the DB when the workbook lacks them", {
@@ -200,4 +199,67 @@ test_that("derived tibbles without import unit are not grid columns", {
   dat <- c(tb_dat3, list(titer_fc = dplyr::select(tb_titer, mouse_id, collected_at, value)))
   d <- meta_mouse_table(dat, tb_wb)[["_data"]]
   expect_false("titer_fc" %in% names(d))
+})
+
+# DB-sourced cohort: x-1..x-3 ok/early, x-4 excluded mouse-wide, D-1 a facility-ID
+# dropout before BMT.
+tb_cohort <- dplyr::bind_rows(
+  dplyr::mutate(tb_meta, early = c(FALSE, FALSE, TRUE), early_reason = c(NA, NA, "pain")),
+  tibble::tibble(experiment_code = "x", mouse_id = c("x-4", "D-1"),
+                 group = factor(c("MPO409", "irrel"), levels = c("MPO409", "irrel")),
+                 sex = "f", bmt_date = as.Date("2026-05-12"),
+                 end_date = as.Date(c("2026-06-16", "2026-05-05")),
+                 early = c(FALSE, TRUE), early_reason = c(NA, "died at bleed"))
+) |>
+  dplyr::mutate(id_source = dplyr::if_else(mouse_id == "D-1", "facility", "mouse_ID"),
+                excluded_mouse_wide = mouse_id == "x-4",
+                exclusion_reason = dplyr::if_else(mouse_id == "x-4", "no response", NA_character_))
+tb_dat_db <- c(list(meta = tb_meta, cohort = tb_cohort), tb_dat3[c("exclusions", "titer")])
+
+test_that("meta_summary_table uses dat$cohort when workbook is NULL", {
+  expect_no_message(tb <- meta_summary_table(NULL, tb_dat_db))
+  expect_equal(tb_total(tb, "Enrolled"), 5)
+  expect_equal(tb_total(tb, "Dropped before"), 1)
+  expect_equal(tb_total(tb, "Excluded"), 1)
+})
+
+test_that("meta_mouse_table shows DB dropouts", {
+  expect_no_message(d <- meta_mouse_table(tb_dat_db)[["_data"]])
+  expect_match(d$status[d$mouse_id %in% "D-1"], "^early: died at bleed")
+  expect_equal(d$status[d$mouse_id %in% "x-4"], "excluded: no response")
+  expect_false(any(grepl("not in DB", d$status)))
+})
+
+test_that("cohort is not a grid column", {
+  expect_false("cohort" %in% names(data_units_(tb_dat_db)))
+})
+
+test_that("cohort tables work on a real db_load_experiment() list", {
+  con <- local_test_db()
+  db_write_experiment(con, experiment_code = "26-1")
+  db_write_subjects(con, tibble::tibble(
+    mouse_id = c("26-1-1", "26-1-2", "D-1"), experiment_code = "26-1",
+    treatment_group = c("a", "a", "b"), bmt_date = as.Date("2026-05-12"),
+    end_date = as.Date(c("2026-06-15", "2026-06-15", "2026-05-05"))
+  ))
+  DBI::dbExecute(con, "UPDATE subjects SET id_source = 'facility', early = TRUE,
+                       early_reason = 'died at bleed' WHERE mouse_id = 'D-1'")
+  db_write_samples(con, tibble::tibble(mouse_id = c("26-1-1", "26-1-2"), tissue = "serum"))
+  db_write_assay(con, assay_name = "anti-MPO", domain = "elisa")
+  DBI::dbExecute(con, "INSERT INTO elisa_measurements
+    (sample_id, assay_id, import_unit, analyte, replicate, value, unit, result_status)
+    SELECT sm.sample_id, a.assay_id, 'titer_26-1', 'anti-MPO', 1, 5, 'U', 'ok'
+    FROM samples sm, assays a WHERE a.assay_name = 'anti-MPO'")
+  suppressMessages(db_write_exclusions(con, tibble::tibble(
+    mouse_ID = "26-1-2", reason = "bad", decided_on = as.Date("2026-11-17")), "26-1"))
+  dat <- suppressMessages(db_load_experiment(con, "26-1", group_levels = c("a", "b")))
+  expect_no_message(tb <- meta_summary_table(NULL, dat))
+  expect_equal(tb_total(tb, "Enrolled"), 3)
+  expect_equal(tb_total(tb, "Dropped before"), 1)
+  expect_equal(tb_total(tb, "Excluded"), 1)
+  expect_equal(tb_total(tb, "Analysed"), 1)
+  d <- meta_mouse_table(dat)[["_data"]]
+  expect_equal(d$status[d$mouse_id == "26-1-2"], "excluded: bad")
+  expect_match(d$status[d$mouse_id == "D-1"], "^early: died at bleed")
+  expect_false(any(grepl("not in DB", d$status)))
 })

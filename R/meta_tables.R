@@ -11,11 +11,13 @@
 #' ends after BMT, exclusions, end-point day and the number analysed. Meant for
 #' the top of an analysis document -- the numbers a methods section quotes.
 #'
-#' The cohort is the meta workbook's `meta` sheet (`meta_read(path)$meta`),
-#' because the DB holds neither mice that dropped out before getting a
-#' `mouse_ID` nor (in `db_load_experiment()` output) mice excluded mouse-wide.
+#' The cohort is `dat$cohort` from [db_load_experiment()] (every subject of
+#' the experiment, including dropouts without a `mouse_ID` and mice excluded
+#' mouse-wide). Alternatively pass the meta workbook's `meta` sheet
+#' (`meta_read(path)$meta`) as `workbook`.
 #' A mouse is *excluded* when it is excluded mouse-wide (no tissue / panel /
-#' condition / file / date restriction) in every import unit of `dat`; it is
+#' condition / file / date restriction; `dat$cohort$excluded_mouse_wide`, else
+#' the mouse-wide rules of `dat$exclusions`); it is
 #' *analysed* when it has end-point data (a sample on its end date) in at
 #' least one import unit and is not excluded -- mice that ended early count.
 #'
@@ -23,7 +25,7 @@
 #'   [meta_read()] (`mouse_ID`, `id`, `group`, `sex`, `cage`, `line`,
 #'   `generation`, `dob`, `bmt_date`, `death_date`, `early`, `reason`), or a
 #'   table with DB names (`mouse_id`, `mouse_strain`, `end_date`, ...). `NULL`
-#'   uses `dat$meta` (with a message: mice without a DB record are missing).
+#'   uses `dat$cohort` (older lists without it: `dat$meta`, with a message).
 #' @param dat Optional [db_load_experiment()] list. Needed for the
 #'   `Excluded from analysis` and `Analysed` rows (omitted without it) and for
 #'   the group order (levels of `dat$meta$group`).
@@ -126,8 +128,13 @@ meta_summary_table <- function(workbook, dat = NULL, group_col = "group") {
 
 # Internal: the cohort to tabulate, normalised, with a row id.
 cohort_input_ <- function(workbook, dat, group_col) {
+  from_db <- FALSE
   if (is.null(workbook)) {
     if (is.null(dat)) stop("Give `workbook` or `dat`.", call. = FALSE)
+    from_db <- is.data.frame(dat$cohort)
+    if (from_db) workbook <- dat$cohort
+  }
+  if (is.null(workbook)) {
     message("No workbook given: using dat$meta -- mice without a DB record ",
             "(dropouts without mouse_ID, mice excluded mouse-wide) are not shown.")
     workbook <- dat$meta
@@ -135,7 +142,8 @@ cohort_input_ <- function(workbook, dat, group_col) {
   if (group_col != "group") {
     workbook <- dplyr::rename(workbook, group = dplyr::all_of(group_col))
   }
-  dplyr::mutate(cohort_normalise_(workbook), .row_ = dplyr::row_number())
+  dplyr::mutate(cohort_normalise_(workbook), .from_db_ = from_db,
+                .row_ = dplyr::row_number())
 }
 
 # Internal: map a workbook `meta` sheet (meta_read() names) or a DB subjects
@@ -160,7 +168,9 @@ cohort_normalise_ <- function(cohort) {
     bmt_date = as.Date(pick("bmt_date")),
     end_date = as.Date(pick("death_date", "end_date")),
     early = early,
-    reason = as.character(pick("reason"))
+    reason = as.character(pick("reason", "early_reason")),
+    excluded_mouse_wide = as.logical(pick("excluded_mouse_wide")),
+    exclusion_reason = as.character(pick("exclusion_reason"))
   )
 }
 
@@ -176,7 +186,7 @@ group_levels_ <- function(cohort, dat) {
 data_units_ <- function(dat) {
   keep <- vapply(seq_along(dat), function(i) {
     nm <- names(dat)[i]
-    !nm %in% c("meta", "exclusions", "workbook") && is.data.frame(dat[[i]]) &&
+    !nm %in% c("meta", "cohort", "exclusions", "workbook") && is.data.frame(dat[[i]]) &&
       "mouse_id" %in% names(dat[[i]]) &&
       any(c("import_unit", "wsp_root") %in% names(dat[[i]]))
   }, logical(1))
@@ -202,16 +212,18 @@ cohort_ends_ <- function(cohort, dat) {
 analysis_status_ <- function(cohort, dat) {
   units <- data_units_(dat)
   excl <- dat$exclusions
-  if (is.null(excl)) excl <- tibble::tibble(mouse_id = character(), import_unit = character())
-  unit_ids <- unique(unlist(lapply(units, function(u) {
-    c(u[["import_unit"]], u[["wsp_root"]])
-  })))
-  unit_ids <- unique(c(unit_ids, excl$import_unit))
-  excluded <- if (nrow(excl) > 0) fully_excluded_mice_(excl, unit_ids) else character()
+  if (is.null(excl)) excl <- tibble::tibble(mouse_id = character())
+  # excluded: the cohort's flag when it has one, else mouse-wide rules
   mouse_wide <- if (nrow(excl) > 0) {
     dplyr::filter(excl, is.na(.data$tissue), is.na(.data$panel), is.na(.data$condition),
                   is.na(.data$file_name), is.na(.data$collected_at))
   } else excl
+  rule_excl <- !is.na(cohort$mouse_id) & cohort$mouse_id %in% mouse_wide$mouse_id
+  rule_reason <- mouse_wide$reason[match(cohort$mouse_id, mouse_wide$mouse_id)]
+  from_db <- if (".from_db_" %in% names(cohort)) cohort$.from_db_ else FALSE
+  has_flag <- !is.na(cohort$excluded_mouse_wide)
+  excluded <- dplyr::if_else(has_flag, cohort$excluded_mouse_wide, rule_excl)
+  excl_reason <- dplyr::if_else(has_flag, cohort$exclusion_reason, rule_reason)
 
   ends <- cohort_ends_(cohort, dat)
 
@@ -226,10 +238,9 @@ analysis_status_ <- function(cohort, dat) {
 
   cohort |>
     dplyr::mutate(
-      in_db = !is.na(.data$mouse_id) & .data$mouse_id %in% in_db,
-      excluded = !is.na(.data$mouse_id) & .data$mouse_id %in% excluded,
-      exclusion_reason = mouse_wide$reason[match(.data$mouse_id, mouse_wide$mouse_id)],
-      exclusion_reason = dplyr::if_else(.data$excluded, .data$exclusion_reason, NA_character_),
+      in_db = from_db | (!is.na(.data$mouse_id) & .data$mouse_id %in% in_db),
+      excluded = excluded,
+      exclusion_reason = dplyr::if_else(excluded, excl_reason, NA_character_),
       has_endpoint = !is.na(.data$mouse_id) & .data$mouse_id %in% with_end,
       analysed = .data$has_endpoint & !.data$excluded
     )
@@ -269,7 +280,8 @@ reason_note_ <- function(reasons) {
 #'
 #' @param dat A [db_load_experiment()] list.
 #' @param workbook The cohort (workbook `meta` sheet from [meta_read()], or a
-#'   table with DB names); `NULL` uses `dat$meta` with a message.
+#'   table with DB names); `NULL` uses `dat$cohort` (older lists: `dat$meta`
+#'   with a message).
 #' @returns A `gt` table. Its data (`tbl[["_data"]]`) has columns `mouse_id`,
 #'   `ear_tag`, `group`, `sex`, `cage`, `age_at_bmt_wk`, `end_day`, one
 #'   character column per import unit (named as in `dat`) and `status`.
@@ -353,8 +365,7 @@ mouse_status_ <- function(cohort, exclusions) {
     TRUE ~ "ok"
   )
   if (is.null(exclusions) || nrow(exclusions) == 0) return(base)
-  # partial = restricted rows, or mouse-wide rows of a mouse not excluded
-  # everywhere (scope = the import unit)
+  # partial = restricted rows, or mouse-wide rows of a mouse not flagged excluded
   wide <- is.na(exclusions$tissue) & is.na(exclusions$panel) & is.na(exclusions$condition) &
     is.na(exclusions$file_name) & is.na(exclusions$collected_at)
   excluded_ids <- cohort$mouse_id[cohort$excluded]
@@ -364,7 +375,7 @@ mouse_status_ <- function(cohort, exclusions) {
     partial[, c("tissue", "panel", "condition", "file_name", "collected_at")], 1,
     function(r) paste(trimws(stats::na.omit(r)), collapse = " ")
   )
-  partial$scope <- dplyr::if_else(partial$scope == "", partial$import_unit, partial$scope)
+  partial$scope <- dplyr::if_else(partial$scope == "", "all data", partial$scope)
   notes <- partial |>
     dplyr::distinct(.data$mouse_id, .data$scope, .data$reason) |>
     dplyr::summarise(

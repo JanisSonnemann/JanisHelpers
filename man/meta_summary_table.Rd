@@ -11,7 +11,7 @@ meta_summary_table(workbook, dat = NULL, group_col = "group")
 \code{\link[=meta_read]{meta_read()}} (\code{mouse_ID}, \code{id}, \code{group}, \code{sex}, \code{cage}, \code{line},
 \code{generation}, \code{dob}, \code{bmt_date}, \code{death_date}, \code{early}, \code{reason}), or a
 table with DB names (\code{mouse_id}, \code{mouse_strain}, \code{end_date}, ...). \code{NULL}
-uses \code{dat$meta} (with a message: mice without a DB record are missing).}
+uses \code{dat$cohort} (older lists without it: \code{dat$meta}, with a message).}
 
 \item{dat}{Optional \code{\link[=db_load_experiment]{db_load_experiment()}} list. Needed for the
 \verb{Excluded from analysis} and \code{Analysed} rows (omitted without it) and for
@@ -30,11 +30,13 @@ ends after BMT, exclusions, end-point day and the number analysed. Meant for
 the top of an analysis document -- the numbers a methods section quotes.
 }
 \details{
-The cohort is the meta workbook's \code{meta} sheet (\code{meta_read(path)$meta}),
-because the DB holds neither mice that dropped out before getting a
-\code{mouse_ID} nor (in \code{db_load_experiment()} output) mice excluded mouse-wide.
+The cohort is \code{dat$cohort} from \code{\link[=db_load_experiment]{db_load_experiment()}} (every subject of
+the experiment, including dropouts without a \code{mouse_ID} and mice excluded
+mouse-wide). Alternatively pass the meta workbook's \code{meta} sheet
+(\code{meta_read(path)$meta}) as \code{workbook}.
 A mouse is \emph{excluded} when it is excluded mouse-wide (no tissue / panel /
-condition / file / date restriction) in every import unit of \code{dat}; it is
+condition / file / date restriction; \code{dat$cohort$excluded_mouse_wide}, else
+the mouse-wide rules of \code{dat$exclusions}); it is
 \emph{analysed} when it has end-point data (a sample on its end date) in at
 least one import unit and is not excluded -- mice that ended early count.
 }

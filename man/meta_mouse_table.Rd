@@ -10,7 +10,8 @@ meta_mouse_table(dat, workbook = NULL)
 \item{dat}{A \code{\link[=db_load_experiment]{db_load_experiment()}} list.}
 
 \item{workbook}{The cohort (workbook \code{meta} sheet from \code{\link[=meta_read]{meta_read()}}, or a
-table with DB names); \code{NULL} uses \code{dat$meta} with a message.}
+table with DB names); \code{NULL} uses \code{dat$cohort} (older lists: \code{dat$meta}
+with a message).}
 }
 \value{
 A \code{gt} table. Its data (\code{tbl[["_data"]]}) has columns \code{mouse_id},

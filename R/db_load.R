@@ -190,19 +190,3 @@ unit_names_ <- function(units, experiment) {
   for (sep in c("-", "_")) out <- strip_end_(out, paste0(sep, experiment))
   out
 }
-
-# Internal: mice with a mouse-wide exclusion (no tissue / panel / condition /
-# file / date restriction) in every one of `units`.
-# TODO(Task 8): still used by meta_tables.R; deleted there.
-fully_excluded_mice_ <- function(exclusions, units) {
-  if (length(units) == 0 || nrow(exclusions) == 0) return(character())
-  mouse_wide <- exclusions |>
-    dplyr::filter(
-      is.na(.data$tissue), is.na(.data$panel), is.na(.data$condition),
-      is.na(.data$file_name), is.na(.data$collected_at)
-    ) |>
-    dplyr::distinct(mouse_id, import_unit) |>
-    dplyr::filter(import_unit %in% units) |>
-    dplyr::count(mouse_id)
-  sort(mouse_wide$mouse_id[mouse_wide$n == length(units)])
-}
