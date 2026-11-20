@@ -118,13 +118,15 @@ elisa_qc_replicates_ <- function(data, max_cv = 20) {
 
 # Jittered CVs (elisa_qc_cv_()) per analyte, facets timepoint (plus tissue if
 # several); dashed line at `max_cv`, points above it red and labelled with
-# mouse_ID. NULL without any CV.
-elisa_qc_cv_plot_ <- function(cv, max_cv = 20) {
+# mouse_ID; samples in `excluded_keys` (qc_excluded_keys_()) drawn as
+# crosses. NULL without any CV.
+elisa_qc_cv_plot_ <- function(cv, max_cv = 20, excluded_keys = NULL) {
   if (nrow(cv) == 0) {
     return(NULL)
   }
   d <- cv
   d$timepoint <- qc_timepoint_(d$collected_at)
+  d$.excluded <- qc_excluded_col_(qc_is_excluded_(d, excluded_keys), nrow(d))
   d$timepoint <- factor(d$timepoint, levels = qc_timepoint_levels_(d$timepoint))
   d$.high <- d$cv > max_cv
   d$.label <- dplyr::if_else(d$.high, as.character(d$mouse_ID), "")
@@ -148,11 +150,13 @@ elisa_qc_cv_plot_ <- function(cv, max_cv = 20) {
   ggplot2::ggplot(d, ggplot2::aes(x = analyte, y = cv)) +
     ggplot2::geom_hline(yintercept = max_cv, linetype = "dashed",
                         colour = "red3") +
-    ggplot2::geom_point(ggplot2::aes(colour = .high), position = pos,
-                        alpha = 0.7, size = 1.5, show.legend = FALSE) +
+    ggplot2::geom_point(ggplot2::aes(colour = .high, shape = .excluded),
+                        position = pos, alpha = 0.7, size = 1.5) +
     label_layer +
+    qc_excluded_shape_(d$.excluded) +
     ggplot2::scale_colour_manual(values = c("FALSE" = "grey20",
-                                            "TRUE" = "red3")) +
+                                            "TRUE" = "red3"),
+                                 guide = "none") +
     ggplot2::facet_grid(cols = cols) +
     ggplot2::expand_limits(y = 0) +
     ggplot2::labs(x = NULL, y = "replicate CV (%)") +

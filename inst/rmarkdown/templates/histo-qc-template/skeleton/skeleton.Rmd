@@ -60,7 +60,7 @@ note <- function(...) cat("\n\n*", ..., "*\n\n", sep = "")
 | End-point dates | `r if (n_end == 0) "no empty dates" else if (is.null(end_dates)) "not given (empty dates shown as end)" else paste0(n_resolved, " of ", n_end, " empty-date rows placed at the end date")` |
 | Sanity rules | `r rules_label` |
 
-All samples are shown. Rows on the exclusions sheet are only flagged here;
+All samples are shown. Rows on the exclusions sheet are only flagged here (drawn as crosses on the point plots);
 they are dropped at the final export.
 
 ```{r overview}
@@ -191,7 +191,8 @@ if (is.null(group_col)) {
 ### By group
 
 ```{r outliers, results = "asis"}
-emit_plot(JanisHelpers:::qc_table_plot_(scored, "metric", group_col, log_scale))
+emit_plot(JanisHelpers:::qc_table_plot_(scored, "metric", group_col, log_scale,
+                                        excluded_keys = excluded_keys))
 ```
 
 ## Flagged samples

@@ -210,6 +210,26 @@ qc_has_ggrepel_ <- function() {
   requireNamespace("ggrepel", quietly = TRUE)
 }
 
+# Point shape by exclusion: filled circle, or a cross for samples on the
+# exclusions sheet. Only the cross gets a legend key, and only when the plot
+# has an excluded point (`.excluded` = the plot's column).
+qc_excluded_shape_ <- function(.excluded) {
+  shown <- any(.excluded == "TRUE")
+  ggplot2::scale_shape_manual(
+    values = c("FALSE" = 16, "TRUE" = 4), limits = c("FALSE", "TRUE"),
+    breaks = if (shown) "TRUE" else NULL,
+    labels = if (shown) "on exclusions sheet" else NULL,
+    name = "excluded"
+  )
+}
+
+# `.excluded` ("TRUE"/"FALSE") for the shape aesthetic from a logical vector
+# (NULL, e.g. no `excluded` column, = none excluded).
+qc_excluded_col_ <- function(excluded, n) {
+  if (is.null(excluded)) excluded <- rep(FALSE, n)
+  as.character(excluded %in% TRUE)
+}
+
 # Rows of one check (and condition / MFI population) prepared for plotting:
 # `.row` = facet row (population, or marker for MFI), `.group` = group label,
 # `.y` = plotted value (counts + 1 and positive MFIs only, for the log axis).
@@ -235,6 +255,9 @@ qc_plot_rows_ <- function(scored, settings, check, condition, population) {
   }
   d$.group <- if (is.null(group_col)) "all" else qc_batch_label_(d[[group_col]])
   d$.y <- if (check == "counts") d$value + 1 else d$value
+  d$.excluded <- qc_excluded_col_(
+    if ("excluded" %in% names(d)) d$excluded, nrow(d)
+  )
   d
 }
 
@@ -270,8 +293,10 @@ qc_plot_individuals_ <- function(scored, settings, check, condition = NULL,
   }
   ggplot2::ggplot(d, ggplot2::aes(x = .group, y = .y, fill = .group)) +
     ggplot2::geom_boxplot(outlier.shape = NA, alpha = 0.5) +
-    ggplot2::geom_point(position = pos, alpha = 0.7, size = 1.5) +
+    ggplot2::geom_point(ggplot2::aes(shape = .excluded), position = pos,
+                        alpha = 0.7, size = 1.5) +
     label_layer +
+    qc_excluded_shape_(d$.excluded) +
     qc_y_scale_(check) +
     ggplot2::facet_grid(rows = ggplot2::vars(.row), cols = ggplot2::vars(tissue),
                         scales = "free_y") +
@@ -300,7 +325,9 @@ qc_plot_batch_ <- function(scored, settings, check, tissue, condition = NULL,
   pos <- ggplot2::position_jitter(width = 0.15, height = 0, seed = 1)
   ggplot2::ggplot(d, ggplot2::aes(x = .batch, y = .y, fill = .batch)) +
     ggplot2::geom_boxplot(outlier.shape = NA, alpha = 0.5) +
-    ggplot2::geom_point(ggplot2::aes(colour = .batch), position = pos, size = 1.5) +
+    ggplot2::geom_point(ggplot2::aes(colour = .batch, shape = .excluded),
+                        position = pos, size = 1.5) +
+    qc_excluded_shape_(d$.excluded) +
     qc_y_scale_(check) +
     ggplot2::facet_grid(rows = ggplot2::vars(.row), cols = ggplot2::vars(.group),
                         scales = "free_y") +

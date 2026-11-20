@@ -436,3 +436,30 @@ test_that("qc_whisker_side_() flags points beyond 1.5 x IQR", {
   expect_equal(qc_whisker_side_(c(-50, 1, 2, 2, 3, 2))[1], "low")
   expect_equal(qc_whisker_side_(c(NA, 1, 2)), rep(NA_character_, 3))
 })
+
+# Shapes of the built point layer, per row of p$data (same order).
+point_shapes_ <- function(p) {
+  i <- which(vapply(p$layers, function(l) inherits(l$geom, "GeomPoint"), logical(1)))[1]
+  ggplot2::ggplot_build(p)$data[[i]]$shape
+}
+
+test_that("qc plots draw excluded files as crosses", {
+  d <- fake_qc_data()
+  s <- fake_qc_settings(d)
+  sc <- qc_score_(d, s, excluded_files = "m-3_spleen.fcs")
+  p <- qc_plot_individuals_(sc, s, "hierarchy")
+  sh <- point_shapes_(p)
+  # built rows are reordered by panel, so compare counts per shape
+  expect_true(all(p$data$.excluded[p$data$mouse_ID == "m-3"] == "TRUE"))
+  expect_equal(sum(sh == 4), sum(p$data$mouse_ID == "m-3"))
+  expect_equal(sum(sh == 16), sum(p$data$mouse_ID != "m-3"))
+  b <- qc_plot_batch_(sc, s, "counts", tissue = "spleen")
+  shb <- point_shapes_(b)
+  expect_equal(sum(shb == 4), sum(b$data$mouse_ID == "m-3"))
+  expect_equal(sum(shb == 16), sum(b$data$mouse_ID != "m-3"))
+  p0 <- qc_plot_individuals_(qc_score_(d, s), s, "hierarchy")
+  expect_true(all(point_shapes_(p0) == 16))
+  # older scored data without the column: all circles
+  sc$excluded <- NULL
+  expect_true(all(point_shapes_(qc_plot_individuals_(sc, s, "hierarchy")) == 16))
+})

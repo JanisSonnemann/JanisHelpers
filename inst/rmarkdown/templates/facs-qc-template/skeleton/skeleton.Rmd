@@ -104,7 +104,7 @@ emit_check <- function(check, population = NULL) {
 | MFI populations / markers | `r describe_sel(settings$qc_mfi_populations, all_pops)` / `r describe_sel(settings$qc_metrics, settings$qc_metrics)` |
 | Outlier labels | outside the boxplot whiskers; populations with at least `r settings$min_events` events |
 
-All samples are shown. Rows on the exclusions sheet are only flagged here;
+All samples are shown. Rows on the exclusions sheet are only flagged here (drawn as crosses on the point plots);
 they are dropped at the final export.
 
 ## Files

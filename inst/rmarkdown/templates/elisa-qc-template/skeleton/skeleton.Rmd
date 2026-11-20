@@ -61,7 +61,7 @@ note <- function(...) cat("\n\n*", ..., "*\n\n", sep = "")
 | End-point dates | `r if (n_end == 0) "no empty dates" else if (is.null(end_dates)) "not given (empty dates shown as end)" else paste0(n_resolved, " of ", n_end, " empty-date rows placed at the end date")` |
 | Replicate CV limit | `r qc$max_cv`% |
 
-All samples are shown. Rows on the exclusions sheet are only flagged here;
+All samples are shown. Rows on the exclusions sheet are only flagged here (drawn as crosses on the point plots);
 they are dropped at the final export.
 
 ```{r overview}
@@ -164,7 +164,7 @@ labelled points lie above the `r qc$max_cv`% limit (dashed line).
 
 ```{r replicates, results = "asis"}
 cv <- JanisHelpers:::elisa_qc_cv_(data)
-p <- JanisHelpers:::elisa_qc_cv_plot_(cv, qc$max_cv)
+p <- JanisHelpers:::elisa_qc_cv_plot_(cv, qc$max_cv, excluded_keys)
 reps <- JanisHelpers:::elisa_qc_replicates_(data, qc$max_cv)
 if (is.null(p)) {
   note("No sample has two or more numeric replicates.")
@@ -192,7 +192,8 @@ if (is.null(group_col)) {
 ```
 
 ```{r outliers, results = "asis"}
-p <- JanisHelpers:::qc_table_plot_(scored, "analyte", group_col, log_scale)
+p <- JanisHelpers:::qc_table_plot_(scored, "analyte", group_col, log_scale,
+                                   excluded_keys = excluded_keys)
 emit_plot(JanisHelpers:::elisa_qc_add_lloq_(p, scored, log_scale))
 ```
 

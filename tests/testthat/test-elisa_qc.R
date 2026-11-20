@@ -270,3 +270,35 @@ test_that("flag table and exclusion keys match on mouse x tissue x timepoint", {
   expect_equal(qc_table_flag_table_(s, "analyte", keys)$excluded, "")
   expect_false("excluded" %in% names(qc_table_flag_table_(s, "analyte")))
 })
+
+point_shapes_tbl_ <- function(p) {
+  i <- which(vapply(p$layers, function(l) inherits(l$geom, "GeomPoint"), logical(1)))[1]
+  ggplot2::ggplot_build(p)$data[[i]]$shape
+}
+
+test_that("qc_table_plot_ draws excluded samples as crosses", {
+  s <- qc_table_score_(synthetic_scores(), "analyte", "grp", FALSE)
+  s$batch <- rep(c("b1", "b2"), 3)
+  keys <- tibble::tibble(mouse_ID = "S6", tissue = "spleen", timepoint = "end")
+  p <- qc_table_plot_(s, "analyte", "grp", FALSE, excluded_keys = keys)
+  sh <- point_shapes_tbl_(p)
+  expect_equal(sh[p$data$mouse_ID == "S6"], 4)
+  expect_true(all(sh[p$data$mouse_ID != "S6"] == 16))
+  b <- qc_table_plot_(s, "analyte", "grp", FALSE, batch_col = "batch",
+                      excluded_keys = keys)
+  expect_equal(point_shapes_tbl_(b)[b$data$mouse_ID == "S6"], 4)
+  expect_true(all(point_shapes_tbl_(qc_table_plot_(s, "analyte", "grp", FALSE)) == 16))
+})
+
+test_that("elisa_qc_cv_plot_ draws excluded samples as crosses", {
+  cv <- elisa_qc_cv_(fixture_data())
+  m1 <- cv[cv$mouse_ID == "M1", ][1, ]
+  keys <- tibble::tibble(mouse_ID = "M1", tissue = m1$tissue,
+                         timepoint = qc_timepoint_(m1$collected_at))
+  p <- elisa_qc_cv_plot_(cv, 5, excluded_keys = keys)
+  sh <- point_shapes_tbl_(p)
+  hit <- p$data$mouse_ID == "M1" & p$data$timepoint == keys$timepoint
+  expect_true(all(sh[hit] == 4))
+  expect_true(all(sh[!hit] == 16))
+  expect_true(all(point_shapes_tbl_(elisa_qc_cv_plot_(cv, 5)) == 16))
+})
