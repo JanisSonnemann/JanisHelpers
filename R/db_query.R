@@ -16,8 +16,14 @@ NULL
 #' before the column existed and opened read-only (so [db_connect()] could not
 #' add it), `population_order` is returned as all `NA`.
 #'
+#' Every stored row is returned. `excluded` (logical, `FALSE` when no rule
+#' matches) and `exclusion_reason` (the matching rules' reasons, sorted and
+#' joined with `"; "`) come from the experiment's current exclusion rule set
+#' (see [db_write_exclusions()]); filter with `dplyr::filter(!excluded)`.
+#'
 #' @param con A `DBI` connection from [db_connect()].
-#' @returns A lazy `tbl` -- filter/collect as needed.
+#' @returns A lazy `tbl` -- filter/collect as needed. Ends with `excluded` and
+#'   `exclusion_reason`.
 #' @export
 db_query_facs <- function(con) {
   measurements <- dplyr::tbl(con, "facs_measurements")
@@ -31,10 +37,12 @@ db_query_facs <- function(con) {
     dplyr::left_join(dplyr::tbl(con, "subjects"), by = "subject_id") |>
     dplyr::left_join(dplyr::tbl(con, "experiments"), by = "experiment_id") |>
     dplyr::left_join(dplyr::tbl(con, "assays"), by = "assay_id") |>
+    add_exclusion_flags_(con, "facs") |>
     dplyr::select(
       experiment_code, mouse_id, tissue, collected_at, assay_name,
       population_full_path, population, population_order, metric, value,
-      wsp_root, condition, condition_keyword, source_file, imported_at
+      wsp_root, condition, condition_keyword, source_file, imported_at,
+      excluded, exclusion_reason
     )
 }
 
@@ -44,8 +52,13 @@ db_query_facs <- function(con) {
 #' `samples`/`subjects`/`experiments`/`assays`, exposing natural keys instead
 #' of surrogate IDs. Call [dplyr::collect()] to materialize.
 #'
+#' Every stored row is returned, flagged by the experiment's current exclusion
+#' rule set as in [db_query_facs()]. Rules naming a `condition` or `file_name`
+#' never match here.
+#'
 #' @param con A `DBI` connection from [db_connect()].
-#' @returns A lazy `tbl` -- filter/collect as needed.
+#' @returns A lazy `tbl` -- filter/collect as needed. Ends with `excluded` and
+#'   `exclusion_reason`.
 #' @export
 db_query_elisa <- function(con) {
   dplyr::tbl(con, "elisa_measurements") |>
@@ -53,10 +66,11 @@ db_query_elisa <- function(con) {
     dplyr::left_join(dplyr::tbl(con, "subjects"), by = "subject_id") |>
     dplyr::left_join(dplyr::tbl(con, "experiments"), by = "experiment_id") |>
     dplyr::left_join(dplyr::tbl(con, "assays"), by = "assay_id") |>
+    add_exclusion_flags_(con, "elisa") |>
     dplyr::select(
       experiment_code, mouse_id, tissue, collected_at, assay_name,
       import_unit, analyte, replicate, value, unit, result_status,
-      lloq, uloq, source_file, imported_at
+      lloq, uloq, source_file, imported_at, excluded, exclusion_reason
     )
 }
 
@@ -66,8 +80,13 @@ db_query_elisa <- function(con) {
 #' `samples`/`subjects`/`experiments`/`assays`, exposing natural keys instead
 #' of surrogate IDs. Call [dplyr::collect()] to materialize.
 #'
+#' Every stored row is returned, flagged by the experiment's current exclusion
+#' rule set as in [db_query_facs()]. Rules naming a `condition` or `file_name`
+#' never match here.
+#'
 #' @param con A `DBI` connection from [db_connect()].
-#' @returns A lazy `tbl` -- filter/collect as needed.
+#' @returns A lazy `tbl` -- filter/collect as needed. Ends with `excluded` and
+#'   `exclusion_reason`.
 #' @export
 db_query_histo <- function(con) {
   dplyr::tbl(con, "histo_measurements") |>
@@ -75,10 +94,31 @@ db_query_histo <- function(con) {
     dplyr::left_join(dplyr::tbl(con, "subjects"), by = "subject_id") |>
     dplyr::left_join(dplyr::tbl(con, "experiments"), by = "experiment_id") |>
     dplyr::left_join(dplyr::tbl(con, "assays"), by = "assay_id") |>
+    add_exclusion_flags_(con, "histo") |>
     dplyr::select(
       experiment_code, mouse_id, tissue, collected_at, assay_name,
-      import_unit, metric, value, source_file, imported_at
+      import_unit, metric, value, source_file, imported_at, excluded,
+      exclusion_reason
     )
+}
+
+# Internal: left-join a lazy measurement table (still carrying
+# `<domain>_measurement_id`) to its exclusion-flag view: `excluded` (FALSE
+# when no current rule matches) and `exclusion_reason` (NA then). A file
+# opened read-only before the views existed gets FALSE / NA throughout.
+add_exclusion_flags_ <- function(tbl, con, domain) {
+  view <- paste0(domain, "_exclusion_flags")
+  if (!DBI::dbExistsTable(con, view)) {
+    return(dplyr::mutate(
+      tbl,
+      excluded = FALSE,
+      exclusion_reason = dbplyr::sql("CAST(NULL AS VARCHAR)")
+    ))
+  }
+  tbl |>
+    dplyr::left_join(dplyr::tbl(con, view),
+                     by = paste0(domain, "_measurement_id")) |>
+    dplyr::mutate(excluded = dplyr::coalesce(excluded, FALSE))
 }
 
 #' Query subject (mouse) meta data
@@ -101,8 +141,11 @@ db_query_histo <- function(con) {
 #' @returns A lazy `tbl` with columns `experiment_code`, `mouse_id`, `group`,
 #'   `mouse_treatment`, `sex`, `cage`, `mouse_strain`, `generation`, `dob`,
 #'   `start_date`, `bmt_date`, `end_date`, `mdc_id` (facility ID), `early`
-#'   (logical, left the experiment early), `early_reason` and `id_source`
-#'   (`"mouse_ID"` or `"facility"`: where `mouse_id` came from).
+#'   (logical, left the experiment early), `early_reason`, `id_source`
+#'   (`"mouse_ID"` or `"facility"`: where `mouse_id` came from),
+#'   `excluded_mouse_wide` (logical: the experiment's current exclusion rule
+#'   set holds a rule for the mouse with every scope column empty) and
+#'   `exclusion_reason` (the reasons of those mouse-wide rules, `NA` if none).
 #' @examples
 #' \dontrun{
 #' con <- DBI::dbConnect(duckdb::duckdb(), "~/databases/lab.duckdb",
@@ -121,15 +164,39 @@ db_query_histo <- function(con) {
 #' }
 #' @export
 db_query_subjects <- function(con) {
-  dplyr::tbl(con, "subjects") |>
+  subjects <- dplyr::tbl(con, "subjects")
+  if (DBI::dbExistsTable(con, "exclusion_rules")) {
+    # mouse-wide = a rule of the experiment's current set with no scope
+    mouse_wide <- dplyr::tbl(con, dbplyr::sql("
+      SELECT cur.experiment_id, r.mouse_id, TRUE AS excluded_mouse_wide,
+             string_agg(DISTINCT r.reason, '; ' ORDER BY r.reason) AS exclusion_reason
+      FROM (SELECT experiment_id, MAX(exclusion_set_id) AS exclusion_set_id
+            FROM exclusion_sets GROUP BY experiment_id) cur
+      JOIN exclusion_rules r ON r.exclusion_set_id = cur.exclusion_set_id
+      WHERE r.tissue IS NULL AND r.panel IS NULL AND r.condition IS NULL
+        AND r.file_name IS NULL AND r.collected_at IS NULL
+      GROUP BY cur.experiment_id, r.mouse_id
+    "))
+    subjects <- subjects |>
+      dplyr::left_join(mouse_wide, by = c("experiment_id", "mouse_id"))
+  } else {
+    subjects <- dplyr::mutate(
+      subjects,
+      excluded_mouse_wide = FALSE,
+      exclusion_reason = dbplyr::sql("CAST(NULL AS VARCHAR)")
+    )
+  }
+  subjects |>
     dplyr::left_join(dplyr::tbl(con, "experiments"), by = "experiment_id") |>
     dplyr::select(
       experiment_code, mouse_id, group = treatment_group, mouse_treatment,
       sex, cage, mouse_strain, generation, dob, start_date, bmt_date, end_date,
-      mdc_id, early, early_reason, id_source
+      mdc_id, early, early_reason, id_source, excluded_mouse_wide,
+      exclusion_reason
     ) |>
     dplyr::mutate(
       early = dplyr::coalesce(early, FALSE),
-      id_source = dplyr::coalesce(id_source, "mouse_ID")
+      id_source = dplyr::coalesce(id_source, "mouse_ID"),
+      excluded_mouse_wide = dplyr::coalesce(excluded_mouse_wide, FALSE)
     )
 }

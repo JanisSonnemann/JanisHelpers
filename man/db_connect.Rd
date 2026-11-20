@@ -23,6 +23,9 @@ Additive columns introduced later (\code{facs_measurements.population_order},
 \code{subjects.early} / \code{early_reason} / \code{id_source}, \code{facs_stains.file_name})
 are added to an existing file on open; earlier rows stay \code{NULL}
 (\code{early} = \code{FALSE}, \code{id_source} = \code{"mouse_ID"}).
+The views \code{facs_exclusion_flags}, \code{elisa_exclusion_flags} and
+\code{histo_exclusion_flags} (one row per measurement matched by the current
+exclusion rule set of its experiment) are (re)created on every open.
 }
 \details{
 Errors if the file was created by an older schema (one whose

@@ -10,10 +10,16 @@ db_query_elisa(con)
 \item{con}{A \code{DBI} connection from \code{\link[=db_connect]{db_connect()}}.}
 }
 \value{
-A lazy \code{tbl} -- filter/collect as needed.
+A lazy \code{tbl} -- filter/collect as needed. Ends with \code{excluded} and
+\code{exclusion_reason}.
 }
 \description{
 Returns a lazy \code{dbplyr} \code{tbl} joining \code{elisa_measurements} back through
 \code{samples}/\code{subjects}/\code{experiments}/\code{assays}, exposing natural keys instead
 of surrogate IDs. Call \code{\link[dplyr:collect]{dplyr::collect()}} to materialize.
+}
+\details{
+Every stored row is returned, flagged by the experiment's current exclusion
+rule set as in \code{\link[=db_query_facs]{db_query_facs()}}. Rules naming a \code{condition} or \code{file_name}
+never match here.
 }

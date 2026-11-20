@@ -46,5 +46,11 @@ A new set is only written when the rules differ from the current one
 says "unchanged". An empty or \code{NULL} sheet writes an empty set, which
 re-includes everything. Rules naming a panel that is not registered yet, or
 matching no stored row, are reported as messages, not errors, because the
-data of that unit may not be imported yet.
+data of that unit may not be imported yet. \code{file_name} rules can't match
+FACS stains exported before file names were stored; the message then asks
+for a re-export of that panel.
+
+The rules are applied on read: \code{\link[=db_query_facs]{db_query_facs()}}, \code{\link[=db_query_elisa]{db_query_elisa()}} and
+\code{\link[=db_query_histo]{db_query_histo()}} flag matching rows with \code{excluded} / \code{exclusion_reason},
+and \code{\link[=db_query_subjects]{db_query_subjects()}} flags mouse-wide rules.
 }

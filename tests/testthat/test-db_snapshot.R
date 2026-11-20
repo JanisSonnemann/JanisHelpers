@@ -47,3 +47,31 @@ test_that("snapshot works with exclusion tables", {
 
   expect_true(any(grepl("exclusion_rules", list.files(out))))
 })
+
+test_that("snapshot with flag views restores and reopens", {
+  con <- local_test_db()
+  seed_minimal_fixture(con)
+  db_write_facs(
+    con,
+    tibble::tibble(PopulationFullPath = "root/CD4+", Population = "CD4+",
+                   metric = "count", value = 1),
+    mouse_id = "25-7-1", tissue = "spleen", assay_name = "overview",
+    wsp_root = "overview_25-7", source_file = "25-7/overview_25-7_20261101.wsp"
+  )
+  suppressMessages(db_write_exclusions(
+    con, tibble::tibble(mouse_ID = "25-7-1", reason = "test"), "25-7"))
+  root <- withr::local_tempdir()
+
+  out <- suppressMessages(db_snapshot(con, root))
+
+  path <- tempfile(fileext = ".duckdb")
+  restored <- DBI::dbConnect(duckdb::duckdb(), path)
+  DBI::dbExecute(restored, sprintf("IMPORT DATABASE '%s'", out))
+  expect_equal(
+    DBI::dbGetQuery(restored, "SELECT exclusion_reason FROM facs_exclusion_flags")$exclusion_reason,
+    "test")
+  DBI::dbDisconnect(restored, shutdown = TRUE)
+  reopened <- db_connect(path)
+  withr::defer(DBI::dbDisconnect(reopened, shutdown = TRUE))
+  expect_true(dplyr::collect(db_query_facs(reopened))$excluded)
+})

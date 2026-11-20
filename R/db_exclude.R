@@ -111,7 +111,13 @@ match_sample_exclusions_ <- function(data, exclusions, assay) {
 #' says "unchanged". An empty or `NULL` sheet writes an empty set, which
 #' re-includes everything. Rules naming a panel that is not registered yet, or
 #' matching no stored row, are reported as messages, not errors, because the
-#' data of that unit may not be imported yet.
+#' data of that unit may not be imported yet. `file_name` rules can't match
+#' FACS stains exported before file names were stored; the message then asks
+#' for a re-export of that panel.
+#'
+#' The rules are applied on read: [db_query_facs()], [db_query_elisa()] and
+#' [db_query_histo()] flag matching rows with `excluded` / `exclusion_reason`,
+#' and [db_query_subjects()] flags mouse-wide rules.
 #'
 #' @param con A DuckDB connection from [db_connect()].
 #' @param exclusions The exclusions sheet (from [meta_read()]) with columns
@@ -174,14 +180,6 @@ db_write_exclusions <- function(con, exclusions, experiment_code,
     )
   }
 
-  unmatched <- rules_without_match_(con, rules)
-  if (length(unmatched) > 0) {
-    message(
-      "Rule(s) for mouse/mice ", paste(unmatched, collapse = ", "),
-      " match no stored row (yet)."
-    )
-  }
-
   version <- as.character(utils::packageVersion("JanisHelpers"))
   new_id <- NA_integer_
   DBI::dbWithTransaction(con, {
@@ -203,6 +201,21 @@ db_write_exclusions <- function(con, exclusions, experiment_code,
       ")
     }
   })
+
+  unmatched <- rules_without_match_(con, experiment_code)
+  show <- function(x) format_rows_(dplyr::select(x, !needs_reexport))
+  stale <- dplyr::filter(unmatched, needs_reexport)
+  unmatched <- dplyr::filter(unmatched, !needs_reexport)
+  if (nrow(unmatched) > 0) {
+    message("These rules match no stored row (yet):\n", show(unmatched))
+  }
+  if (nrow(stale) > 0) {
+    message(
+      "These file_name rules can't match yet: the matching stains were ",
+      "exported before file names were stored -- re-export the panel ",
+      "(final = TRUE).\n", show(stale)
+    )
+  }
   invisible(as.integer(new_id))
 }
 
@@ -287,13 +300,38 @@ normalise_exclusions_ <- function(exclusions) {
   sort_exclusions_(out)
 }
 
-# Internal: mouse ids of `rules` that match no stored row. Simple version: the
-# mouse has no row in `samples`. (Task 5 swaps this for a view-based match.)
-rules_without_match_ <- function(con, rules) {
-  if (nrow(rules) == 0) return(character())
-  have <- DBI::dbGetQuery(con, "
-    SELECT DISTINCT s.mouse_id FROM samples sm
-    JOIN subjects s USING (subject_id)
-  ")$mouse_id
-  setdiff(unique(rules$mouse_id), have)
+# Internal: the rules of the experiment's current set that match no stored
+# FACS / ELISA / histology row (same match as the *_exclusion_flags views).
+# `needs_reexport` is TRUE for file_name rules that would match a FACS stain
+# stored without a file name (exported before file names were kept).
+# Returns a tibble with the rule columns plus `needs_reexport` (0 rows when
+# there is no set or every rule matches).
+rules_without_match_ <- function(con, experiment_code) {
+  matched_sql <- function(...) {
+    paste("SELECT DISTINCT r.exclusion_rule_id", exclusion_match_from_(...))
+  }
+  sql <- paste0("
+    WITH matched AS (",
+      matched_sql("facs"), " UNION ", matched_sql("elisa"), " UNION ",
+      matched_sql("histo"), "),
+    unnamed AS (",
+      matched_sql("facs", "r.file_name IS NOT NULL AND fs.file_name IS NULL"), ")
+    SELECT r.mouse_id, r.tissue, r.panel, r.condition, r.file_name,
+           r.collected_at, r.reason,
+           r.exclusion_rule_id IN (SELECT exclusion_rule_id FROM unnamed)
+             AS needs_reexport
+    FROM exclusion_rules r
+    JOIN exclusion_sets s USING (exclusion_set_id)
+    JOIN experiments e USING (experiment_id)
+    WHERE e.experiment_code = ?
+      AND s.exclusion_set_id = (
+        SELECT MAX(s2.exclusion_set_id) FROM exclusion_sets s2
+        WHERE s2.experiment_id = s.experiment_id)
+      AND r.exclusion_rule_id NOT IN (SELECT exclusion_rule_id FROM matched)
+    ORDER BY r.mouse_id, r.tissue, r.panel, r.condition, r.file_name,
+             r.collected_at, r.reason
+  ")
+  out <- tibble::as_tibble(DBI::dbGetQuery(con, sql, params = list(experiment_code)))
+  out$collected_at <- as.Date(out$collected_at)
+  out
 }

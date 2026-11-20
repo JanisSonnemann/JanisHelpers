@@ -10,6 +10,9 @@
 #' `subjects.early` / `early_reason` / `id_source`, `facs_stains.file_name`)
 #' are added to an existing file on open; earlier rows stay `NULL`
 #' (`early` = `FALSE`, `id_source` = `"mouse_ID"`).
+#' The views `facs_exclusion_flags`, `elisa_exclusion_flags` and
+#' `histo_exclusion_flags` (one row per measurement matched by the current
+#' exclusion rule set of its experiment) are (re)created on every open.
 #'
 #' Errors if the file was created by an older schema (one whose
 #' `facs_stains` table has no `wsp_root` or `condition` column, or whose
@@ -301,5 +304,60 @@ create_schema_ <- function(con) {
     )
   ")
 
+  # Exclusion flags, computed on read from each experiment's current rule set
+  # (spec "Matching on read"). One row per flagged measurement; rows without a
+  # match are absent (the db_query_*() left joins turn that into FALSE).
+  # CREATE OR REPLACE also migrates older files on open.
+  for (domain in c("facs", "elisa", "histo")) {
+    id <- paste0(domain, "_measurement_id")
+    DBI::dbExecute(con, paste0(
+      "CREATE OR REPLACE VIEW ", domain, "_exclusion_flags AS ",
+      "SELECT m.", id, ", TRUE AS excluded, ",
+      "string_agg(DISTINCT r.reason, '; ' ORDER BY r.reason) AS exclusion_reason ",
+      exclusion_match_from_(domain),
+      " GROUP BY m.", id
+    ))
+  }
+
   invisible(con)
+}
+
+# Internal: the FROM / JOIN clause matching each measurement of `domain`
+# ("facs", "elisa", "histo"; aliases m = measurement, sa = sample, su =
+# subject, a = assay, fs = FACS stain) against the rules `r` of its
+# experiment's current set. A rule matches when mouse_id is equal and every
+# scope column is NULL or equal (`panel` vs `assay_name`). ELISA / histology
+# have no condition / file_name, so rules naming one never match there.
+# `file_match` replaces the FACS file_name condition (used to find file rules
+# whose stains were stored without a file name).
+exclusion_match_from_ <- function(domain,
+                                  file_match = "(r.file_name IS NULL OR r.file_name = fs.file_name)") {
+  if (domain == "facs") {
+    joins <- "
+      FROM facs_measurements m
+      JOIN facs_stains fs ON fs.facs_stain_id = m.facs_stain_id
+      JOIN samples sa     ON sa.sample_id = fs.sample_id
+      JOIN assays a       ON a.assay_id = fs.assay_id"
+    extra <- paste0("
+       AND (r.condition IS NULL OR r.condition = fs.condition)
+       AND ", file_match)
+  } else {
+    joins <- paste0("
+      FROM ", domain, "_measurements m
+      JOIN samples sa     ON sa.sample_id = m.sample_id
+      JOIN assays a       ON a.assay_id = m.assay_id")
+    extra <- "
+       AND r.condition IS NULL AND r.file_name IS NULL"
+  }
+  paste0(joins, "
+      JOIN subjects su    ON su.subject_id = sa.subject_id
+      JOIN (SELECT experiment_id, MAX(exclusion_set_id) AS exclusion_set_id
+            FROM exclusion_sets GROUP BY experiment_id) cur
+        ON cur.experiment_id = su.experiment_id
+      JOIN exclusion_rules r ON r.exclusion_set_id = cur.exclusion_set_id
+       AND r.mouse_id = su.mouse_id
+       AND (r.tissue IS NULL OR r.tissue = sa.tissue)
+       AND (r.panel IS NULL OR r.panel = a.assay_name)
+       AND (r.collected_at IS NULL OR r.collected_at = sa.collected_at)",
+    extra)
 }

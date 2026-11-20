@@ -10,7 +10,8 @@ db_query_facs(con)
 \item{con}{A \code{DBI} connection from \code{\link[=db_connect]{db_connect()}}.}
 }
 \value{
-A lazy \code{tbl} -- filter/collect as needed.
+A lazy \code{tbl} -- filter/collect as needed. Ends with \code{excluded} and
+\code{exclusion_reason}.
 }
 \description{
 Returns a lazy \code{dbplyr} \code{tbl} joining \code{facs_measurements} back through
@@ -26,4 +27,9 @@ made before the column existed. Positions are only comparable within one
 \code{population} back into an ordered factor. On a database file created
 before the column existed and opened read-only (so \code{\link[=db_connect]{db_connect()}} could not
 add it), \code{population_order} is returned as all \code{NA}.
+
+Every stored row is returned. \code{excluded} (logical, \code{FALSE} when no rule
+matches) and \code{exclusion_reason} (the matching rules' reasons, sorted and
+joined with \code{"; "}) come from the experiment's current exclusion rule set
+(see \code{\link[=db_write_exclusions]{db_write_exclusions()}}); filter with \code{dplyr::filter(!excluded)}.
 }

@@ -139,3 +139,53 @@ test_that("rules for mice without samples are reported", {
   seed_exclusion_fixture(con)
   expect_message(db_write_exclusions(con, ex_sheet, "E1"), "match no stored row.*m1|m1.*match no stored row")
 })
+
+seed_rule_match_fixture <- function(con) {
+  seed_exclusion_fixture(con)
+  db_write_samples(con, tibble::tibble(mouse_id = "m1", tissue = "spleen"))
+  db_write_facs(
+    con,
+    tibble::tibble(PopulationFullPath = "root/CD4+", Population = "CD4+",
+                   metric = "count", value = 1),
+    mouse_id = "m1", tissue = "spleen", assay_name = "overview",
+    wsp_root = "overview_E1", source_file = "E1/overview_E1_20261101.wsp"
+  )
+  DBI::dbExecute(con, "UPDATE facs_stains SET file_name = 'm1.fcs'")
+  invisible(con)
+}
+
+test_that("rules_without_match_ uses the full match, not just the mouse", {
+  con <- local_test_db()
+  seed_rule_match_fixture(con)
+  sheet <- tibble::tibble(
+    mouse_ID = c("m1", "m1", "m1", "m1"),
+    tissue = c("spleen", "kidney", NA, NA),
+    file_name = c(NA, NA, "m1.fcs", "other.fcs"),
+    reason = c("ok", "wrong tissue", "ok file", "wrong file"))
+  suppressMessages(db_write_exclusions(con, sheet, "E1"))
+  res <- rules_without_match_(con, "E1")
+  expect_setequal(res$reason, c("wrong tissue", "wrong file"))
+  expect_false(any(res$needs_reexport))
+  expect_true(all(c("mouse_id", "tissue", "panel", "condition", "file_name",
+                    "collected_at", "reason", "needs_reexport") %in% names(res)))
+})
+
+test_that("file rules on stains without file_name need a re-export", {
+  con <- local_test_db()
+  seed_rule_match_fixture(con)
+  DBI::dbExecute(con, "UPDATE facs_stains SET file_name = NULL")
+  sheet <- tibble::tibble(mouse_ID = c("m1", "m1"), file_name = c("m1.fcs", NA),
+                          tissue = c(NA, "kidney"), reason = c("file", "kid"))
+  expect_message(db_write_exclusions(con, sheet, "E1"), "re-export")
+  res <- rules_without_match_(con, "E1") |> dplyr::arrange(reason)
+  expect_equal(res$reason, c("file", "kid"))
+  expect_equal(res$needs_reexport, c(TRUE, FALSE))
+})
+
+test_that("rules_without_match_ is empty without rules or set", {
+  con <- local_test_db()
+  seed_rule_match_fixture(con)
+  expect_equal(nrow(rules_without_match_(con, "E1")), 0)
+  suppressMessages(db_write_exclusions(con, NULL, "E1"))
+  expect_equal(nrow(rules_without_match_(con, "E1")), 0)
+})

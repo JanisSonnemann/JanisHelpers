@@ -14,8 +14,11 @@ read-only \code{DBI::dbConnect(duckdb::duckdb(), path, read_only = TRUE)}.}
 A lazy \code{tbl} with columns \code{experiment_code}, \code{mouse_id}, \code{group},
 \code{mouse_treatment}, \code{sex}, \code{cage}, \code{mouse_strain}, \code{generation}, \code{dob},
 \code{start_date}, \code{bmt_date}, \code{end_date}, \code{mdc_id} (facility ID), \code{early}
-(logical, left the experiment early), \code{early_reason} and \code{id_source}
-(\code{"mouse_ID"} or \code{"facility"}: where \code{mouse_id} came from).
+(logical, left the experiment early), \code{early_reason}, \code{id_source}
+(\code{"mouse_ID"} or \code{"facility"}: where \code{mouse_id} came from),
+\code{excluded_mouse_wide} (logical: the experiment's current exclusion rule
+set holds a rule for the mouse with every scope column empty) and
+\code{exclusion_reason} (the reasons of those mouse-wide rules, \code{NA} if none).
 }
 \description{
 Returns a lazy \code{dbplyr} \code{tbl} with one row per mouse: \code{subjects} joined to
