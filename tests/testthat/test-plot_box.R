@@ -112,3 +112,87 @@ test_that("explicit NULL gives ggplot default fills", {
     expect_length(intersect(box_fills_(p), c("#111111", "#222222")), 0)
   }
 })
+
+# -- excluded mice and labels -------------------------------------------------
+
+excl_data_ <- dplyr::mutate(
+  dplyr::filter(pop_data, population == "CD4+"),
+  excluded = c(FALSE, FALSE, TRUE, NA, FALSE, FALSE, FALSE, TRUE)
+)
+# GeomText matches ggrepel's GeomTextRepel too (labels with or without ggrepel)
+layer_idx_ <- function(p, geom) {
+  if (geom == "GeomText") geom <- c("GeomText", "GeomTextRepel")
+  which(vapply(p$layers, function(l) inherits(l$geom, geom), logical(1)))
+}
+
+test_that("plot_box drops excluded rows with a message by default", {
+  expect_message(p <- plot_box(excl_data_, tissue, value, group), "Dropped 2 excluded")
+  expect_equal(nrow(p$data), 6)
+  expect_length(layer_idx_(p, "GeomText"), 0)
+})
+
+test_that("NA in excluded counts as kept", {
+  p <- suppressMessages(plot_box(excl_data_, tissue, value, group))
+  expect_true(any(is.na(p$data$excluded)))
+})
+
+test_that("plot_box draws excluded rows as red crosses with labels, outside the boxes", {
+  p <- plot_box(excl_data_, tissue, value, group, show_excluded = TRUE)
+  expect_equal(nrow(p$data), 6)                       # boxes: kept rows only
+  pt_i <- layer_idx_(p, "GeomPoint")
+  lab_i <- layer_idx_(p, "GeomText")
+  expect_equal(nrow(p$layers[[pt_i]]$data), 8)
+  b <- ggplot2::ggplot_build(p)
+  pts <- b$data[[pt_i]]
+  expect_equal(sum(pts$colour == "red3"), 2)
+  expect_true(all(pts$shape[pts$colour == "red3"] == 4))
+  labs <- b$data[[lab_i]]
+  expect_setequal(labs$label[labs$label != ""], c("m2", "m4"))
+  expect_true(all(labs$colour[labs$label != ""] == "red3"))
+  expect_equal(labs$x, pts$x)                         # labels on their points
+})
+
+test_that("show_excluded without an excluded column adds nothing", {
+  expect_message(p <- plot_box(pop_data, tissue, value, group, show_excluded = TRUE),
+                 "no `excluded` column")
+  expect_length(layer_idx_(p, "GeomText"), 0)
+  expect_false(has_scale_(p, "shape"))
+  expect_no_error(ggplot2::ggplot_build(p))
+})
+
+test_that("plot_box labels every point on request", {
+  p <- plot_box(pop_data, tissue, value, group, label = TRUE)
+  b <- ggplot2::ggplot_build(p)
+  expect_setequal(b$data[[layer_idx_(p, "GeomText")]]$label, pop_data$mouse_id)
+})
+
+test_that("plot_box needs no id column when nothing is labelled", {
+  d <- dplyr::select(pop_data, !mouse_id)
+  expect_no_error(ggplot2::ggplot_build(plot_box(d, tissue, value, group)))
+})
+
+test_that("plot_population passes show_excluded and label through", {
+  p <- plot_population(excl_data_, "CD4+", "count_per_g", x = group, scale = "log",
+                       show_excluded = TRUE, label = TRUE)
+  pts <- p$layers[[layer_idx_(p, "GeomPoint")]]$data
+  expect_equal(sort(pts$value), sort(excl_data_$value + 1))
+  expect_length(layer_idx_(p, "GeomText"), 1)
+})
+
+test_that("plot_paired x labels are the condition names, one cluster per group", {
+  p <- plot_paired(paired_data, levels = c("unstim", "MPO"))
+  b <- ggplot2::ggplot_build(p)
+  expect_equal(b$layout$panel_params[[1]]$x$get_labels(), rep(c("unstim", "MPO"), 2))
+  expect_equal(sort(unique(p$data$.x)), c(1, 2, 3.8, 4.8))
+  grp <- p$layers[[layer_idx_(p, "GeomText")]]$data
+  expect_setequal(grp$.grp, c("irrel", "MPO409"))
+})
+
+test_that("plot_paired shades conditions and shows excluded wells as red crosses", {
+  d <- dplyr::mutate(paired_data, excluded = mouse_id == "m2" & condition == "MPO")
+  p <- plot_paired(d, levels = c("unstim", "MPO"), show_excluded = TRUE, label = TRUE)
+  expect_true(has_scale_(p, "alpha"))
+  expect_equal(nrow(p$data), 3)
+  b <- ggplot2::ggplot_build(p)
+  expect_equal(sum(b$data[[layer_idx_(p, "GeomPoint")]]$colour == "red3"), 1)
+})
