@@ -18,9 +18,9 @@ db_export_facs(
 \item{prep}{A prep result from \code{\link[=facs_prep_load]{facs_prep_load()}}.}
 
 \item{exclusions}{Optional tibble -- the meta workbook's \code{exclusions} sheet
-(see \code{\link[=facs_match_exclusions]{facs_match_exclusions()}}). \code{NULL} = nothing excluded. Rows naming
-a panel that is neither this one nor a registered assay raise a warning
-(possible typo) and are ignored.}
+(see \code{\link[=facs_match_exclusions]{facs_match_exclusions()}}). \code{NULL} = nothing reported. Only used for
+the export message about this panel's own files -- rules are stored by
+\code{\link[=db_write_exclusions]{db_write_exclusions()}}.}
 
 \item{data_dir}{The project's \verb{data/} folder; \code{source_file} and
 \code{qc_report} are stored relative to it.}
@@ -36,22 +36,21 @@ declined.
 \description{
 The final step of the prep / QC loop, run from the panel's prep script with
 \code{final <- TRUE}. Takes the prep result exactly as the last QC report showed
-it (\code{\link[=facs_prep_load]{facs_prep_load()}}), drops the files hit by the exclusions sheet, and
-writes the rest -- raw and calculated metrics -- as one workspace root.
+it (\code{\link[=facs_prep_load]{facs_prep_load()}}), writes every file -- raw and calculated metrics -- as one workspace root.
+Exclusions are flagged on read, see \code{\link[=db_write_exclusions]{db_write_exclusions()}}.
 Calling it is the user's "QC passed": the import is logged with
 \code{qc_passed = TRUE}.
 }
 \details{
 Checks first and writes nothing if: several files share one mouse x tissue
-x condition; an exclusion row for this panel matches no file; no file is
-left after exclusions; the workspace or QC report lies outside \code{data_dir}.
+x condition; the workspace or QC report lies outside \code{data_dir}.
 Warns if a newer dated version of the workspace exists beside it.
 
 If the root is already in the database, asks before overwriting ("no"
 changes nothing). On "yes", one transaction deletes the root's stains and
 measurements, inserts the new ones, writes an \code{import_log} row (linked to
-the previous export of the root via \code{supersedes_import_id}) and stores the
-applied exclusion rows in \code{import_exclusions}. Experiment and subjects must
+the previous export of the root via \code{supersedes_import_id}). Exclusion rows matching no file only give a
+message. Experiment and subjects must
 already be registered; samples and the assay are registered here.
 }
 \examples{

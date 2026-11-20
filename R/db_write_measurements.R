@@ -307,7 +307,7 @@ db_write_facs <- function(con, data, mouse_id, tissue, assay_name, wsp_root,
 # Returns the number of measurement rows inserted.
 insert_facs_stain_ <- function(con, sample_id, assay_id, data, wsp_root,
                                source_file, condition, condition_keyword,
-                               stain_date = NA) {
+                               stain_date = NA, file_name = NA_character_) {
   population_order <- if (is.factor(data$population)) {
     as.integer(data$population)
   } else {
@@ -327,13 +327,14 @@ insert_facs_stain_ <- function(con, sample_id, assay_id, data, wsp_root,
   DBI::dbExecute(
     con,
     "INSERT INTO facs_stains (
-       sample_id, assay_id, wsp_root, condition, condition_keyword, stain_date
+       sample_id, assay_id, wsp_root, condition, condition_keyword, stain_date,
+       file_name
      )
-     VALUES (?, ?, ?, ?, ?, ?)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT (sample_id, assay_id, condition) DO NOTHING",
     params = list(
       sample_id, assay_id, wsp_root, condition,
-      as.character(condition_keyword), stain_date
+      as.character(condition_keyword), stain_date, as.character(file_name)
     )
   )
 

@@ -18,10 +18,10 @@ db_export_histo(
 \item{prep}{A prep result from \code{\link[=histo_prep_load]{histo_prep_load()}}.}
 
 \item{exclusions}{Optional tibble -- the meta workbook's \code{exclusions} sheet.
-\code{NULL} = nothing excluded. Rows naming a panel that is neither this
-assay nor a registered one raise a warning (possible typo) and are
-ignored. A dated row matches the sheet's date: end-point samples have an
-empty date, so leave \code{collected_at} empty to target them.}
+\code{NULL} = nothing reported. Only used for the export message about
+this unit's own rows -- rules are stored by \code{\link[=db_write_exclusions]{db_write_exclusions()}}. A
+dated row matches the stored date; end-point samples carry the mouse's
+end date.}
 
 \item{data_dir}{The project's \verb{data/} folder; \code{source_file} and
 \code{qc_report} are stored relative to it.}
@@ -37,14 +37,13 @@ declined.
 \description{
 The final step of the histology prep / QC loop, run from the prep script
 with \code{final <- TRUE}. Takes the prep result exactly as the last QC report
-showed it (\code{\link[=histo_prep_load]{histo_prep_load()}}), drops the samples hit by the exclusions
-sheet and replaces the import unit (the curated file's name) in
+showed it (\code{\link[=histo_prep_load]{histo_prep_load()}}), writes every sample (exclusions are
+flagged on read, see \code{\link[=db_write_exclusions]{db_write_exclusions()}}) and replaces the import unit (the curated file's name) in
 \code{histo_measurements}. Calling it is the user's "QC passed". Rows with an
 \code{NA} value (an empty score) are written.
 }
 \details{
-Checks first and writes nothing if: an exclusion row for this assay matches
-no sample; no sample is left; a sample without date belongs to a mouse with
+Checks first and writes nothing if: a sample without date belongs to a mouse with
 no \code{end_date}; one mouse x tissue x date x metric occurs twice (after empty
 dates are resolved to the subject's \code{end_date}); the source file or QC
 report lies outside \code{data_dir}. Experiment and subjects must already be
@@ -53,8 +52,8 @@ registered; samples and the assay are registered here.
 If the import unit is already in the database, asks before overwriting
 ("no" changes nothing). On "yes", one transaction deletes its rows, inserts
 the new ones, writes an \code{import_log} row (linked to the previous export via
-\code{supersedes_import_id}) and stores the applied exclusion rows in
-\code{import_exclusions}.
+\code{supersedes_import_id}). Exclusion rows matching no sample only give a
+message.
 }
 \examples{
 \dontrun{

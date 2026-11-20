@@ -18,29 +18,28 @@ format_rows_ <- function(x) {
 #'
 #' The final step of the prep / QC loop, run from the panel's prep script with
 #' `final <- TRUE`. Takes the prep result exactly as the last QC report showed
-#' it ([facs_prep_load()]), drops the files hit by the exclusions sheet, and
-#' writes the rest -- raw and calculated metrics -- as one workspace root.
+#' it ([facs_prep_load()]), writes every file -- raw and calculated metrics -- as one workspace root.
+#' Exclusions are flagged on read, see [db_write_exclusions()].
 #' Calling it is the user's "QC passed": the import is logged with
 #' `qc_passed = TRUE`.
 #'
 #' Checks first and writes nothing if: several files share one mouse x tissue
-#' x condition; an exclusion row for this panel matches no file; no file is
-#' left after exclusions; the workspace or QC report lies outside `data_dir`.
+#' x condition; the workspace or QC report lies outside `data_dir`.
 #' Warns if a newer dated version of the workspace exists beside it.
 #'
 #' If the root is already in the database, asks before overwriting ("no"
 #' changes nothing). On "yes", one transaction deletes the root's stains and
 #' measurements, inserts the new ones, writes an `import_log` row (linked to
-#' the previous export of the root via `supersedes_import_id`) and stores the
-#' applied exclusion rows in `import_exclusions`. Experiment and subjects must
+#' the previous export of the root via `supersedes_import_id`). Exclusion rows matching no file only give a
+#' message. Experiment and subjects must
 #' already be registered; samples and the assay are registered here.
 #'
 #' @param con A `DBI` connection from [db_connect()].
 #' @param prep A prep result from [facs_prep_load()].
 #' @param exclusions Optional tibble -- the meta workbook's `exclusions` sheet
-#'   (see [facs_match_exclusions()]). `NULL` = nothing excluded. Rows naming
-#'   a panel that is neither this one nor a registered assay raise a warning
-#'   (possible typo) and are ignored.
+#'   (see [facs_match_exclusions()]). `NULL` = nothing reported. Only used for
+#'   the export message about this panel's own files -- rules are stored by
+#'   [db_write_exclusions()].
 #' @param data_dir The project's `data/` folder; `source_file` and
 #'   `qc_report` are stored relative to it.
 #' @param overwrite `NULL` (default) asks interactively when the root already
@@ -72,23 +71,17 @@ db_export_facs <- function(con, prep, exclusions = NULL, data_dir = "data",
     )
   }
 
-  # A mistyped panel (e.g. "Treg" for assay "treg") would be ignored by every
-  # export, so unknown panel names raise a warning here.
-  check_exclusion_panels_(con, exclusions, info$assay)
-
+  # Every file is written; exclusions are flagged on read. The match only
+  # feeds the messages (and the dated-rule check of facs_match_exclusions()).
   matched <- facs_match_exclusions(prep$data, exclusions, info$assay)
   if (nrow(matched$unmatched) > 0) {
-    stop(
-      "These exclusion rows match no file of panel '", info$assay, "' -- fix ",
-      "them in the meta workbook. Nothing was written.\n",
-      format_rows_(dplyr::select(matched$unmatched, !n_files_matched)),
-      call. = FALSE
+    message(
+      "These exclusion rows match no file of panel '", info$assay, "' -- ",
+      "check them in the meta workbook (the export goes ahead).\n",
+      format_rows_(dplyr::select(matched$unmatched, !n_files_matched))
     )
   }
-  data <- dplyr::filter(prep$data, !file_name %in% matched$excluded_files$file_name)
-  if (nrow(data) == 0) {
-    stop("Every file is excluded -- nothing left to export.", call. = FALSE)
-  }
+  data <- prep$data
 
   versions <- list.files(dirname(info$wsp_path), pattern = "\\.wsp$")
   versions <- versions[startsWith(versions, root) &
@@ -163,7 +156,7 @@ db_export_facs <- function(con, prep, exclusions = NULL, data_dir = "data",
       n <- n + insert_facs_stain_(
         con, s$sample_id, assay_id,
         dplyr::filter(data, file_name == s$file_name),
-        root, source_file, s$condition, kw
+        root, source_file, s$condition, kw, file_name = s$file_name
       )
     }
 
@@ -174,25 +167,12 @@ db_export_facs <- function(con, prep, exclusions = NULL, data_dir = "data",
       supersedes_import_id = if (is.na(previous_id)) NA_integer_ else previous_id
     )
 
-    ex <- matched$applicable
-    if (nrow(ex) > 0) {
-      DBI::dbExecute(con, "
-        INSERT INTO import_exclusions (
-          import_id, mouse_id, tissue, panel, condition, file_name, reason,
-          decided_on, n_files_matched, collected_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        params = list(
-          rep(id, nrow(ex)), ex$mouse_ID, ex$tissue, ex$panel, ex$condition,
-          ex$file_name, ex$reason, ex$date, ex$n_files_matched,
-          ex$collected_at
-        ))
-    }
     id
   })
 
   message(
     "Exported root '", root, "': ", nrow(stains), " stains, ", n_rows_written_(con, import_id),
-    " measurement rows, ", nrow(matched$excluded_files), " file(s) excluded."
+    " measurement rows, ", nrow(matched$excluded_files), " file(s) match an exclusion rule (stored, flagged on read)."
   )
   invisible(import_id)
 }

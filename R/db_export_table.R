@@ -11,37 +11,14 @@ check_replace_table_ <- function(table) {
   invisible(table)
 }
 
-# Internal: exclusion rows naming a panel that is neither `assay` nor any
-# registered assay (any domain) raise a warning -- a mistyped panel would be
-# silently ignored. Not an error: on a fresh database the other assays are
-# not registered yet, and their rows must not block this export.
-check_exclusion_panels_ <- function(con, exclusions, assay) {
-  if (is.null(exclusions) || !"panel" %in% names(exclusions)) {
-    return(invisible(TRUE))
-  }
-  known <- unique(c(assay, DBI::dbGetQuery(con, "SELECT assay_name FROM assays")$assay_name))
-  panels <- unique(stats::na.omit(as.character(exclusions$panel)))
-  unknown <- setdiff(panels[panels != ""], known)
-  if (length(unknown) > 0) {
-    warning(
-      "The exclusions sheet names panel(s) not registered in the database: ",
-      paste0("'", unknown, "'", collapse = ", "), ". Known panels / assays: ",
-      paste(known, collapse = ", "), ". Their rows are ignored here -- check ",
-      "for typos if that assay is already exported.",
-      call. = FALSE
-    )
-  }
-  invisible(TRUE)
-}
-
 # Internal: hint appended to unmatched-exclusion messages when a row is dated
-# (exclusions match the sheet's dates, where end-point samples are empty).
+# (rules match resolved dates, as the database does).
 exclusion_date_hint_ <- function(unmatched) {
   if (!any(!is.na(unmatched$collected_at))) {
     return("")
   }
-  paste0("\nEnd-point samples have an empty date in the sheet -- leave ",
-         "collected_at empty to target them.")
+  paste0("\nEnd-point samples are stored with the mouse's end date -- a rule ",
+         "dated on that day matches them.")
 }
 
 # Internal: TRUE to proceed, FALSE if the user declined. Asks only when
@@ -72,11 +49,10 @@ confirm_replace_ <- function(con, table, root, overwrite) {
 }
 
 # Internal: replace import unit `root` in `table` and log it, atomically.
-# `rows` has the table's columns (minus the id and imported_at); `applicable`
-# is the applied exclusion rows from match_sample_exclusions_() (or NULL).
-# Returns the new import_id.
+# `rows` has the table's columns (minus the id and imported_at). Returns the
+# new import_id.
 replace_import_ <- function(con, domain, table, rows, root, source_file,
-                            qc_report, applicable) {
+                            qc_report) {
   check_replace_table_(table)
   previous_id <- DBI::dbGetQuery(con, "
     SELECT MAX(l.import_id) AS id FROM import_log l
@@ -96,51 +72,21 @@ replace_import_ <- function(con, domain, table, rows, root, source_file,
       supersedes_import_id = if (is.na(previous_id)) NA_integer_ else previous_id
     )
 
-    if (!is.null(applicable) && nrow(applicable) > 0) {
-      ex <- data.frame(
-        import_id = rep(id, nrow(applicable)),
-        mouse_id = applicable$mouse_ID,
-        tissue = applicable$tissue,
-        panel = applicable$panel,
-        collected_at = applicable$collected_at,
-        reason = applicable$reason,
-        decided_on = applicable$date,
-        n_files_matched = applicable$n_samples_matched
-      )
-      DBI::dbAppendTable(con, "import_exclusions", ex)
-    }
     id
   })
 }
 
 # Internal: the validation sequence shared by db_export_elisa() and
-# db_export_histo(). Matches exclusions, drops the excluded samples (anti-join
-# on mouse_ID x tissue x collected_at), resolves empty dates to the subject's
-# end_date and checks `key` is unique. Stops before anything is written.
-# Returns list(data, excluded, matched).
+# db_export_histo(). Resolves empty dates to the subject's end_date (what
+# db_write_samples() does), matches the exclusion rules against the resolved
+# dates (for messages only -- every row is written, flagged on read), and
+# checks `key` is unique. Stops before anything is written.
+# Returns list(data, matched).
 prepare_sample_export_ <- function(con, data, exclusions, assay, key, key_label) {
   # An all-empty date column may arrive as logical NA; keep it a Date so the
   # end-date fill below stays a Date.
   data$collected_at <- as.Date(data$collected_at)
-  check_exclusion_panels_(con, exclusions, assay)
-  matched <- match_sample_exclusions_(data, exclusions, assay)
-  if (nrow(matched$unmatched) > 0) {
-    stop(
-      "These exclusion rows match no sample of assay '", assay, "' -- ",
-      "fix them in the meta workbook. Nothing was written.\n",
-      format_rows_(dplyr::select(matched$unmatched, !n_samples_matched)),
-      exclusion_date_hint_(matched$unmatched),
-      call. = FALSE
-    )
-  }
-  excluded <- dplyr::distinct(matched$excluded_samples, mouse_ID, tissue, collected_at)
-  data <- dplyr::anti_join(data, excluded,
-                           by = c("mouse_ID", "tissue", "collected_at"))
-  if (nrow(data) == 0) {
-    stop("Every sample is excluded -- nothing left to export.", call. = FALSE)
-  }
 
-  # Resolve empty dates to the subject's end date (what db_write_samples() does).
   ends <- DBI::dbGetQuery(con, "SELECT mouse_id, end_date FROM subjects")
   end_date <- ends$end_date[match(data$mouse_ID, ends$mouse_id)]
   empty <- is.na(data$collected_at)
@@ -156,6 +102,16 @@ prepare_sample_export_ <- function(con, data, exclusions, assay, key, key_label)
     )
   }
 
+  matched <- match_sample_exclusions_(data, exclusions, assay)
+  if (nrow(matched$unmatched) > 0) {
+    message(
+      "These exclusion rows match no sample of assay '", assay, "' -- check ",
+      "them in the meta workbook (the export goes ahead).\n",
+      format_rows_(dplyr::select(matched$unmatched, !n_samples_matched)),
+      exclusion_date_hint_(matched$unmatched)
+    )
+  }
+
   dups <- dplyr::count(data, dplyr::pick(dplyr::all_of(key))) |>
     dplyr::filter(n > 1)
   if (nrow(dups) > 0) {
@@ -167,5 +123,5 @@ prepare_sample_export_ <- function(con, data, exclusions, assay, key, key_label)
       call. = FALSE
     )
   }
-  list(data = data, excluded = excluded, matched = matched)
+  list(data = data, matched = matched)
 }

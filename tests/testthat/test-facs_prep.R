@@ -283,7 +283,7 @@ test_that("facs_prep_run(final = TRUE) exports the saved prep and snapshots", {
 
   expect_type(id, "integer")
   expect_equal(
-    DBI::dbGetQuery(con, "SELECT COUNT(*) AS n FROM facs_stains")$n, 1
+    DBI::dbGetQuery(con, "SELECT COUNT(*) AS n FROM facs_stains")$n, 2
   )
   expect_true(DBI::dbIsValid(con))
   snap <- file.path(snap_root, format(Sys.Date(), "%Y-%m-%d"))

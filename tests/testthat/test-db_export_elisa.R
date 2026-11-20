@@ -72,53 +72,47 @@ test_that("overwrite replaces the root; FALSE changes nothing", {
   expect_equal(sup, id1)
 })
 
-test_that("exclusion drops the sample and logs one row", {
+test_that("exclusion rule does not drop the sample and logs no exclusion", {
   con <- local_test_db(); seed_elisa_db(con)
   p <- elisa_prep_in_root()
   ex <- tibble::tibble(mouse_ID = "M2", reason = "bad plate")
-  id <- export_quiet(con, p$prep, ex, data_dir = p$data_dir)
+  expect_message(
+    id <- db_export_elisa(con, p$prep, ex, data_dir = p$data_dir),
+    "1 sample\\(s\\) match an exclusion rule \\(stored, flagged on read\\)"
+  )
   expect_equal(DBI::dbGetQuery(con, "
     SELECT COUNT(*) AS n FROM elisa_measurements e
     JOIN samples s ON s.sample_id = e.sample_id
-    JOIN subjects u ON u.subject_id = s.subject_id WHERE u.mouse_id = 'M2'")$n, 0)
-  log <- DBI::dbGetQuery(con, "SELECT * FROM import_exclusions WHERE import_id = ?",
-                         params = list(id))
-  expect_equal(nrow(log), 1)
-  expect_equal(log$mouse_id, "M2")
-  expect_equal(log$n_files_matched, 1)
-})
-
-test_that("an unmatched exclusion errors and writes nothing", {
-  con <- local_test_db(); seed_elisa_db(con)
-  p <- elisa_prep_in_root()
-  ex <- tibble::tibble(mouse_ID = "M9", reason = "typo")
-  expect_error(export_quiet(con, p$prep, ex, data_dir = p$data_dir),
-               "match no sample")
-  expect_equal(count_rows_(con, "elisa_measurements"), 0)
-  expect_equal(count_rows_(con, "import_log"), 0)
-})
-
-test_that("an unknown exclusion panel warns but does not block the export", {
-  con <- local_test_db(); seed_elisa_db(con)
-  p <- elisa_prep_in_root()
-  ex <- tibble::tibble(mouse_ID = "M2", panel = "Treg", reason = "facs only")
-  expect_warning(id <- export_quiet(con, p$prep, ex, data_dir = p$data_dir),
-                 "not registered.*'Treg'")
+    JOIN subjects u ON u.subject_id = s.subject_id WHERE u.mouse_id = 'M2'")$n > 0, TRUE)
   expect_equal(count_rows_(con, "elisa_measurements"), nrow(p$prep$data))
   expect_equal(count_rows_(con, "import_exclusions"), 0)
 })
 
-test_that("a dated exclusion matching no sample hints at empty end-point dates", {
+test_that("an unmatched exclusion gives a message and the export succeeds", {
+  con <- local_test_db(); seed_elisa_db(con)
+  p <- elisa_prep_in_root()
+  ex <- tibble::tibble(mouse_ID = "M9", reason = "typo")
+  expect_message(export_quiet_msg <- db_export_elisa(
+    con, p$prep, ex, data_dir = p$data_dir), "match no sample.*M9")
+  expect_equal(count_rows_(con, "elisa_measurements"), nrow(p$prep$data))
+  expect_equal(count_rows_(con, "import_log"), 1)
+})
+
+test_that("a rule dated on the end date matches an end-point sample", {
   con <- local_test_db(); seed_elisa_db(con)
   p <- elisa_prep_in_root()
   ex <- tibble::tibble(mouse_ID = "M2", collected_at = as.Date("2026-06-10"),
                        reason = "end bleed")
-  expect_error(export_quiet(con, p$prep, ex, data_dir = p$data_dir),
-               "leave collected_at empty to target them")
-  ex$collected_at <- NA
+  msgs <- testthat::capture_messages(
+    db_export_elisa(con, p$prep, ex, data_dir = p$data_dir))
+  expect_false(any(grepl("match no sample", msgs)))
+  expect_true(any(grepl("1 sample\\(s\\) match an exclusion rule", msgs)))
+  # an unmatched dated row carries the new hint
   ex$mouse_ID <- "M9"
-  expect_error(export_quiet(con, p$prep, ex, data_dir = p$data_dir),
-               "match no sample")
+  expect_message(
+    db_export_elisa(con, p$prep, ex, data_dir = p$data_dir, overwrite = TRUE),
+    "stored with the mouse's end date -- a rule dated on that day matches them"
+  )
 })
 
 test_that("a dated row equal to end_date plus an empty-date row errors", {

@@ -6,8 +6,7 @@
 #' replaces the import unit (the curated file's name) in `elisa_measurements`.
 #' Calling it is the user's "QC passed".
 #'
-#' Checks first and writes nothing if: an exclusion row for this assay matches
-#' no sample; no sample is left; a sample without date belongs to a mouse with
+#' Checks first and writes nothing if: a sample without date belongs to a mouse with
 #' no `end_date`; one mouse x tissue x date x analyte x replicate occurs twice
 #' (after empty dates are resolved to the subject's `end_date`); the source
 #' file or QC report lies outside `data_dir`. Experiment and subjects must
@@ -16,16 +15,16 @@
 #' If the import unit is already in the database, asks before overwriting
 #' ("no" changes nothing). On "yes", one transaction deletes its rows, inserts
 #' the new ones, writes an `import_log` row (linked to the previous export via
-#' `supersedes_import_id`) and stores the applied exclusion rows in
-#' `import_exclusions`.
+#' `supersedes_import_id`). Exclusion rows matching no sample only give a
+#' message.
 #'
 #' @param con A `DBI` connection from [db_connect()].
 #' @param prep A prep result from [elisa_prep_load()].
 #' @param exclusions Optional tibble -- the meta workbook's `exclusions` sheet.
-#'   `NULL` = nothing excluded. Rows naming a panel that is neither this
-#'   assay nor a registered one raise a warning (possible typo) and are
-#'   ignored. A dated row matches the sheet's date: end-point samples have an
-#'   empty date, so leave `collected_at` empty to target them.
+#'   `NULL` = nothing reported. Only used for the export message about
+#'   this unit's own rows -- rules are stored by [db_write_exclusions()]. A
+#'   dated row matches the stored date; end-point samples carry the mouse's
+#'   end date.
 #' @param data_dir The project's `data/` folder; `source_file` and
 #'   `qc_report` are stored relative to it.
 #' @param overwrite `NULL` (default) asks interactively when the import unit
@@ -53,7 +52,6 @@ db_export_elisa <- function(con, prep, exclusions = NULL, data_dir = "data",
     key_label = "mouse_ID x tissue x date x analyte x replicate"
   )
   data <- prepared$data
-  excluded <- prepared$excluded
   matched <- prepared$matched
 
   source_file <- relative_to_data_dir_(info$source_path, data_dir)
@@ -84,13 +82,13 @@ db_export_elisa <- function(con, prep, exclusions = NULL, data_dir = "data",
   )
 
   import_id <- replace_import_(
-    con, "elisa", "elisa_measurements", rows, root, source_file, qc_report,
-    matched$applicable
+    con, "elisa", "elisa_measurements", rows, root, source_file, qc_report
   )
   message(
     "Exported '", root, "': ", nrow(dplyr::distinct(data, mouse_ID, tissue, collected_at)),
     " samples, ", n_rows_written_(con, import_id), " measurement rows, ",
-    nrow(excluded), " sample(s) excluded."
+    nrow(dplyr::distinct(matched$excluded_samples, mouse_ID, tissue, collected_at)),
+    " sample(s) match an exclusion rule (stored, flagged on read)."
   )
   invisible(import_id)
 }

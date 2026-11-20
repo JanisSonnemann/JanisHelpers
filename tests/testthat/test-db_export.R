@@ -57,29 +57,35 @@ test_that("db_export_facs ignores extra meta columns in prep data", {
   expect_equal(n_rows(con, "facs_measurements"), nrow(prep$data))
 })
 
-test_that("applies exclusions and records them with the import", {
+test_that("exclusion rules do not drop files and write no import_exclusions", {
   con <- local_test_db(); seed_export_fixture(con)
   d <- local_prep_dirs()
   prep <- suppressMessages(local_loaded_prep(d, two_mice))
   ex <- tibble::tibble(mouse_ID = "25-7-2", reason = "clots",
                        date = as.Date("2026-11-10"))
 
-  id <- suppressMessages(db_export_facs(con, prep, ex, data_dir = d$data_dir))
+  expect_message(
+    db_export_facs(con, prep, ex, data_dir = d$data_dir),
+    "1 file\\(s\\) match an exclusion rule \\(stored, flagged on read\\)"
+  )
 
-  expect_equal(n_rows(con, "facs_stains"), 1)
-  mice <- dplyr::collect(db_query_facs(con))$mouse_id
-  expect_equal(unique(mice), "25-7-1")
-  exc <- DBI::dbGetQuery(con, "SELECT * FROM import_exclusions")
-  expect_equal(nrow(exc), 1)
-  expect_equal(exc$import_id, id)
-  expect_equal(exc$mouse_id, "25-7-2")
-  expect_equal(exc$reason, "clots")
-  expect_equal(exc$n_files_matched, 1)
-  expect_equal(as.Date(exc$decided_on), as.Date("2026-11-10"))
-  expect_true(is.na(exc$tissue) && is.na(exc$panel) && is.na(exc$file_name))
+  expect_equal(n_rows(con, "facs_stains"), 2)
+  mice <- sort(unique(dplyr::collect(db_query_facs(con))$mouse_id))
+  expect_equal(mice, c("25-7-1", "25-7-2"))
+  expect_equal(n_rows(con, "import_exclusions"), 0)
 })
 
-test_that("a dated exclusion row (ELISA bleed) excludes no FACS file", {
+test_that("db_export_facs stores file_name per stain", {
+  con <- local_test_db(); seed_export_fixture(con)
+  d <- local_prep_dirs()
+  prep <- suppressMessages(local_loaded_prep(d, two_mice))
+  suppressMessages(db_export_facs(con, prep, data_dir = d$data_dir))
+  got <- DBI::dbGetQuery(con, "SELECT file_name FROM facs_stains ORDER BY file_name")$file_name
+  expect_equal(got, sort(unique(prep$data$file_name)))
+  expect_false(anyNA(got))
+})
+
+test_that("a dated exclusion row (ELISA bleed) is only checked, not applied", {
   con <- local_test_db(); seed_export_fixture(con)
   d <- local_prep_dirs()
   prep <- suppressMessages(local_loaded_prep(d, two_mice))
@@ -89,11 +95,7 @@ test_that("a dated exclusion row (ELISA bleed) excludes no FACS file", {
     reason = c("hemolysed bleed", "clots")
   )
   suppressMessages(db_export_facs(con, prep, ex, data_dir = d$data_dir))
-  mice <- unique(dplyr::collect(db_query_facs(con))$mouse_id)
-  expect_equal(mice, "25-7-1")
-  exc <- DBI::dbGetQuery(con, "SELECT mouse_id, collected_at FROM import_exclusions")
-  expect_equal(exc$mouse_id, "25-7-2")
-  expect_true(is.na(exc$collected_at))
+  expect_equal(n_rows(con, "facs_stains"), 2)
   # a dated row naming the FACS panel stops the export
   ex2 <- tibble::tibble(mouse_ID = "25-7-1", panel = "overview",
                         collected_at = as.Date("2026-05-01"), reason = "x")
@@ -101,27 +103,27 @@ test_that("a dated exclusion row (ELISA bleed) excludes no FACS file", {
                               overwrite = TRUE), "collected_at")
 })
 
-test_that("unmatched exclusion row stops the export, nothing written", {
+test_that("unmatched exclusion row gives a message, export succeeds", {
   con <- local_test_db(); seed_export_fixture(con)
   d <- local_prep_dirs()
   prep <- suppressMessages(local_loaded_prep(d, two_mice))
   ex <- tibble::tibble(mouse_ID = "25-7-1", tissue = "Spleen", reason = "typo")
 
-  expect_error(db_export_facs(con, prep, ex, data_dir = d$data_dir),
-               "match no file")
-  expect_equal(n_rows(con, "facs_stains"), 0)
-  expect_equal(n_rows(con, "import_log"), 0)
+  expect_message(db_export_facs(con, prep, ex, data_dir = d$data_dir),
+                 "match no file.*Spleen")
+  expect_equal(n_rows(con, "facs_stains"), 2)
+  expect_equal(n_rows(con, "import_log"), 1)
 })
 
-test_that("all files excluded stops the export", {
+test_that("all files matching a rule still export", {
   con <- local_test_db(); seed_export_fixture(con)
   d <- local_prep_dirs()
   prep <- suppressMessages(local_loaded_prep(d, two_mice))
   ex <- tibble::tibble(mouse_ID = c("25-7-1", "25-7-2"), reason = "x")
 
-  expect_error(db_export_facs(con, prep, ex, data_dir = d$data_dir),
-               "nothing left")
-  expect_equal(n_rows(con, "import_log"), 0)
+  suppressMessages(db_export_facs(con, prep, ex, data_dir = d$data_dir))
+  expect_equal(n_rows(con, "facs_stains"), 2)
+  expect_equal(n_rows(con, "import_log"), 1)
 })
 
 test_that("keyword clash stops the export", {
@@ -188,8 +190,7 @@ test_that("existing root: overwrite = TRUE replaces data and links the log", {
   log <- DBI::dbGetQuery(con, "SELECT * FROM import_log ORDER BY import_id")
   expect_equal(nrow(log), 2)
   expect_equal(log$supersedes_import_id[[2]], id1)
-  exc <- DBI::dbGetQuery(con, "SELECT import_id FROM import_exclusions")
-  expect_equal(exc$import_id, id1)
+  expect_equal(n_rows(con, "import_exclusions"), 0)
 })
 
 test_that("re-exporting the same version overwrites it in place", {
@@ -222,40 +223,6 @@ test_that("overwrite = NULL outside an interactive session refuses to overwrite"
   prep2 <- second_version(d)
   expect_error(db_export_facs(con, prep2, data_dir = d$data_dir), "overwrite")
   expect_equal(n_rows(con, "import_log"), 1)
-})
-
-test_that("an exclusion row naming an unknown panel warns, export proceeds", {
-  con <- local_test_db(); seed_export_fixture(con)
-  d <- local_prep_dirs()
-  prep <- suppressMessages(local_loaded_prep(d, two_mice))
-  ex <- tibble::tibble(mouse_ID = "25-7-2", panel = "Overview", reason = "case typo")
-  expect_warning(
-    suppressMessages(db_export_facs(con, prep, ex, data_dir = d$data_dir)),
-    "not registered.*'Overview'.*Known panels / assays: overview"
-  )
-  expect_equal(n_rows(con, "import_log"), 1)
-  expect_equal(n_rows(con, "import_exclusions"), 0)
-  # a registered other FACS panel is fine (row ignored here, no warning)
-  db_write_assay(con, "treg", domain = "facs")
-  ex$panel <- "treg"
-  expect_no_warning(suppressMessages(
-    db_export_facs(con, prep, ex, data_dir = d$data_dir, overwrite = TRUE)
-  ))
-})
-
-test_that("exclusion panel naming a registered assay of another domain passes", {
-  con <- local_test_db(); seed_export_fixture(con)
-  d <- local_prep_dirs()
-  prep <- suppressMessages(local_loaded_prep(d, two_mice))
-  db_write_assay(con, "titer", domain = "elisa")
-  ex <- tibble::tibble(mouse_ID = "25-7-2", panel = "titer", reason = "other assay")
-  expect_no_error(suppressMessages(
-    db_export_facs(con, prep, ex, data_dir = d$data_dir)
-  ))
-  ex$panel <- "Treg"
-  expect_warning(suppressMessages(
-    db_export_facs(con, prep, ex, data_dir = d$data_dir, overwrite = TRUE)
-  ), "not registered")
 })
 
 test_that("export stores each population's display position", {

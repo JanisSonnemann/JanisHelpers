@@ -73,40 +73,34 @@ test_that("histo overwrite replaces the root; FALSE changes nothing", {
   expect_equal(sup, id1)
 })
 
-test_that("histo exclusion drops the sample and logs one row", {
+test_that("histo exclusion rule does not drop the sample and logs no exclusion", {
   con <- local_test_db(); seed_histo_db(con)
   p <- histo_prep_in_root()
   ex <- tibble::tibble(mouse_ID = "M2", reason = "bad slide")
-  id <- histo_export_quiet(con, p$prep, ex, data_dir = p$data_dir)
-  expect_equal(DBI::dbGetQuery(con, "
-    SELECT COUNT(*) AS n FROM histo_measurements e
-    JOIN samples s ON s.sample_id = e.sample_id
-    JOIN subjects u ON u.subject_id = s.subject_id WHERE u.mouse_id = 'M2'")$n, 0)
-  log <- DBI::dbGetQuery(con, "SELECT * FROM import_exclusions WHERE import_id = ?",
-                         params = list(id))
-  expect_equal(nrow(log), 1)
-  expect_equal(log$mouse_id, "M2")
-  expect_equal(log$n_files_matched, 1)
+  expect_message(
+    db_export_histo(con, p$prep, ex, data_dir = p$data_dir),
+    "1 sample\\(s\\) match an exclusion rule \\(stored, flagged on read\\)"
+  )
+  expect_equal(count_rows_(con, "histo_measurements"), nrow(p$prep$data))
+  expect_equal(count_rows_(con, "import_exclusions"), 0)
 })
 
-test_that("histo unmatched exclusion errors and writes nothing", {
+test_that("histo unmatched exclusion gives a message and the export succeeds", {
   con <- local_test_db(); seed_histo_db(con)
   p <- histo_prep_in_root()
   ex <- tibble::tibble(mouse_ID = "M9", reason = "typo")
-  expect_error(histo_export_quiet(con, p$prep, ex, data_dir = p$data_dir),
-               "match no sample")
-  expect_equal(count_rows_(con, "histo_measurements"), 0)
-  expect_equal(count_rows_(con, "import_log"), 0)
+  expect_message(db_export_histo(con, p$prep, ex, data_dir = p$data_dir),
+                 "match no sample.*M9")
+  expect_equal(count_rows_(con, "histo_measurements"), nrow(p$prep$data))
+  expect_equal(count_rows_(con, "import_log"), 1)
 })
 
-test_that("histo export: unknown panel warns; logical NA dates stay Dates", {
+test_that("histo export: logical NA dates stay Dates", {
   con <- local_test_db(); seed_histo_db(con)
   d <- histo_fixture_data()
   d$collected_at <- NA
   p <- histo_prep_in_root(d)
-  ex <- tibble::tibble(mouse_ID = "M2", panel = "titer", reason = "elisa only")
-  expect_warning(histo_export_quiet(con, p$prep, ex, data_dir = p$data_dir),
-                 "not registered.*'titer'")
+  histo_export_quiet(con, p$prep, data_dir = p$data_dir)
   res <- dplyr::collect(db_query_histo(con))
   expect_equal(nrow(res), nrow(d))
   expect_equal(unique(as.character(res$collected_at)), "2026-06-10")
