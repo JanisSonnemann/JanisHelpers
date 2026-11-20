@@ -29,7 +29,11 @@ Invisibly, \code{con} -- so it can follow \code{\link[=db_connect]{db_connect()}
 Registers the experiment (\code{\link[=db_write_experiment]{db_write_experiment()}}) and its subjects
 (\code{\link[=db_write_subjects]{db_write_subjects()}}) from the \code{meta} sheet of a meta workbook built from
 the standard template (\code{meta_template.xlsm}), as read by \code{\link[=meta_read]{meta_read()}}.
-Rows without \code{mouse_ID} are skipped. Idempotent. For workbooks that don't
+Every row with a \code{mouse_ID} or a facility \code{id} is registered (the key
+\code{mouse_id} is the \code{mouse_ID}, else the \code{id}; \code{id_source} records which); a row
+with neither is an error. Re-running updates \code{early} / \code{early_reason} of
+stored mice but refuses \code{end_date} changes (see \code{\link[=db_write_subjects]{db_write_subjects()}}).
+Idempotent. For workbooks that don't
 follow the template, shape the subjects yourself and call
 \code{\link[=db_write_subjects]{db_write_subjects()}}.
 }
@@ -37,7 +41,9 @@ follow the template, shape the subjects yourself and call
 Column mapping (sheet -> \code{subjects}): \code{mouse_ID} -> \code{mouse_id}, \code{id} ->
 \code{mdc_id}, \code{cage}, \code{line} -> \code{mouse_strain}, \code{generation}, \code{sex}, \code{group}
 -> \code{treatment_group}, \code{dob}, \code{start_date}, \code{bmt_date}, \code{death_date} ->
-\code{end_date}.
+\code{end_date}. Optional columns: \code{early} (\code{yes}/\code{ja}/\code{y}/\code{x}/\code{true} -> \code{TRUE};
+empty/\code{no}/\code{nein}/\code{n}/\code{false} -> \code{FALSE}; anything else is an error) and
+\code{reason} -> \code{early_reason}.
 }
 \examples{
 \dontrun{

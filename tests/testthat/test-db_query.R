@@ -100,9 +100,23 @@ test_that("db_query_subjects returns one row per mouse with group", {
   all <- dplyr::collect(lazy)
   expect_equal(names(all), c("experiment_code", "mouse_id", "group",
     "mouse_treatment", "sex", "cage", "mouse_strain", "generation", "dob",
-    "start_date", "bmt_date", "end_date"))
+    "start_date", "bmt_date", "end_date", "mdc_id", "early", "early_reason",
+    "id_source"))
   expect_equal(nrow(all), 2)
   expect_false("treatment_group" %in% names(all))
+})
+
+test_that("db_query_subjects returns dropout columns", {
+  con <- local_test_db()
+  db_write_experiment(con, "25-7")
+  db_write_subjects(con, tibble::tibble(
+    mouse_id = "F2", experiment_code = "25-7", mdc_id = "F2", early = TRUE,
+    early_reason = "found dead", id_source = "facility"))
+  got <- dplyr::collect(db_query_subjects(con))
+  expect_true(all(c("mdc_id", "early", "early_reason", "id_source") %in% names(got)))
+  expect_equal(got$early, TRUE)
+  expect_equal(got$early_reason, "found dead")
+  expect_equal(got$id_source, "facility")
 })
 
 test_that("db_query_facs falls back when population_order is missing (read-only)", {

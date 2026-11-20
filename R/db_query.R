@@ -100,7 +100,9 @@ db_query_histo <- function(con) {
 #'   read-only `DBI::dbConnect(duckdb::duckdb(), path, read_only = TRUE)`.
 #' @returns A lazy `tbl` with columns `experiment_code`, `mouse_id`, `group`,
 #'   `mouse_treatment`, `sex`, `cage`, `mouse_strain`, `generation`, `dob`,
-#'   `start_date`, `bmt_date`, `end_date`.
+#'   `start_date`, `bmt_date`, `end_date`, `mdc_id` (facility ID), `early`
+#'   (logical, left the experiment early), `early_reason` and `id_source`
+#'   (`"mouse_ID"` or `"facility"`: where `mouse_id` came from).
 #' @examples
 #' \dontrun{
 #' con <- DBI::dbConnect(duckdb::duckdb(), "~/databases/lab.duckdb",
@@ -123,6 +125,11 @@ db_query_subjects <- function(con) {
     dplyr::left_join(dplyr::tbl(con, "experiments"), by = "experiment_id") |>
     dplyr::select(
       experiment_code, mouse_id, group = treatment_group, mouse_treatment,
-      sex, cage, mouse_strain, generation, dob, start_date, bmt_date, end_date
+      sex, cage, mouse_strain, generation, dob, start_date, bmt_date, end_date,
+      mdc_id, early, early_reason, id_source
+    ) |>
+    dplyr::mutate(
+      early = dplyr::coalesce(early, FALSE),
+      id_source = dplyr::coalesce(id_source, "mouse_ID")
     )
 }

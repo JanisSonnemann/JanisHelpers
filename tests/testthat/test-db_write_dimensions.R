@@ -167,10 +167,10 @@ test_that("db_write_meta registers experiment + subjects from the meta sheet", {
   expect_equal(DBI::dbGetQuery(con, "SELECT COUNT(*) AS n FROM subjects")$n, 4)
 })
 
-test_that("db_write_meta also takes the meta sheet itself and skips rows without mouse_ID", {
+test_that("db_write_meta also takes the meta sheet itself and skips fully blank rows", {
   con <- local_test_db()
   sheet <- meta_read(testthat::test_path("../fixtures/meta_minimal.xlsx"))$meta
-  sheet$mouse_ID[2] <- NA
+  sheet[2, ] <- NA  # a fully blank row
 
   suppressMessages(db_write_meta(con, sheet, "26-1"))
 
@@ -192,6 +192,73 @@ test_that("db_write_meta lists every missing template column", {
   sheet <- dplyr::select(sheet, !c(line, bmt_date))
   expect_error(db_write_meta(con, sheet, "26-1"), "line, bmt_date")
   expect_equal(DBI::dbGetQuery(con, "SELECT COUNT(*) AS n FROM experiments")$n, 0)
+})
+
+meta_sheet_ <- function(...) {
+  tibble::tibble(
+    mouse_ID = c("m1", NA), id = c("F1", "F2"), cage = "c1", line = "L",
+    generation = "F1", sex = "m", group = "g", dob = as.Date("2025-01-01"),
+    start_date = as.Date("2025-02-01"), bmt_date = as.Date("2025-03-01"),
+    death_date = as.Date(c("2025-06-01", NA)),
+    early = c(NA, "yes"), reason = c(NA, "found dead")
+  ) |> dplyr::mutate(...)
+}
+
+test_that("db_write_meta registers dropouts without mouse_ID by facility ID", {
+  con <- local_test_db()
+  suppressMessages(db_write_meta(con, meta_sheet_(), "26-1"))
+  s <- DBI::dbGetQuery(con, "SELECT * FROM subjects ORDER BY subject_id")
+  expect_equal(nrow(s), 2)
+  expect_equal(s$mouse_id, c("m1", "F2"))
+  expect_equal(s$id_source, c("mouse_ID", "facility"))
+  expect_equal(s$early, c(FALSE, TRUE))
+  expect_equal(s$early_reason, c(NA, "found dead"))
+})
+
+test_that("db_write_meta errors on a row with neither mouse_ID nor id", {
+  con <- local_test_db()
+  sheet <- meta_sheet_()
+  sheet$id[2] <- NA
+  expect_error(db_write_meta(con, sheet, "26-1"), "neither mouse_ID nor id")
+  expect_equal(count_rows_(con, "subjects"), 0)
+})
+
+test_that("db_write_meta errors on unknown early values and accepts known ones", {
+  con <- local_test_db()
+  expect_error(db_write_meta(con, meta_sheet_(early = c(NA, "maybe")), "26-1"), "maybe")
+  yes <- c("yes", "ja", "y", "x", "true", "TRUE", " Yes ")
+  no <- c(NA, "", "no", "nein", "n", "false")
+  expect_equal(parse_early_(c(yes, no)), rep(c(TRUE, FALSE), c(length(yes), length(no))))
+  expect_equal(parse_early_(c(TRUE, FALSE, NA)), c(TRUE, FALSE, FALSE))
+})
+
+test_that("re-running db_write_meta updates early but refuses end_date changes", {
+  con <- local_test_db()
+  suppressMessages(db_write_meta(con, meta_sheet_(), "26-1"))
+  suppressMessages(db_write_meta(
+    con, meta_sheet_(early = c("yes", "yes"), reason = c("sick", "found dead")), "26-1"))
+  s <- DBI::dbGetQuery(con, "SELECT * FROM subjects ORDER BY subject_id")
+  expect_equal(s$early, c(TRUE, TRUE))
+  expect_equal(s$early_reason, c("sick", "found dead"))
+
+  err <- expect_error(
+    db_write_meta(con, meta_sheet_(death_date = as.Date(c("2025-07-01", NA)),
+                                   early = c("no", "no")), "26-1"),
+    "end_date differs")
+  expect_match(conditionMessage(err), "m1")
+  expect_match(conditionMessage(err), "2025-06-01")
+  expect_match(conditionMessage(err), "2025-07-01")
+  s2 <- DBI::dbGetQuery(con, "SELECT * FROM subjects ORDER BY subject_id")
+  expect_equal(s2$early, c(TRUE, TRUE))
+  expect_equal(s2$end_date[1], as.Date("2025-06-01"))
+})
+
+test_that("db_write_subjects still returns only newly inserted rows", {
+  con <- local_test_db()
+  db_write_experiment(con, "25-7")
+  d <- tibble::tibble(mouse_id = "a", experiment_code = "25-7")
+  expect_equal(db_write_subjects(con, d), 1)
+  expect_equal(db_write_subjects(con, dplyr::mutate(d, early = TRUE)), 0)
 })
 
 test_that("db_write_samples defaults collected_at to the subject's end_date", {

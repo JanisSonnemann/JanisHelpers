@@ -12,16 +12,22 @@ db_write_subjects(con, data)
 \item{data}{A tibble with columns \code{mouse_id}, \code{experiment_code}, and
 optionally \code{mdc_id}, \code{cage}, \code{mouse_strain}, \code{generation}, \code{sex},
 \code{mouse_treatment}, \code{treatment_group}, \code{dob}, \code{start_date}, \code{bmt_date},
-\code{end_date}. Missing optional columns are filled with \code{NA}.}
+\code{end_date}, \code{early} (logical, default \code{FALSE}), \code{early_reason} and
+\code{id_source} (\code{"mouse_ID"} (default) or \code{"facility"}). Missing optional
+columns are filled with \code{NA}.}
 }
 \value{
-Invisibly, the number of rows inserted.
+Invisibly, the number of rows newly inserted (updates of
+\code{early} / \code{early_reason} do not count).
 }
 \description{
 Bulk-inserts subject rows. \code{data} must already be shaped to match the
 \code{subjects} table: one row per mouse, with \code{mouse_id} and an
 \code{experiment_code} identifying an experiment already registered via
-\code{\link[=db_write_experiment]{db_write_experiment()}}. Rows whose \code{mouse_id} already exists are skipped.
-Errors if any row's \code{experiment_code} isn't registered yet -- naming
+\code{\link[=db_write_experiment]{db_write_experiment()}}. Rows whose \code{mouse_id} already exists are not
+inserted again; their \code{early} / \code{early_reason} are updated when \code{data} has
+those columns, all other columns stay untouched. Errors (writing nothing)
+if a stored \code{end_date} differs from a non-\code{NA} incoming one -- end-point
+samples are keyed by it. Errors if any row's \code{experiment_code} isn't registered yet -- naming
 every unresolved code -- rather than silently dropping those rows.
 }

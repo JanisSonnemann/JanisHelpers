@@ -34,19 +34,27 @@ fill_missing_cols_ <- function(data, cols) {
 #' Bulk-inserts subject rows. `data` must already be shaped to match the
 #' `subjects` table: one row per mouse, with `mouse_id` and an
 #' `experiment_code` identifying an experiment already registered via
-#' [db_write_experiment()]. Rows whose `mouse_id` already exists are skipped.
-#' Errors if any row's `experiment_code` isn't registered yet -- naming
+#' [db_write_experiment()]. Rows whose `mouse_id` already exists are not
+#' inserted again; their `early` / `early_reason` are updated when `data` has
+#' those columns, all other columns stay untouched. Errors (writing nothing)
+#' if a stored `end_date` differs from a non-`NA` incoming one -- end-point
+#' samples are keyed by it. Errors if any row's `experiment_code` isn't registered yet -- naming
 #' every unresolved code -- rather than silently dropping those rows.
 #'
 #' @param con A `DBI` connection from [db_connect()].
 #' @param data A tibble with columns `mouse_id`, `experiment_code`, and
 #'   optionally `mdc_id`, `cage`, `mouse_strain`, `generation`, `sex`,
 #'   `mouse_treatment`, `treatment_group`, `dob`, `start_date`, `bmt_date`,
-#'   `end_date`. Missing optional columns are filled with `NA`.
-#' @returns Invisibly, the number of rows inserted.
+#'   `end_date`, `early` (logical, default `FALSE`), `early_reason` and
+#'   `id_source` (`"mouse_ID"` (default) or `"facility"`). Missing optional
+#'   columns are filled with `NA`.
+#' @returns Invisibly, the number of rows newly inserted (updates of
+#'   `early` / `early_reason` do not count).
 #' @export
 db_write_subjects <- function(con, data) {
+  update_early <- any(c("early", "early_reason") %in% names(data))
   data <- fill_missing_cols_(data, c(
+    "early", "early_reason", "id_source",
     "mouse_id", "experiment_code", "mdc_id", "cage", "mouse_strain",
     "generation", "sex", "mouse_treatment", "treatment_group",
     "dob", "start_date", "bmt_date", "end_date"
@@ -68,21 +76,50 @@ db_write_subjects <- function(con, data) {
     )
   }
 
-  n <- DBI::dbExecute(con, "
+  changed <- DBI::dbGetQuery(con, "
+    SELECT s.mouse_id, sub.end_date AS stored, CAST(s.end_date AS DATE) AS new
+    FROM tmp_subjects s
+    JOIN subjects sub ON sub.mouse_id = s.mouse_id
+    WHERE sub.end_date IS NOT NULL AND s.end_date IS NOT NULL
+      AND sub.end_date <> CAST(s.end_date AS DATE)
+  ")
+  if (nrow(changed) > 0) {
+    stop(
+      "end_date differs from the stored value (end-point samples are keyed by it); nothing written:\n",
+      paste0("  ", changed$mouse_id, ": stored ", changed$stored,
+             ", new ", changed$new, collapse = "\n"),
+      call. = FALSE
+    )
+  }
+
+  n_new <- DBI::dbGetQuery(con, "
+    SELECT COUNT(DISTINCT s.mouse_id) AS n
+    FROM tmp_subjects s
+    WHERE s.mouse_id NOT IN (SELECT mouse_id FROM subjects)
+  ")$n
+
+  on_conflict <- if (update_early) {
+    "DO UPDATE SET early = excluded.early, early_reason = excluded.early_reason"
+  } else {
+    "DO NOTHING"
+  }
+  DBI::dbExecute(con, paste("
     INSERT INTO subjects (
       mouse_id, experiment_id, mdc_id, cage, mouse_strain, generation,
-      sex, mouse_treatment, treatment_group, dob, start_date, bmt_date, end_date
+      sex, mouse_treatment, treatment_group, dob, start_date, bmt_date, end_date,
+      early, early_reason, id_source
     )
     SELECT
       s.mouse_id, e.experiment_id, s.mdc_id, s.cage, s.mouse_strain, s.generation,
       s.sex, s.mouse_treatment, s.treatment_group,
       CAST(s.dob AS DATE), CAST(s.start_date AS DATE),
-      CAST(s.bmt_date AS DATE), CAST(s.end_date AS DATE)
+      CAST(s.bmt_date AS DATE), CAST(s.end_date AS DATE),
+      COALESCE(CAST(s.early AS BOOLEAN), FALSE), CAST(s.early_reason AS VARCHAR),
+      COALESCE(CAST(s.id_source AS VARCHAR), 'mouse_ID')
     FROM tmp_subjects s
     JOIN experiments e ON e.experiment_code = s.experiment_code
-    ON CONFLICT (mouse_id) DO NOTHING
-  ")
-  invisible(n)
+    ON CONFLICT (mouse_id)", on_conflict))
+  invisible(as.numeric(n_new))
 }
 
 #' Register samples (subject x tissue x collection date)
@@ -187,14 +224,20 @@ db_write_assay <- function(con, assay_name, domain, description = NA_character_)
 #' Registers the experiment ([db_write_experiment()]) and its subjects
 #' ([db_write_subjects()]) from the `meta` sheet of a meta workbook built from
 #' the standard template (`meta_template.xlsm`), as read by [meta_read()].
-#' Rows without `mouse_ID` are skipped. Idempotent. For workbooks that don't
+#' Every row with a `mouse_ID` or a facility `id` is registered (the key
+#' `mouse_id` is the `mouse_ID`, else the `id`; `id_source` records which); a row
+#' with neither is an error. Re-running updates `early` / `early_reason` of
+#' stored mice but refuses `end_date` changes (see [db_write_subjects()]).
+#' Idempotent. For workbooks that don't
 #' follow the template, shape the subjects yourself and call
 #' [db_write_subjects()].
 #'
 #' Column mapping (sheet -> `subjects`): `mouse_ID` -> `mouse_id`, `id` ->
 #' `mdc_id`, `cage`, `line` -> `mouse_strain`, `generation`, `sex`, `group`
 #' -> `treatment_group`, `dob`, `start_date`, `bmt_date`, `death_date` ->
-#' `end_date`.
+#' `end_date`. Optional columns: `early` (`yes`/`ja`/`y`/`x`/`true` -> `TRUE`;
+#' empty/`no`/`nein`/`n`/`false` -> `FALSE`; anything else is an error) and
+#' `reason` -> `early_reason`.
 #'
 #' @param con A `DBI` connection from [db_connect()].
 #' @param meta The list returned by [meta_read()] (its `meta` element is
@@ -228,10 +271,27 @@ db_write_meta <- function(con, meta, experiment_code,
     )
   }
 
+  no_key <- is.na(sheet$mouse_ID) & is.na(sheet$id)
+  # fully blank rows are skipped; a row with other data but no key is an error
+  other <- sheet[setdiff(names(sheet), c("mouse_ID", "id"))]
+  stray <- which(no_key & rowSums(!is.na(other)) > 0)
+  if (length(stray) > 0) {
+    stop(
+      "Row(s) ", paste(stray, collapse = ", "),
+      " of the meta sheet have neither mouse_ID nor id.",
+      call. = FALSE
+    )
+  }
+  sheet$early <- if ("early" %in% names(sheet)) parse_early_(sheet$early) else FALSE
+  sheet$reason <- if ("reason" %in% names(sheet)) as.character(sheet$reason) else NA_character_
+
   subjects <- sheet |>
-    dplyr::filter(!is.na(mouse_ID)) |>
+    dplyr::filter(!no_key) |>
     dplyr::transmute(
-      mouse_id        = as.character(mouse_ID),
+      mouse_id        = dplyr::coalesce(as.character(mouse_ID), as.character(id)),
+      id_source       = ifelse(is.na(mouse_ID), "facility", "mouse_ID"),
+      early           = early,
+      early_reason    = reason,
       experiment_code = experiment_code,
       mdc_id          = as.character(id),
       cage            = as.character(cage),
@@ -250,4 +310,21 @@ db_write_meta <- function(con, meta, experiment_code,
   message("Experiment ", experiment_code, ": ", n, " new of ",
           nrow(subjects), " mice registered.")
   invisible(con)
+}
+
+# Parse the meta sheet's `early` column; errors on values it cannot interpret.
+parse_early_ <- function(x) {
+  if (is.logical(x)) return(!is.na(x) & x)
+  v <- tolower(trimws(as.character(x)))
+  yes <- c("yes", "ja", "y", "x", "true")
+  no <- c("", "no", "nein", "n", "false")
+  bad <- unique(x[!is.na(v) & !(v %in% c(yes, no))])
+  if (length(bad) > 0) {
+    stop(
+      "Unknown `early` value(s): ", paste(sprintf("'%s'", bad), collapse = ", "),
+      " -- use yes/no (or leave empty).",
+      call. = FALSE
+    )
+  }
+  v %in% yes
 }
