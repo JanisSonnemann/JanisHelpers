@@ -404,3 +404,49 @@ test_that("db_query_* fall back without flag views (old file, read-only)", {
   subj <- dplyr::collect(db_query_subjects(ro))
   expect_identical(subj$excluded_mouse_wide, FALSE)
 })
+
+test_that("db_query_subjects / db_load_experiment work on an old file opened read-only", {
+  src <- tempfile(fileext = ".duckdb")
+  path <- tempfile(fileext = ".duckdb")
+  withr::defer(unlink(c(src, path)))
+  con <- db_connect(src)
+  seed_minimal_fixture(con)
+  db_write_facs(
+    con,
+    tibble::tibble(PopulationFullPath = "root/CD4+", Population = "CD4+",
+                   metric = "count", value = 1),
+    mouse_id = "25-7-1", tissue = "spleen", assay_name = "overview",
+    wsp_root = "overview_25-7", source_file = "25-7/overview_25-7_20261112.wsp"
+  )
+  # copy every table except the exclusion tables (no views) into a new file;
+  # subjects without the columns added since
+  DBI::dbExecute(con, paste0("ATTACH '", path, "' AS old"))
+  tabs <- DBI::dbGetQuery(con, "
+    SELECT table_name FROM information_schema.tables
+    WHERE table_catalog = current_database() AND table_schema = 'main'
+      AND table_type = 'BASE TABLE'")$table_name
+  for (t in setdiff(tabs, c("exclusion_sets", "exclusion_rules"))) {
+    cols <- if (t == "subjects") "* EXCLUDE (mdc_id, early, early_reason, id_source)" else "*"
+    DBI::dbExecute(con, paste0("CREATE TABLE old.", t, " AS SELECT ", cols, " FROM main.", t))
+  }
+  DBI::dbExecute(con, "DETACH old")
+  DBI::dbDisconnect(con, shutdown = TRUE)
+
+  ro <- DBI::dbConnect(duckdb::duckdb(), path, read_only = TRUE)
+  withr::defer(DBI::dbDisconnect(ro, shutdown = TRUE))
+  expect_false(DBI::dbExistsTable(ro, "exclusion_sets"))
+  expect_false("early" %in% DBI::dbListFields(ro, "subjects"))
+  subj <- dplyr::collect(db_query_subjects(ro))
+  expect_identical(subj$early, FALSE)
+  expect_identical(subj$id_source, "mouse_ID")
+  expect_true(is.na(subj$mdc_id))
+  expect_true(is.na(subj$early_reason))
+  expect_message(dat <- db_load_experiment(ro, "25-7"), "No exclusions recorded")
+  expect_identical(dat$cohort$early, FALSE)
+  expect_identical(dat$cohort$id_source, "mouse_ID")
+  expect_equal(nrow(dat$exclusions), 0)
+  expect_named(dat$exclusions, c("exclusion_set_id", "mouse_id", "tissue", "panel",
+    "condition", "file_name", "collected_at", "reason", "decided_on"))
+  expect_equal(dat$meta$mouse_id, "25-7-1")
+  expect_equal(nrow(dat$overview), 1)
+})

@@ -104,8 +104,21 @@ db_load_experiment <- function(con, experiment, names = NULL, group_levels = NUL
 
   el_names <- resolve_unit_names_(units, experiment, names)
 
-  exclusions <- current_exclusion_rules_(con, experiment)
-  if (!DBI::dbGetQuery(con, "
+  # a file created before the exclusion tables existed (opened read-only, so
+  # db_connect() could not add them) has no rules
+  has_rule_tables <- DBI::dbExistsTable(con, "exclusion_sets") &&
+    DBI::dbExistsTable(con, "exclusion_rules")
+  exclusions <- if (has_rule_tables) {
+    current_exclusion_rules_(con, experiment)
+  } else {
+    tibble::tibble(
+      exclusion_set_id = integer(), mouse_id = character(), tissue = character(),
+      panel = character(), condition = character(), file_name = character(),
+      collected_at = as.Date(character()), reason = character(),
+      decided_on = as.Date(character())
+    )
+  }
+  if (!has_rule_tables || !DBI::dbGetQuery(con, "
     SELECT COUNT(*) AS n FROM exclusion_sets s JOIN experiments e USING (experiment_id)
     WHERE e.experiment_code = ?", params = list(experiment))$n > 0) {
     message("No exclusions recorded for experiment ", experiment, ".")

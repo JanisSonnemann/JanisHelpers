@@ -129,6 +129,11 @@ add_exclusion_flags_ <- function(tbl, con, domain) {
 #' is an SQL reserved word; dbplyr quotes it, so `dplyr::filter(group == ...)`
 #' works on the lazy table). Call [dplyr::collect()] to materialize.
 #'
+#' On a database file created before the dropout columns or the exclusion
+#' tables existed and opened read-only (so [db_connect()] could not add
+#' them), `mdc_id` / `early_reason` are `NA`, `early` is `FALSE`, `id_source`
+#' is `"mouse_ID"` and no mouse is excluded.
+#'
 #' Intended use in an analysis document: connect read-only, query the subjects
 #' once, filter to the experiment, collect, and set the group factor levels
 #' once. Then join only the columns a dataset needs with the checked join
@@ -165,7 +170,19 @@ add_exclusion_flags_ <- function(tbl, con, domain) {
 #' @export
 db_query_subjects <- function(con) {
   subjects <- dplyr::tbl(con, "subjects")
-  if (DBI::dbExistsTable(con, "exclusion_rules")) {
+  # a file created before these columns existed and opened read-only (so
+  # db_connect() could not add them): typed NULLs, then the defaults below
+  added <- c(mdc_id = "VARCHAR", early = "BOOLEAN", early_reason = "VARCHAR",
+             id_source = "VARCHAR")
+  missing <- setdiff(base::names(added), DBI::dbListFields(con, "subjects"))
+  if (length(missing) > 0) {
+    casts <- lapply(missing, function(col) {
+      dbplyr::sql(paste0("CAST(NULL AS ", added[[col]], ")"))
+    })
+    subjects <- dplyr::mutate(subjects, !!!stats::setNames(casts, missing))
+  }
+  if (DBI::dbExistsTable(con, "exclusion_rules") &&
+      DBI::dbExistsTable(con, "exclusion_sets")) {
     # mouse-wide = a rule of the experiment's current set with no scope
     mouse_wide <- dplyr::tbl(con, dbplyr::sql("
       SELECT cur.experiment_id, r.mouse_id, TRUE AS excluded_mouse_wide,

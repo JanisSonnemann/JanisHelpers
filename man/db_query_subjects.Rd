@@ -28,6 +28,11 @@ is an SQL reserved word; dbplyr quotes it, so \code{dplyr::filter(group == ...)}
 works on the lazy table). Call \code{\link[dplyr:collect]{dplyr::collect()}} to materialize.
 }
 \details{
+On a database file created before the dropout columns or the exclusion
+tables existed and opened read-only (so \code{\link[=db_connect]{db_connect()}} could not add
+them), \code{mdc_id} / \code{early_reason} are \code{NA}, \code{early} is \code{FALSE}, \code{id_source}
+is \code{"mouse_ID"} and no mouse is excluded.
+
 Intended use in an analysis document: connect read-only, query the subjects
 once, filter to the experiment, collect, and set the group factor levels
 once. Then join only the columns a dataset needs with the checked join
