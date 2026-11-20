@@ -71,3 +71,8 @@ test_that("POSIXct dates are accepted", {
   out <- meta_label_weeks(wk_data, meta)
   expect_equal(sort(unique(out$week_num)), c(-1L, 1L, 3L, 4L, 5L))
 })
+
+test_that("missing end_date warns, naming the mouse", {
+  meta <- dplyr::mutate(wk_meta, end_date = dplyr::if_else(mouse_id == "m2", as.Date(NA), end_date))
+  expect_warning(meta_label_weeks(wk_data, meta), "end_date.*m2")
+})

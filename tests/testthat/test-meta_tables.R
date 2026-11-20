@@ -169,3 +169,35 @@ test_that("group order follows dat$meta levels", {
   d <- meta_mouse_table(tb_dat3, tb_wb)[["_data"]]
   expect_equal(unique(d$group), c("MPO409", "irrel", NA))
 })
+
+test_that("sex counts ignore case and report other codings", {
+  wb <- dplyr::mutate(tb_wb, sex = c("F", "m", "f", "F", "w", "M", "?"))
+  tb <- meta_summary_table(wb, tb_dat)
+  expect_equal(tb_row(tb, "Sex")[["total"]], "4 / 2 / 1 other")
+  expect_equal(tb_row(meta_summary_table(tb_wb, tb_dat), "Sex")[["total"]], "5 / 2")
+})
+
+test_that("early mice without death_date warn and never print NA", {
+  wb <- dplyr::mutate(tb_wb, death_date = dplyr::if_else(id == "T7", as.Date(NA), death_date))
+  expect_warning(tb <- meta_summary_table(wb, tb_dat), "T7")
+  d <- tb[["_data"]]
+  expect_false(any(grepl("NA", unlist(d[setdiff(names(d), "characteristic")]))))
+})
+
+test_that("mouse-wide exclusion in only some units shows as a note", {
+  d <- meta_mouse_table(c(tb_dat, list(overview = tb_overview)), tb_wb)[["_data"]]
+  expect_equal(d$status[d$mouse_id %in% "x-4"], "ok; excl. titer_x (no response)")
+})
+
+test_that("grid end dates come from the DB when the workbook lacks them", {
+  wb <- dplyr::mutate(tb_wb, death_date = dplyr::if_else(id == "T1", as.Date(NA), death_date))
+  d <- meta_mouse_table(tb_dat3, wb)[["_data"]]
+  expect_equal(d$titer[!is.na(d$mouse_id) & d$mouse_id %in% c("x-1", "x-2", "x-3")],
+               rep("4/4", 3))
+})
+
+test_that("derived tibbles without import unit are not grid columns", {
+  dat <- c(tb_dat3, list(titer_fc = dplyr::select(tb_titer, mouse_id, collected_at, value)))
+  d <- meta_mouse_table(dat, tb_wb)[["_data"]]
+  expect_false("titer_fc" %in% names(d))
+})

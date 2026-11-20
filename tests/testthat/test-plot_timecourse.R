@@ -141,3 +141,23 @@ test_that("hollow low-n points stay out of the legend", {
   hollow <- Filter(function(l) identical(l$aes_params$shape, 21), p$layers)[[1]]
   expect_false(hollow$show.legend)
 })
+
+test_that("summary keeps groups side by side when one group is below min_n", {
+  # irrel has one mouse at week 3, MPO409 four
+  d <- dplyr::filter(tc, !(group == "irrel" & week_num == 3 & mouse_id != "irrel-1"))
+  b <- ggplot2::ggplot_build(plot_timecourse_summary(d))
+  pts <- dplyr::bind_rows(lapply(seq_along(b$data), function(i) {
+    if (inherits(b$plot$layers[[i]]$geom, "GeomPoint")) b$data[[i]][, c("x", "y", "colour")]
+  }))
+  at3 <- pts[abs(pts$x - 3) < 0.5, ]
+  expect_equal(length(unique(round(at3$x, 6))), 2)
+  txt <- b$data[[which(vapply(b$plot$layers, function(l) inherits(l$geom, "GeomText"), logical(1)))]]
+  expect_setequal(round(txt$x[abs(txt$x - 3) < 0.5], 6), round(at3$x, 6))
+})
+
+test_that("several analytes per mouse and time point error instead of averaging", {
+  tc2 <- dplyr::bind_rows(dplyr::mutate(tc, analyte = "IFNg"), dplyr::mutate(tc, analyte = "IL-17"))
+  expect_error(plot_timecourse(tc2), "several analyte")
+  expect_error(plot_timecourse_summary(tc2), "several analyte")
+  expect_s3_class(plot_timecourse(tc2, facet = analyte), "ggplot")
+})

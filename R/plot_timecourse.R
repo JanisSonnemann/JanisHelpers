@@ -91,26 +91,37 @@ plot_timecourse_summary <- function(data, x = week_num, y = value, fill = group,
   x_name <- deparse(substitute(x))
   d <- timecourse_prep_(data, {{ x }}, {{ y }}, {{ fill }}, {{ subject }}, facet_name)
   check_log_values_(d, scale)
+  # categories -> positions 1..n, so every layer can share one numeric offset
+  x_labels <- NULL
+  if (!is.numeric(d$.x)) {
+    x_labels <- levels(droplevels(as.factor(d$.x)))
+    d$.x <- match(as.character(d$.x), x_labels)
+  }
   s <- timecourse_summary_(d, min_n)
+  # one sideways offset per group for all layers (position_dodge works per
+  # layer and would stack groups split across the ok / low-n layers)
+  groups <- levels(droplevels(as.factor(s$.fill)))
+  k <- length(groups)
+  width <- 0.4
+  s$.xd <- s$.x + (match(as.character(s$.fill), groups) - (k + 1) / 2) * width / k
   ok <- s[!s$low_n, ]
-  dodge <- ggplot2::position_dodge(width = 0.4)
 
-  p <- ggplot2::ggplot(s, ggplot2::aes(x = .data$.x, y = .data$median, colour = .data$.fill,
+  p <- ggplot2::ggplot(s, ggplot2::aes(x = .data$.xd, y = .data$median, colour = .data$.fill,
                                        group = .data$.fill)) +
     ggplot2::geom_errorbar(data = ok, ggplot2::aes(ymin = .data$q25, ymax = .data$q75),
-                           width = 0.3, position = dodge) +
-    ggplot2::geom_line(data = ok, position = dodge, linewidth = 0.8) +
-    ggplot2::geom_point(data = ok, position = dodge, size = 2.5)
+                           width = 0.8 * width / k) +
+    ggplot2::geom_line(data = ok, linewidth = 0.8) +
+    ggplot2::geom_point(data = ok, size = 2.5)
   if (any(s$low_n)) {
-    p <- p + ggplot2::geom_point(data = s[s$low_n, ], position = dodge, size = 2.5,
+    p <- p + ggplot2::geom_point(data = s[s$low_n, ], size = 2.5,
                                  shape = 21, fill = "white", show.legend = FALSE)
   }
   p <- p +
     ggplot2::geom_text(data = s, ggplot2::aes(y = -Inf, label = .data$n), vjust = -0.5,
-                       position = dodge, size = 3, show.legend = FALSE) +
+                       size = 3, show.legend = FALSE) +
     ggplot2::labs(x = NULL, y = deparse(substitute(y)), colour = deparse(substitute(fill)),
                   caption = "median and IQR; n per group below")
-  timecourse_finish_(p, d, data, facet_name, x_name, scale, colors, p_val)
+  timecourse_finish_(p, d, data, facet_name, x_name, scale, colors, p_val, x_labels)
 }
 
 # Internal: per group x time point (x facet): n mice, median, quartiles,
@@ -140,6 +151,17 @@ timecourse_prep_ <- function(data, x, y, fill, subject, facet_name = NULL) {
   d <- dplyr::mutate(data, .x = {{ x }}, .y = {{ y }}, .fill = {{ fill }},
                      .subject = {{ subject }})
   if (!is.null(facet_name)) d$.facet <- d[[facet_name]]
+  # averaging is for replicates only: refuse to mix analytes / tissues / ...
+  cell <- intersect(c(".subject", ".x", ".facet"), names(d))
+  for (col in setdiff(intersect(c("analyte", "tissue", "condition", "population", "metric"),
+                                names(d)), facet_name)) {
+    n_val <- dplyr::summarise(d, n = dplyr::n_distinct(.data[[col]]),
+                              .by = dplyr::all_of(cell))$n
+    if (any(n_val > 1)) {
+      stop("several ", col, " values per mouse and time point -- filter `data` ",
+           "or use `facet = ", col, "`.", call. = FALSE)
+    }
+  }
   n_na <- sum(is.na(d$.y) | is.na(d$.x))
   if (n_na > 0) {
     message("Dropped ", n_na, " row(s) with missing values (value or time point, ",
@@ -160,10 +182,12 @@ check_log_values_ <- function(d, scale) {
 }
 
 # Internal: axis, LLOQ line, y scale, colours, facets, stars, theme.
-timecourse_finish_ <- function(p, d, data, facet_name, x_name, scale, colors, p_val) {
+timecourse_finish_ <- function(p, d, data, facet_name, x_name, scale, colors, p_val,
+                               x_labels = NULL) {
   if (is.numeric(d$.x)) {
     br <- sort(unique(d$.x))
-    labs <- if (grepl("week", x_name)) paste("week", br) else format(br)
+    labs <- if (!is.null(x_labels)) x_labels[br] else
+      if (grepl("week", x_name)) paste("week", br) else format(br)
     p <- p + ggplot2::scale_x_continuous(breaks = br, labels = labs, minor_breaks = NULL)
   }
   lloq <- timecourse_lloq_(data, facet_name)

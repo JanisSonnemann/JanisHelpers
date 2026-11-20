@@ -53,16 +53,29 @@ meta_summary_table <- function(workbook, dat = NULL, group_col = "group") {
   cohort <- dplyr::mutate(
     cohort,
     .age_wk_ = as.numeric(.data$bmt_date - .data$dob) / 7,
-    .dropped_ = .data$early & (is.na(.data$bmt_date) | .data$end_date <= .data$bmt_date),
-    .early_after_ = .data$early & !is.na(.data$bmt_date) & .data$end_date > .data$bmt_date,
+    .dropped_ = dplyr::coalesce(
+      .data$early & (is.na(.data$bmt_date) | .data$end_date <= .data$bmt_date), FALSE),
+    .early_after_ = dplyr::coalesce(
+      .data$early & !is.na(.data$bmt_date) & .data$end_date > .data$bmt_date, FALSE),
     .end_day_ = dplyr::if_else(.data$early, NA_real_,
                                as.numeric(.data$end_date - .data$bmt_date))
   )
   subsets <- lapply(subsets, function(s) cohort[cohort$.row_ %in% s$.row_, ])
+  undated <- cohort$early & is.na(cohort$end_date)
+  if (any(undated)) {
+    warning("Mouse(s) ended early without death_date, not counted as dropped / early: ",
+            paste(dplyr::coalesce(cohort$mouse_id, cohort$ear_tag)[undated], collapse = ", "),
+            call. = FALSE)
+  }
 
   rows <- list(
     "Enrolled, n" = function(s) as.character(nrow(s)),
-    "Sex, f / m" = function(s) paste(sum(s$sex %in% "f"), "/", sum(s$sex %in% "m")),
+    "Sex, f / m" = function(s) {
+      sx <- tolower(trimws(s$sex))
+      f <- sum(sx %in% c("f", "female", "w")); m <- sum(sx %in% c("m", "male"))
+      other <- nrow(s) - f - m
+      paste0(f, " / ", m, if (other > 0) paste0(" / ", other, " other"))
+    },
     "Age at BMT, weeks" = function(s) median_range_(s$.age_wk_, digits = 1),
     "Strain / generation" = function(s) {
       v <- unique(stats::na.omit(trimws(paste(
@@ -164,9 +177,24 @@ data_units_ <- function(dat) {
   keep <- vapply(seq_along(dat), function(i) {
     nm <- names(dat)[i]
     !nm %in% c("meta", "exclusions", "workbook") && is.data.frame(dat[[i]]) &&
-      "mouse_id" %in% names(dat[[i]])
+      "mouse_id" %in% names(dat[[i]]) &&
+      any(c("import_unit", "wsp_root") %in% names(dat[[i]]))
   }, logical(1))
   dat[keep]
+}
+
+# Internal: one end date per mouse -- the DB's (dat$meta) first, else the
+# cohort's (workbook death_date).
+cohort_ends_ <- function(cohort, dat) {
+  ends <- dplyr::select(cohort, "mouse_id", "end_date")
+  if (!is.null(dat$meta) && "end_date" %in% names(dat$meta)) {
+    ends <- dplyr::bind_rows(
+      dplyr::transmute(dat$meta, mouse_id, end_date = as.Date(end_date)),
+      ends
+    )
+  }
+  ends <- dplyr::filter(ends, !is.na(.data$mouse_id), !is.na(.data$end_date))
+  dplyr::distinct(ends, .data$mouse_id, .keep_all = TRUE)
 }
 
 # Internal: per-mouse analysis status against a db_load_experiment() list.
@@ -185,14 +213,7 @@ analysis_status_ <- function(cohort, dat) {
                   is.na(.data$file_name), is.na(.data$collected_at))
   } else excl
 
-  ends <- dplyr::select(cohort, "mouse_id", "end_date")
-  if (!is.null(dat$meta) && "end_date" %in% names(dat$meta)) {
-    ends <- dplyr::bind_rows(
-      dplyr::transmute(dat$meta, mouse_id, end_date = as.Date(end_date)),
-      ends
-    )
-  }
-  ends <- dplyr::distinct(dplyr::filter(ends, !is.na(.data$mouse_id)), .data$mouse_id, .keep_all = TRUE)
+  ends <- cohort_ends_(cohort, dat)
 
   with_end <- unique(unlist(lapply(units, function(u) {
     if (!"collected_at" %in% names(u)) return(unique(u$mouse_id))
@@ -260,7 +281,7 @@ reason_note_ <- function(reasons) {
 meta_mouse_table <- function(dat, workbook = NULL) {
   cohort <- analysis_status_(cohort_input_(workbook, dat, "group"), dat)
   units <- data_units_(dat)
-  ends <- dplyr::filter(dplyr::select(cohort, "mouse_id", "end_date"), !is.na(.data$mouse_id))
+  ends <- cohort_ends_(cohort, dat)
 
   cells <- lapply(units, function(u) unit_cells_(u, ends)[cohort$mouse_id])
   cells <- lapply(cells, function(v) dplyr::coalesce(unname(v), ""))
@@ -332,14 +353,18 @@ mouse_status_ <- function(cohort, exclusions) {
     TRUE ~ "ok"
   )
   if (is.null(exclusions) || nrow(exclusions) == 0) return(base)
-  partial <- exclusions |>
-    dplyr::filter(!(is.na(.data$tissue) & is.na(.data$panel) & is.na(.data$condition) &
-                      is.na(.data$file_name) & is.na(.data$collected_at)))
+  # partial = restricted rows, or mouse-wide rows of a mouse not excluded
+  # everywhere (scope = the import unit)
+  wide <- is.na(exclusions$tissue) & is.na(exclusions$panel) & is.na(exclusions$condition) &
+    is.na(exclusions$file_name) & is.na(exclusions$collected_at)
+  excluded_ids <- cohort$mouse_id[cohort$excluded]
+  partial <- exclusions[!wide | !exclusions$mouse_id %in% excluded_ids, ]
   if (nrow(partial) == 0) return(base)
   partial$scope <- apply(
     partial[, c("tissue", "panel", "condition", "file_name", "collected_at")], 1,
     function(r) paste(trimws(stats::na.omit(r)), collapse = " ")
   )
+  partial$scope <- dplyr::if_else(partial$scope == "", partial$import_unit, partial$scope)
   notes <- partial |>
     dplyr::distinct(.data$mouse_id, .data$scope, .data$reason) |>
     dplyr::summarise(

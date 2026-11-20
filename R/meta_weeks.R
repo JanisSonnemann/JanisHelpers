@@ -62,6 +62,12 @@ meta_label_weeks <- function(data, meta, by = c("experiment_code", "mouse_id"),
             ": week is NA.", call. = FALSE)
   }
 
+  no_end <- unique(d[[by[length(by)]]][is.na(d$.end_) & !is.na(d$.ref_)])
+  if (length(no_end) > 0) {
+    warning("No end_date for mouse(s) ", paste(no_end, collapse = ", "),
+            ": their end-point samples are not pooled with the harvest.", call. = FALSE)
+  }
+
   pool_by <- intersect("experiment_code", by)
   d <- d |>
     dplyr::mutate(.iso_ = format(.date_, "%G-%V")) |>
