@@ -18,10 +18,10 @@ format_rows_ <- function(x) {
 #'
 #' The final step of the prep / QC loop, run from the panel's prep script with
 #' `final <- TRUE`. Takes the prep result exactly as the last QC report showed
-#' it ([facs_prep_load()]), writes every file -- raw and calculated metrics -- as one workspace root.
-#' Exclusions are flagged on read, see [db_write_exclusions()].
-#' Calling it is the user's "QC passed": the import is logged with
-#' `qc_passed = TRUE`.
+#' it ([facs_prep_load()]), writes every file -- raw and calculated metrics --
+#' as one workspace root. Exclusions are flagged on read, see
+#' [db_write_exclusions()]. Calling it is the user's "QC passed": the import is
+#' logged with `qc_passed = TRUE`.
 #'
 #' Checks first and writes nothing if: several files share one mouse x tissue
 #' x condition; the workspace or QC report lies outside `data_dir`.
@@ -29,9 +29,9 @@ format_rows_ <- function(x) {
 #'
 #' If the root is already in the database, asks before overwriting ("no"
 #' changes nothing). On "yes", one transaction deletes the root's stains and
-#' measurements, inserts the new ones, writes an `import_log` row (linked to
-#' the previous export of the root via `supersedes_import_id`). Exclusion rows matching no file only give a
-#' message. Experiment and subjects must
+#' measurements, inserts the new ones and writes an `import_log` row (linked
+#' to the previous export of the root via `supersedes_import_id`). Exclusion
+#' rows matching no file only give a message. Experiment and subjects must
 #' already be registered; samples and the assay are registered here.
 #'
 #' @param con A `DBI` connection from [db_connect()].
@@ -81,7 +81,6 @@ db_export_facs <- function(con, prep, exclusions = NULL, data_dir = "data",
       format_rows_(dplyr::select(matched$unmatched, !n_files_matched))
     )
   }
-  data <- prep$data
 
   versions <- list.files(dirname(info$wsp_path), pattern = "\\.wsp$")
   versions <- versions[startsWith(versions, root) &
@@ -130,10 +129,10 @@ db_export_facs <- function(con, prep, exclusions = NULL, data_dir = "data",
     WHERE d.domain_name = 'facs' AND l.import_unit = ?",
     params = list(root))$id
 
-  db_write_samples(con, dplyr::distinct(data, mouse_id = mouse_ID, tissue))
+  db_write_samples(con, dplyr::distinct(prep$data, mouse_id = mouse_ID, tissue))
   db_write_assay(con, info$assay, domain = "facs")
   assay_id <- lookup_assay_id_(con, info$assay, domain = "facs")
-  stains <- dplyr::distinct(data, file_name, mouse_ID, tissue, condition)
+  stains <- dplyr::distinct(prep$data, file_name, mouse_ID, tissue, condition)
   stains$sample_id <- purrr::map2_int(
     stains$mouse_ID, stains$tissue,
     function(m, t) as.integer(lookup_sample_id_(con, m, t))
@@ -155,7 +154,7 @@ db_export_facs <- function(con, prep, exclusions = NULL, data_dir = "data",
       check_facs_root_keyword_(con, root, kw)
       n <- n + insert_facs_stain_(
         con, s$sample_id, assay_id,
-        dplyr::filter(data, file_name == s$file_name),
+        dplyr::filter(prep$data, file_name == s$file_name),
         root, source_file, s$condition, kw, file_name = s$file_name
       )
     }

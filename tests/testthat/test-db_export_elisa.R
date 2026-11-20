@@ -80,10 +80,10 @@ test_that("exclusion rule does not drop the sample and logs no exclusion", {
     id <- db_export_elisa(con, p$prep, ex, data_dir = p$data_dir),
     "1 sample\\(s\\) match an exclusion rule \\(stored, flagged on read\\)"
   )
-  expect_equal(DBI::dbGetQuery(con, "
+  expect_gt(DBI::dbGetQuery(con, "
     SELECT COUNT(*) AS n FROM elisa_measurements e
     JOIN samples s ON s.sample_id = e.sample_id
-    JOIN subjects u ON u.subject_id = s.subject_id WHERE u.mouse_id = 'M2'")$n > 0, TRUE)
+    JOIN subjects u ON u.subject_id = s.subject_id WHERE u.mouse_id = 'M2'")$n, 0)
   expect_equal(count_rows_(con, "elisa_measurements"), nrow(p$prep$data))
   expect_equal(count_rows_(con, "import_exclusions"), 0)
 })
@@ -92,8 +92,10 @@ test_that("an unmatched exclusion gives a message and the export succeeds", {
   con <- local_test_db(); seed_elisa_db(con)
   p <- elisa_prep_in_root()
   ex <- tibble::tibble(mouse_ID = "M9", reason = "typo")
-  expect_message(export_quiet_msg <- db_export_elisa(
-    con, p$prep, ex, data_dir = p$data_dir), "match no sample.*M9")
+  expect_message(
+    db_export_elisa(con, p$prep, ex, data_dir = p$data_dir),
+    "match no sample.*M9"
+  )
   expect_equal(count_rows_(con, "elisa_measurements"), nrow(p$prep$data))
   expect_equal(count_rows_(con, "import_log"), 1)
 })

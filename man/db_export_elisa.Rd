@@ -37,21 +37,21 @@ declined.
 \description{
 The final step of the ELISA prep / QC loop, run from the prep script with
 \code{final <- TRUE}. Takes the prep result exactly as the last QC report showed
-it (\code{\link[=elisa_prep_load]{elisa_prep_load()}}), drops the samples hit by the exclusions sheet and
-replaces the import unit (the curated file's name) in \code{elisa_measurements}.
-Calling it is the user's "QC passed".
+it (\code{\link[=elisa_prep_load]{elisa_prep_load()}}), writes every sample (exclusions are flagged on read, see
+\code{\link[=db_write_exclusions]{db_write_exclusions()}}) and replaces the import unit (the curated file's
+name) in \code{elisa_measurements}. Calling it is the user's "QC passed".
 }
 \details{
-Checks first and writes nothing if: a sample without date belongs to a mouse with
-no \code{end_date}; one mouse x tissue x date x analyte x replicate occurs twice
-(after empty dates are resolved to the subject's \code{end_date}); the source
-file or QC report lies outside \code{data_dir}. Experiment and subjects must
-already be registered; samples and the assay are registered here.
+Checks first and writes nothing if: a sample without date belongs to a
+mouse with no \code{end_date}; one mouse x tissue x date x analyte x replicate occurs
+twice (after empty dates are resolved to the subject's \code{end_date}); the
+source file or QC report lies outside \code{data_dir}. Experiment and subjects
+must already be registered; samples and the assay are registered here.
 
 If the import unit is already in the database, asks before overwriting
 ("no" changes nothing). On "yes", one transaction deletes its rows, inserts
-the new ones, writes an \code{import_log} row (linked to the previous export via
-\code{supersedes_import_id}). Exclusion rows matching no sample only give a
+the new ones and writes an \code{import_log} row (linked to the previous export
+via \code{supersedes_import_id}). Exclusion rows matching no sample only give a
 message.
 }
 \examples{

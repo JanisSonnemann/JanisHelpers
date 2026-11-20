@@ -36,10 +36,10 @@ declined.
 \description{
 The final step of the prep / QC loop, run from the panel's prep script with
 \code{final <- TRUE}. Takes the prep result exactly as the last QC report showed
-it (\code{\link[=facs_prep_load]{facs_prep_load()}}), writes every file -- raw and calculated metrics -- as one workspace root.
-Exclusions are flagged on read, see \code{\link[=db_write_exclusions]{db_write_exclusions()}}.
-Calling it is the user's "QC passed": the import is logged with
-\code{qc_passed = TRUE}.
+it (\code{\link[=facs_prep_load]{facs_prep_load()}}), writes every file -- raw and calculated metrics --
+as one workspace root. Exclusions are flagged on read, see
+\code{\link[=db_write_exclusions]{db_write_exclusions()}}. Calling it is the user's "QC passed": the import is
+logged with \code{qc_passed = TRUE}.
 }
 \details{
 Checks first and writes nothing if: several files share one mouse x tissue
@@ -48,9 +48,9 @@ Warns if a newer dated version of the workspace exists beside it.
 
 If the root is already in the database, asks before overwriting ("no"
 changes nothing). On "yes", one transaction deletes the root's stains and
-measurements, inserts the new ones, writes an \code{import_log} row (linked to
-the previous export of the root via \code{supersedes_import_id}). Exclusion rows matching no file only give a
-message. Experiment and subjects must
+measurements, inserts the new ones and writes an \code{import_log} row (linked
+to the previous export of the root via \code{supersedes_import_id}). Exclusion
+rows matching no file only give a message. Experiment and subjects must
 already be registered; samples and the assay are registered here.
 }
 \examples{

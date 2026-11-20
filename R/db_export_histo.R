@@ -1,22 +1,22 @@
 #' Export a QC-approved histology prep result to the database
 #'
-#' The final step of the histology prep / QC loop, run from the prep script
-#' with `final <- TRUE`. Takes the prep result exactly as the last QC report
-#' showed it ([histo_prep_load()]), writes every sample (exclusions are
-#' flagged on read, see [db_write_exclusions()]) and replaces the import unit (the curated file's name) in
-#' `histo_measurements`. Calling it is the user's "QC passed". Rows with an
+#' The final step of the histology prep / QC loop, run from the prep script with
+#' `final <- TRUE`. Takes the prep result exactly as the last QC report showed
+#' it ([histo_prep_load()]), writes every sample (exclusions are flagged on read, see
+#' [db_write_exclusions()]) and replaces the import unit (the curated file's
+#' name) in `histo_measurements`. Calling it is the user's "QC passed". Rows with an
 #' `NA` value (an empty score) are written.
 #'
-#' Checks first and writes nothing if: a sample without date belongs to a mouse with
-#' no `end_date`; one mouse x tissue x date x metric occurs twice (after empty
-#' dates are resolved to the subject's `end_date`); the source file or QC
-#' report lies outside `data_dir`. Experiment and subjects must already be
-#' registered; samples and the assay are registered here.
+#' Checks first and writes nothing if: a sample without date belongs to a
+#' mouse with no `end_date`; one mouse x tissue x date x metric occurs
+#' twice (after empty dates are resolved to the subject's `end_date`); the
+#' source file or QC report lies outside `data_dir`. Experiment and subjects
+#' must already be registered; samples and the assay are registered here.
 #'
 #' If the import unit is already in the database, asks before overwriting
 #' ("no" changes nothing). On "yes", one transaction deletes its rows, inserts
-#' the new ones, writes an `import_log` row (linked to the previous export via
-#' `supersedes_import_id`). Exclusion rows matching no sample only give a
+#' the new ones and writes an `import_log` row (linked to the previous export
+#' via `supersedes_import_id`). Exclusion rows matching no sample only give a
 #' message.
 #'
 #' @param con A `DBI` connection from [db_connect()].
