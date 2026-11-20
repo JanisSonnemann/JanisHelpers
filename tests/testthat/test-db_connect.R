@@ -162,3 +162,56 @@ test_that("db_connect adds population_order to an existing database, keeping row
   expect_true("population_order" %in% names(rows))
   expect_true(is.na(rows$population_order))
 })
+
+test_that("new schema has exclusion tables and subject flags", {
+  con <- local_test_db()
+  expect_true(DBI::dbExistsTable(con, "exclusion_sets"))
+  expect_true(DBI::dbExistsTable(con, "exclusion_rules"))
+  expect_true(all(
+    c("early", "early_reason", "id_source") %in% DBI::dbListFields(con, "subjects")
+  ))
+  expect_true("file_name" %in% DBI::dbListFields(con, "facs_stains"))
+})
+
+test_that("files from the previous schema are migrated", {
+  path <- tempfile(fileext = ".duckdb")
+  # DuckDB refuses DROP COLUMN on tables other tables depend on, so build the
+  # previous-schema tables by hand (pre-change DDL, no dependents).
+  old <- DBI::dbConnect(duckdb::duckdb(), path)
+  DBI::dbExecute(old, "CREATE SEQUENCE seq_experiments START 1")
+  DBI::dbExecute(old, "CREATE TABLE experiments (
+    experiment_id INTEGER PRIMARY KEY DEFAULT nextval('seq_experiments'),
+    experiment_code VARCHAR NOT NULL UNIQUE, experiment_name VARCHAR,
+    project VARCHAR, description VARCHAR,
+    created_at TIMESTAMP DEFAULT current_timestamp)")
+  DBI::dbExecute(old, "CREATE SEQUENCE seq_subjects START 1")
+  DBI::dbExecute(old, "CREATE TABLE subjects (
+    subject_id INTEGER PRIMARY KEY DEFAULT nextval('seq_subjects'),
+    mouse_id VARCHAR NOT NULL UNIQUE,
+    experiment_id INTEGER NOT NULL REFERENCES experiments(experiment_id),
+    mdc_id VARCHAR, cage VARCHAR, mouse_strain VARCHAR, generation VARCHAR,
+    sex VARCHAR, mouse_treatment VARCHAR, treatment_group VARCHAR,
+    dob DATE, start_date DATE, bmt_date DATE, end_date DATE,
+    created_at TIMESTAMP DEFAULT current_timestamp)")
+  DBI::dbExecute(old, "CREATE TABLE facs_stains (
+    facs_stain_id INTEGER PRIMARY KEY, sample_id INTEGER NOT NULL,
+    assay_id INTEGER NOT NULL, wsp_root VARCHAR NOT NULL,
+    condition VARCHAR NOT NULL DEFAULT 'none', condition_keyword VARCHAR,
+    stain_date DATE)")
+  DBI::dbExecute(old, "INSERT INTO experiments (experiment_code) VALUES ('25-7')")
+  DBI::dbExecute(old, "INSERT INTO subjects (mouse_id, experiment_id)
+    SELECT '25-7-1', experiment_id FROM experiments")
+  DBI::dbDisconnect(old, shutdown = TRUE)
+
+  con <- db_connect(path)
+  withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
+  expect_true(all(
+    c("early", "early_reason", "id_source") %in% DBI::dbListFields(con, "subjects")
+  ))
+  expect_true("file_name" %in% DBI::dbListFields(con, "facs_stains"))
+  expect_true(DBI::dbExistsTable(con, "exclusion_sets"))
+  expect_true(DBI::dbExistsTable(con, "exclusion_rules"))
+  s <- DBI::dbGetQuery(con, "SELECT early, id_source FROM subjects")
+  expect_false(s$early)
+  expect_equal(s$id_source, "mouse_ID")
+})

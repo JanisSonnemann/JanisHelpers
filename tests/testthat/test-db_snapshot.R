@@ -31,3 +31,19 @@ test_that("db_snapshot replaces a same-day snapshot", {
 
   expect_false(file.exists(stale))
 })
+
+test_that("snapshot works with exclusion tables", {
+  con <- local_test_db()
+  seed_minimal_fixture(con)
+  DBI::dbExecute(con, "INSERT INTO exclusion_sets
+    (experiment_id, package_version)
+    SELECT experiment_id, '0.0.0' FROM experiments")
+  DBI::dbExecute(con, "INSERT INTO exclusion_rules
+    (exclusion_set_id, mouse_id, reason)
+    SELECT exclusion_set_id, '25-7-1', 'test' FROM exclusion_sets")
+  root <- withr::local_tempdir()
+
+  out <- suppressMessages(db_snapshot(con, root))
+
+  expect_true(any(grepl("exclusion_rules", list.files(out))))
+})

@@ -3,10 +3,13 @@
 #' Opens (creating if necessary) a DuckDB database file and ensures the full
 #' dimension/fact schema exists, creating any missing tables, sequences, and
 #' seed rows. Safe to call repeatedly -- existing tables and data are left
-#' untouched. This includes `import_log` and `import_exclusions` (the
-#' exclusion-sheet rows applied by each [db_export_facs()] call).
-#' Additive columns introduced later (`facs_measurements.population_order`)
-#' are added to an existing file on open; its earlier rows stay `NULL`.
+#' untouched. This includes `import_log` and `import_exclusions` (history
+#' only, no longer written) and the versioned exclusion rules
+#' (`exclusion_sets`, `exclusion_rules`).
+#' Additive columns introduced later (`facs_measurements.population_order`,
+#' `subjects.early` / `early_reason` / `id_source`, `facs_stains.file_name`)
+#' are added to an existing file on open; earlier rows stay `NULL`
+#' (`early` = `FALSE`, `id_source` = `"mouse_ID"`).
 #'
 #' Errors if the file was created by an older schema (one whose
 #' `facs_stains` table has no `wsp_root` or `condition` column, or whose
@@ -107,9 +110,19 @@ create_schema_ <- function(con) {
       start_date      DATE,
       bmt_date        DATE,
       end_date        DATE,
-      created_at      TIMESTAMP DEFAULT current_timestamp
+      created_at      TIMESTAMP DEFAULT current_timestamp,
+      -- dropout info: early = left the experiment before the end point;
+      -- id_source = 'mouse_ID', or 'facility' when mouse_id was taken from ID
+      early           BOOLEAN NOT NULL DEFAULT FALSE,
+      early_reason    VARCHAR,
+      id_source       VARCHAR NOT NULL DEFAULT 'mouse_ID'
     )
   ")
+  # Additive migration for files created before the dropout columns existed.
+  # (DuckDB cannot add a NOT NULL column; the DEFAULT fills existing rows.)
+  DBI::dbExecute(con, "ALTER TABLE subjects ADD COLUMN IF NOT EXISTS early BOOLEAN DEFAULT FALSE")
+  DBI::dbExecute(con, "ALTER TABLE subjects ADD COLUMN IF NOT EXISTS early_reason VARCHAR")
+  DBI::dbExecute(con, "ALTER TABLE subjects ADD COLUMN IF NOT EXISTS id_source VARCHAR DEFAULT 'mouse_ID'")
 
   DBI::dbExecute(con, "CREATE SEQUENCE IF NOT EXISTS seq_samples START 1")
   DBI::dbExecute(con, "
@@ -147,9 +160,12 @@ create_schema_ <- function(con) {
       condition         VARCHAR NOT NULL DEFAULT 'none',
       condition_keyword VARCHAR,
       stain_date    DATE,
+      -- FlowJo file name, matched by file-level exclusion rules
+      file_name     VARCHAR,
       UNIQUE(sample_id, assay_id, condition)
     )
   ")
+  DBI::dbExecute(con, "ALTER TABLE facs_stains ADD COLUMN IF NOT EXISTS file_name VARCHAR")
 
   DBI::dbExecute(con, "CREATE SEQUENCE IF NOT EXISTS seq_facs_measurements START 1")
   DBI::dbExecute(con, "
@@ -251,6 +267,37 @@ create_schema_ <- function(con) {
       reason          VARCHAR NOT NULL,
       decided_on      DATE,
       n_files_matched INTEGER NOT NULL
+    )
+  ")
+
+  # NOTE: import_exclusions above is history only -- it is no longer written.
+  # The live rules are exclusion_sets / exclusion_rules (spec:
+  # docs/superpowers/specs/2026-11-20-exclusions-in-db-design.md). No
+  # self-referencing FKs (EXPORT DATABASE rejects them).
+  DBI::dbExecute(con, "CREATE SEQUENCE IF NOT EXISTS seq_exclusion_sets START 1")
+  DBI::dbExecute(con, "
+    CREATE TABLE IF NOT EXISTS exclusion_sets (
+      exclusion_set_id INTEGER PRIMARY KEY DEFAULT nextval('seq_exclusion_sets'),
+      experiment_id    INTEGER NOT NULL REFERENCES experiments(experiment_id),
+      source_file      VARCHAR,
+      written_at       TIMESTAMP NOT NULL DEFAULT current_timestamp,
+      package_version  VARCHAR NOT NULL,
+      note             VARCHAR
+    )
+  ")
+  DBI::dbExecute(con, "CREATE SEQUENCE IF NOT EXISTS seq_exclusion_rules START 1")
+  DBI::dbExecute(con, "
+    CREATE TABLE IF NOT EXISTS exclusion_rules (
+      exclusion_rule_id INTEGER PRIMARY KEY DEFAULT nextval('seq_exclusion_rules'),
+      exclusion_set_id  INTEGER NOT NULL REFERENCES exclusion_sets(exclusion_set_id),
+      mouse_id          VARCHAR NOT NULL,
+      tissue            VARCHAR,
+      panel             VARCHAR,
+      condition         VARCHAR,
+      file_name         VARCHAR,
+      collected_at      DATE,
+      reason            VARCHAR NOT NULL,
+      decided_on        DATE
     )
   ")
 
