@@ -163,13 +163,14 @@ plot_paired <- function(data, levels, condition = condition, fill = group,
 # (option JanisHelpers.group_colors) are skipped when none of the fill values
 # is named in them -- the plot is filled by something other than the group
 # (condition, tissue, ...), and a manual scale would grey out every box.
-add_fill_scale_ <- function(p, colors, fill_values) {
+# `aesthetics` = c("colour", "fill") colours lines too (plot_timecourse()).
+add_fill_scale_ <- function(p, colors, fill_values, aesthetics = "fill") {
   if (is.null(colors)) return(p)
   from_option <- identical(colors, getOption("JanisHelpers.group_colors"))
   if (from_option && !any(as.character(unique(fill_values)) %in% names(colors))) {
     return(p)
   }
-  p + ggplot2::scale_fill_manual(values = colors)
+  p + ggplot2::scale_discrete_manual(aesthetics = aesthetics, values = colors)
 }
 
 # Internal: y scale shared by plot_box() and plot_paired().
