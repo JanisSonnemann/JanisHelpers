@@ -26,8 +26,8 @@ that are not plain \code{ok} are highlighted. Meant for the QC section of an
 analysis document: every mouse accounted for, and why one is missing.
 }
 \details{
-Unit cells: the tissues present (first letters, e.g. \verb{K S L}) when the
-unit has more than one tissue; otherwise, when the unit has serial samples
+Unit cells: when the unit has more than one tissue, \code{present/expected}
+tissues, naming the missing ones (\verb{5/6 (no lung)}); otherwise, when the unit has serial samples
 (dates other than the mouse's end date), \code{present/expected} with expected
 = the unit's distinct serial dates + 1 end-point; otherwise a check mark.
 Blank = no data. See \code{\link[=meta_summary_table]{meta_summary_table()}} for the cohort source and the

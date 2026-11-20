@@ -25,6 +25,9 @@
 #'   group has fewer than 2 mice are skipped), adjusts the p-values across
 #'   time points (Benjamini-Hochberg, per facet) and prints stars (`*` < 0.05,
 #'   `**` < 0.01, `***` < 0.001) above significant time points.
+#' @param min_n Minimum number of mice for a time point to be part of the
+#'   group median line (default 2); the line bridges time points with fewer
+#'   mice (e.g. one early death), whose mice are still drawn.
 #' @returns A `ggplot` object.
 #' @examples
 #' d <- expand.grid(group = c("a", "b"), m = 1:3, week_num = c(-1, 1, 3))
@@ -35,14 +38,16 @@
 #' @export
 plot_timecourse <- function(data, x = week_num, y = value, fill = group, subject = mouse_id,
                             facet = NULL, scale = c("linear", "log"),
-                            colors = getOption("JanisHelpers.group_colors"), p_val = FALSE) {
+                            colors = getOption("JanisHelpers.group_colors"), p_val = FALSE,
+                            min_n = 2) {
   scale <- match.arg(scale)
   facet_name <- facet_name_(substitute(facet))
   x_name <- deparse(substitute(x))
   d <- timecourse_prep_(data, {{ x }}, {{ y }}, {{ fill }}, {{ subject }}, facet_name)
   check_log_values_(d, scale)
-  med <- dplyr::summarise(d, .y = stats::median(.data$.y),
-                          .by = dplyr::any_of(c(".fill", ".x", ".facet")))
+  med <- dplyr::summarise(d, .y = stats::median(.data$.y), n = dplyr::n_distinct(.data$.subject),
+                          .by = dplyr::any_of(c(".fill", ".x", ".facet"))) |>
+    dplyr::filter(.data$n >= min_n)
 
   p <- ggplot2::ggplot(d, ggplot2::aes(x = .data$.x, y = .data$.y, colour = .data$.fill)) +
     ggplot2::geom_line(ggplot2::aes(group = .data$.subject), alpha = 0.4, linewidth = 0.4) +
@@ -67,7 +72,7 @@ plot_timecourse <- function(data, x = week_num, y = value, fill = group, subject
 #'
 #' @inheritParams plot_timecourse
 #' @param min_n Minimum number of mice for a time point to get an error bar and
-#'   be part of the median line (default 2).
+#'   be part of the median line (default 2); fewer = hollow point.
 #' @returns A `ggplot` object (caption `"median and IQR; n per group below"`,
 #'   override with `+ ggplot2::labs(caption = ...)`).
 #' @examples
@@ -98,7 +103,7 @@ plot_timecourse_summary <- function(data, x = week_num, y = value, fill = group,
     ggplot2::geom_point(data = ok, position = dodge, size = 2.5)
   if (any(s$low_n)) {
     p <- p + ggplot2::geom_point(data = s[s$low_n, ], position = dodge, size = 2.5,
-                                 shape = 21, fill = "white")
+                                 shape = 21, fill = "white", show.legend = FALSE)
   }
   p <- p +
     ggplot2::geom_text(data = s, ggplot2::aes(y = -Inf, label = .data$n), vjust = -0.5,

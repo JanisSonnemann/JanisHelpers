@@ -239,8 +239,8 @@ reason_note_ <- function(reasons) {
 #' that are not plain `ok` are highlighted. Meant for the QC section of an
 #' analysis document: every mouse accounted for, and why one is missing.
 #'
-#' Unit cells: the tissues present (first letters, e.g. `K S L`) when the
-#' unit has more than one tissue; otherwise, when the unit has serial samples
+#' Unit cells: when the unit has more than one tissue, `present/expected`
+#' tissues, naming the missing ones (`5/6 (no lung)`); otherwise, when the unit has serial samples
 #' (dates other than the mouse's end date), `present/expected` with expected
 #' = the unit's distinct serial dates + 1 end-point; otherwise a check mark.
 #' Blank = no data. See [meta_summary_table()] for the cohort source and the
@@ -300,7 +300,9 @@ unit_cells_ <- function(u, ends) {
   if (length(tissues) > 1) {
     present <- dplyr::distinct(u, .data$mouse_id, .data$tissue)
     return(vapply(split(present$tissue, present$mouse_id), function(t) {
-      paste(toupper(substr(tissues[tissues %in% t], 1, 1)), collapse = " ")
+      cell <- paste0(sum(tissues %in% t), "/", length(tissues))
+      miss <- setdiff(tissues, t)
+      if (length(miss) == 0) cell else paste0(cell, " (no ", paste(miss, collapse = ", "), ")")
     }, character(1)))
   }
   if ("collected_at" %in% names(u)) {

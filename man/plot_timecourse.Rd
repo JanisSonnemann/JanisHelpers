@@ -13,7 +13,8 @@ plot_timecourse(
   facet = NULL,
   scale = c("linear", "log"),
   colors = getOption("JanisHelpers.group_colors"),
-  p_val = FALSE
+  p_val = FALSE,
+  min_n = 2
 )
 }
 \arguments{
@@ -38,6 +39,10 @@ rank-sum for two groups, Kruskal-Wallis for more; time points where a
 group has fewer than 2 mice are skipped), adjusts the p-values across
 time points (Benjamini-Hochberg, per facet) and prints stars (\code{*} < 0.05,
 \verb{**} < 0.01, \verb{***} < 0.001) above significant time points.}
+
+\item{min_n}{Minimum number of mice for a time point to be part of the
+group median line (default 2); the line bridges time points with fewer
+mice (e.g. one early death), whose mice are still drawn.}
 }
 \value{
 A \code{ggplot} object.

@@ -132,8 +132,8 @@ test_that("mouse grid shows tissues, date counts and status", {
   expect_equal(names(d), c("mouse_id", "ear_tag", "group", "sex", "cage", "age_at_bmt_wk",
                            "end_day", "titer", "overview", "status"))
   expect_equal(nrow(d), 7)
-  expect_equal(d$overview[d$mouse_id %in% "x-1"], "K S L")
-  expect_equal(d$overview[d$mouse_id %in% "x-3"], "K")
+  expect_equal(d$overview[d$mouse_id %in% "x-1"], "3/3")
+  expect_equal(d$overview[d$mouse_id %in% "x-3"], "1/3 (no spleen, lung)")
   expect_equal(d$titer[d$mouse_id %in% "x-1"], "4/4")
   expect_equal(d$titer[d$mouse_id %in% "x-3"], "4/4")
   expect_equal(d$end_day[d$mouse_id %in% "x-3"], 29)

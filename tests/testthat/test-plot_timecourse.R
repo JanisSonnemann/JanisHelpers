@@ -127,3 +127,17 @@ test_that("summary p_val adds stars without dropping the n labels", {
   n_text <- sum(vapply(p$layers, function(l) inherits(l$geom, "GeomText"), logical(1)))
   expect_equal(n_text, 2)
 })
+
+test_that("full plot median line bridges time points with fewer than min_n mice", {
+  p <- plot_timecourse(tc_low)
+  thick <- Filter(function(l) inherits(l$geom, "GeomLine") && identical(l$aes_params$linewidth, 1.2),
+                  p$layers)[[1]]$data
+  expect_false(4 %in% thick$.x[thick$.fill == "irrel"])
+  expect_true(all(c(3, 5) %in% thick$.x[thick$.fill == "irrel"]))
+})
+
+test_that("hollow low-n points stay out of the legend", {
+  p <- plot_timecourse_summary(tc_low)
+  hollow <- Filter(function(l) identical(l$aes_params$shape, 21), p$layers)[[1]]
+  expect_false(hollow$show.legend)
+})

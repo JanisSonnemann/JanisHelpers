@@ -41,7 +41,7 @@ time points (Benjamini-Hochberg, per facet) and prints stars (\code{*} < 0.05,
 \verb{**} < 0.01, \verb{***} < 0.001) above significant time points.}
 
 \item{min_n}{Minimum number of mice for a time point to get an error bar and
-be part of the median line (default 2).}
+be part of the median line (default 2); fewer = hollow point.}
 }
 \value{
 A \code{ggplot} object (caption \code{"median and IQR; n per group below"},
