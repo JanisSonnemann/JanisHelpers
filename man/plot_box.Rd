@@ -10,7 +10,10 @@ plot_box(
   y,
   fill,
   scale = c("linear", "percent", "log"),
-  colors = getOption("JanisHelpers.group_colors")
+  colors = getOption("JanisHelpers.group_colors"),
+  show_excluded = FALSE,
+  label = FALSE,
+  id = mouse_id
 )
 }
 \arguments{
@@ -29,6 +32,15 @@ positive -- no offset is added here, see \code{\link[=plot_population]{plot_popu
 once with \code{options(JanisHelpers.group_colors = c(...))}; the option is
 ignored when no fill value is one of its names (fill by condition, tissue,
 ...). \code{NULL} (option unset, or passed explicitly) = ggplot2 default fills.}
+
+\item{show_excluded}{\code{FALSE} (default) drops rows with \code{excluded == TRUE}
+(message); \code{TRUE} draws them as red crosses labelled with their mouse ID.}
+
+\item{label}{\code{TRUE} labels every point with its mouse ID (uses \code{ggrepel}
+when installed).}
+
+\item{id}{Bare column name of the mouse ID used for labels (default
+\code{mouse_id}); only read when something is labelled.}
 }
 \value{
 A \code{ggplot} object.
@@ -38,8 +50,15 @@ Dodged boxplots (no outlier points) with the individual values jittered on
 top -- the basic group-comparison plot of the analysis documents. Returns a
 \code{ggplot} to extend with \code{+ ggplot2::labs()}, \code{+ ggplot2::facet_wrap()} etc.
 }
+\details{
+Rows flagged in an \code{excluded} column (from
+\code{db_load_experiment(keep_excluded = TRUE)} or \verb{db_query_*()}) are dropped
+with a message, or with \code{show_excluded = TRUE} drawn as red crosses with a
+red mouse-ID label. Excluded rows never enter the boxes (or p-values).
+}
 \examples{
 d <- data.frame(group = rep(c("a", "b"), each = 4), tissue = "kidney",
+                mouse_id = paste0("m", 1:8),
                 value = c(1, 2, 3, 4, 3, 4, 5, 6))
-plot_box(d, x = tissue, y = value, fill = group)
+plot_box(d, x = tissue, y = value, fill = group, label = TRUE)
 }

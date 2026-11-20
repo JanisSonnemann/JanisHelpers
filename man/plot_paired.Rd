@@ -13,7 +13,9 @@ plot_paired(
   facet = population,
   y = value,
   scale = c("percent", "linear", "log"),
-  colors = getOption("JanisHelpers.group_colors")
+  colors = getOption("JanisHelpers.group_colors"),
+  show_excluded = FALSE,
+  label = FALSE
 )
 }
 \arguments{
@@ -25,22 +27,32 @@ plot, with the columns named below.}
 
 \item{condition, fill, pair, facet, y}{Bare column names: condition (default
 \code{condition}, as in \code{\link[=db_query_facs]{db_query_facs()}}), box fill / group (default
-\code{group}), subject joined by lines (default \code{mouse_id}), facet variable
-(default \code{population}) and values (default \code{value}).}
+\code{group}), subject joined by lines and used for labels (default
+\code{mouse_id}), facet variable (default \code{population}) and values (default
+\code{value}).}
 
 \item{scale}{\code{"percent"} (default, for 0-1 fractions), \code{"linear"} or
 \code{"log"}, see \code{\link[=plot_box]{plot_box()}}.}
 
 \item{colors}{Optional named fill colours; defaults to the option
 \code{JanisHelpers.group_colors}, see \code{\link[=plot_box]{plot_box()}}.}
+
+\item{show_excluded}{\code{FALSE} (default) drops rows with \code{excluded == TRUE}
+(message); \code{TRUE} draws them as red crosses labelled with the subject
+(joined by a red dashed line), outside the boxes.}
+
+\item{label}{\code{TRUE} labels every point with its subject (\code{pair}).}
 }
 \value{
 A \code{ggplot} object.
 }
 \description{
-Boxplots per condition x group with one grey line per subject joining its
-values across conditions -- for wells of the same sample that differ in one
-variable (restimulation). Returns a \code{ggplot} to extend with \code{+ labs()} etc.
+One cluster of boxes per group, the conditions side by side inside it, and
+one grey line per subject joining its values across conditions -- for wells
+of the same sample that differ in one variable (restimulation). The x axis
+shows the condition names; the group name is printed above its cluster.
+Boxes take the group colour, conditions are shades of it (first level, the
+baseline, lightest). Returns a \code{ggplot} to extend with \code{+ labs()} etc.
 }
 \examples{
 \dontrun{

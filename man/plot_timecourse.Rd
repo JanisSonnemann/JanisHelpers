@@ -14,7 +14,9 @@ plot_timecourse(
   scale = c("linear", "log"),
   colors = getOption("JanisHelpers.group_colors"),
   p_val = FALSE,
-  min_n = 2
+  min_n = 2,
+  show_excluded = FALSE,
+  label = FALSE
 )
 }
 \arguments{
@@ -43,6 +45,15 @@ time points (Benjamini-Hochberg, per facet) and prints stars (\code{*} < 0.05,
 \item{min_n}{Minimum number of mice for a time point to be part of the
 group median line (default 2); the line bridges time points with fewer
 mice (e.g. one early death), whose mice are still drawn.}
+
+\item{show_excluded}{Rows with \code{excluded == TRUE} (from
+\code{db_load_experiment(keep_excluded = TRUE)}) are dropped with a message
+(default, and always in \code{\link[=plot_timecourse_summary]{plot_timecourse_summary()}}); \code{TRUE} draws them
+as a red dashed line with red crosses per mouse, labelled with the mouse
+ID at its last time point, outside the medians and p-values.}
+
+\item{label}{\code{TRUE} labels each mouse with its ID at its last time point
+(in its group colour; uses \code{ggrepel} when installed).}
 }
 \value{
 A \code{ggplot} object.

@@ -15,7 +15,10 @@ plot_population(
   scale = c("linear", "percent", "log"),
   p_val = FALSE,
   colors = getOption("JanisHelpers.group_colors"),
-  pseudocount = 1
+  pseudocount = 1,
+  show_excluded = FALSE,
+  label = FALSE,
+  id = mouse_id
 )
 }
 \arguments{
@@ -45,6 +48,15 @@ for two groups, Kruskal-Wallis for more) per facet.}
 \code{JanisHelpers.group_colors}, see \code{\link[=plot_box]{plot_box()}}.}
 
 \item{pseudocount}{Number added to \code{value} for \code{scale = "log"}. Default 1.}
+
+\item{show_excluded}{\code{FALSE} (default) drops rows with \code{excluded == TRUE}
+(message); \code{TRUE} draws them as red crosses labelled with their mouse ID.}
+
+\item{label}{\code{TRUE} labels every point with its mouse ID (uses \code{ggrepel}
+when installed).}
+
+\item{id}{Bare column name of the mouse ID used for labels (default
+\code{mouse_id}); only read when something is labelled.}
 }
 \value{
 A \code{ggplot} object.
