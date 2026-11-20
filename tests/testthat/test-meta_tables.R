@@ -113,3 +113,59 @@ test_that("no 'not assigned' column when every mouse has a group", {
   tb <- meta_summary_table(tb_wb[!is.na(tb_wb$group), ], tb_dat)
   expect_false("not assigned" %in% names(tb[["_data"]]))
 })
+
+tb_overview <- tidyr::expand_grid(
+  mouse_id = c("x-1", "x-2"), tissue = c("kidney", "spleen", "lung")
+) |>
+  dplyr::bind_rows(tibble::tibble(mouse_id = "x-3", tissue = "kidney")) |>
+  dplyr::left_join(dplyr::select(tb_meta, mouse_id, collected_at = end_date), by = "mouse_id") |>
+  dplyr::mutate(experiment_code = "x", wsp_root = "ov_x", population = "CD4+",
+                metric = "count", value = 1)
+tb_dat3 <- c(tb_dat, list(overview = tb_overview))
+# an export writes the mouse-wide exclusion into every unit
+tb_dat3$exclusions <- dplyr::bind_rows(tb_excl(), dplyr::mutate(tb_excl(), import_unit = "ov_x"))
+
+test_that("mouse grid shows tissues, date counts and status", {
+  tb <- meta_mouse_table(tb_dat3, tb_wb)
+  expect_s3_class(tb, "gt_tbl")
+  d <- tb[["_data"]]
+  expect_equal(names(d), c("mouse_id", "ear_tag", "group", "sex", "cage", "age_at_bmt_wk",
+                           "end_day", "titer", "overview", "status"))
+  expect_equal(nrow(d), 7)
+  expect_equal(d$overview[d$mouse_id %in% "x-1"], "K S L")
+  expect_equal(d$overview[d$mouse_id %in% "x-3"], "K")
+  expect_equal(d$titer[d$mouse_id %in% "x-1"], "4/4")
+  expect_equal(d$titer[d$mouse_id %in% "x-3"], "4/4")
+  expect_equal(d$end_day[d$mouse_id %in% "x-3"], 29)
+  expect_equal(d$status[d$mouse_id %in% "x-3"], "early: pain (d 29)")
+  expect_equal(d$status[d$mouse_id %in% "x-4"], "excluded: no response")
+  expect_equal(sum(grepl("^not in DB", d$status)), 3)
+  expect_equal(d$status[d$ear_tag %in% "T7"], "not in DB: found dead")
+  expect_equal(d$status[d$mouse_id %in% "x-1"], "ok")
+})
+
+test_that("blank cell for a unit without data for the mouse", {
+  d <- meta_mouse_table(tb_dat3, tb_wb)[["_data"]]
+  expect_equal(d$overview[d$mouse_id %in% "x-4"], "")
+  expect_equal(d$titer[d$ear_tag %in% "T5"], "")
+})
+
+test_that("partial exclusion shows as a note", {
+  dat <- tb_dat3
+  dat$exclusions <- dplyr::mutate(tb_excl(tissue = "kidney"), mouse_id = "x-1")
+  d <- meta_mouse_table(dat, tb_wb)[["_data"]]
+  expect_equal(d$status[d$mouse_id %in% "x-1"], "ok; excl. kidney (no response)")
+})
+
+test_that("mice sort by group, then naturally by mouse id", {
+  wb <- dplyr::mutate(tb_wb[1:2, ], mouse_ID = c("26-1-10", "26-1-2"), group = factor("irrel"))
+  dat <- list(meta = dplyr::mutate(tb_meta[1:2, ], mouse_id = c("26-1-10", "26-1-2")),
+              exclusions = tb_excl()[0, ])
+  d <- meta_mouse_table(dat, wb)[["_data"]]
+  expect_equal(d$mouse_id, c("26-1-2", "26-1-10"))
+})
+
+test_that("group order follows dat$meta levels", {
+  d <- meta_mouse_table(tb_dat3, tb_wb)[["_data"]]
+  expect_equal(unique(d$group), c("MPO409", "irrel", NA))
+})

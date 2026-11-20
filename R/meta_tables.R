@@ -229,3 +229,122 @@ reason_note_ <- function(reasons) {
   n <- table(reasons)
   paste(paste0(names(n), " (", as.integer(n), ")"), collapse = ", ")
 }
+
+#' Per-mouse accounting grid across import units
+#'
+#' One row per enrolled mouse with its key facts, one column per import unit
+#' of `dat` showing what exists for the mouse, and a `status` column (`ok`,
+#' `early: <reason> (d <n>)`, `excluded: <reason>`, `not in DB: <reason>`,
+#' with partial exclusions appended as `; excl. <scope> (<reason>)`). Rows
+#' that are not plain `ok` are highlighted. Meant for the QC section of an
+#' analysis document: every mouse accounted for, and why one is missing.
+#'
+#' Unit cells: the tissues present (first letters, e.g. `K S L`) when the
+#' unit has more than one tissue; otherwise, when the unit has serial samples
+#' (dates other than the mouse's end date), `present/expected` with expected
+#' = the unit's distinct serial dates + 1 end-point; otherwise a check mark.
+#' Blank = no data. See [meta_summary_table()] for the cohort source and the
+#' exclusion rule.
+#'
+#' @param dat A [db_load_experiment()] list.
+#' @param workbook The cohort (workbook `meta` sheet from [meta_read()], or a
+#'   table with DB names); `NULL` uses `dat$meta` with a message.
+#' @returns A `gt` table. Its data (`tbl[["_data"]]`) has columns `mouse_id`,
+#'   `ear_tag`, `group`, `sex`, `cage`, `age_at_bmt_wk`, `end_day`, one
+#'   character column per import unit (named as in `dat`) and `status`.
+#' @examples
+#' \dontrun{
+#' meta_mouse_table(dat, meta_read("meta/meta_26-1.xlsx")$meta)
+#' }
+#' @export
+meta_mouse_table <- function(dat, workbook = NULL) {
+  cohort <- analysis_status_(cohort_input_(workbook, dat, "group"), dat)
+  units <- data_units_(dat)
+  ends <- dplyr::filter(dplyr::select(cohort, "mouse_id", "end_date"), !is.na(.data$mouse_id))
+
+  cells <- lapply(units, function(u) unit_cells_(u, ends)[cohort$mouse_id])
+  cells <- lapply(cells, function(v) dplyr::coalesce(unname(v), ""))
+
+  lvls <- group_levels_(cohort, dat)
+  out <- tibble::tibble(
+    mouse_id = cohort$mouse_id,
+    ear_tag = cohort$ear_tag,
+    group = cohort$group,
+    sex = cohort$sex,
+    cage = cohort$cage,
+    age_at_bmt_wk = round(as.numeric(cohort$bmt_date - cohort$dob) / 7, 1),
+    end_day = as.numeric(cohort$end_date - cohort$bmt_date)
+  )
+  if (length(cells) > 0) out <- dplyr::bind_cols(out, tibble::as_tibble(cells))
+  out$status <- mouse_status_(cohort, dat$exclusions)
+
+  ord <- order(
+    match(out$group, lvls, nomatch = length(lvls) + 1L),
+    is.na(out$mouse_id),
+    suppressWarnings(as.integer(stringr::str_extract(out$mouse_id, "[0-9]+$"))),
+    out$mouse_id, out$ear_tag
+  )
+  out <- out[ord, ]
+
+  gt::gt(out) |>
+    gt::sub_missing(missing_text = "") |>
+    gt::tab_style(
+      style = gt::cell_fill(color = "#FFF3CD"),
+      locations = gt::cells_body(rows = status != "ok")
+    )
+}
+
+# Internal: one cell string per mouse (named by mouse_id) for one unit.
+unit_cells_ <- function(u, ends) {
+  tissues <- if ("tissue" %in% names(u)) unique(stats::na.omit(u$tissue)) else character()
+  if (length(tissues) > 1) {
+    present <- dplyr::distinct(u, .data$mouse_id, .data$tissue)
+    return(vapply(split(present$tissue, present$mouse_id), function(t) {
+      paste(toupper(substr(tissues[tissues %in% t], 1, 1)), collapse = " ")
+    }, character(1)))
+  }
+  if ("collected_at" %in% names(u)) {
+    d <- dplyr::distinct(u, .data$mouse_id, .data$collected_at) |>
+      dplyr::left_join(ends, by = "mouse_id") |>
+      dplyr::mutate(.end_ = !is.na(.data$end_date) &
+                      as.Date(.data$collected_at) == .data$end_date)
+    serial <- unique(d$collected_at[!d$.end_])
+    if (length(serial) > 0) {
+      expected <- length(serial) + 1L
+      return(vapply(split(d, d$mouse_id), function(m) {
+        paste0(sum(!m$.end_) + any(m$.end_), "/", expected)
+      }, character(1)))
+    }
+  }
+  ids <- unique(u$mouse_id)
+  stats::setNames(rep("✓", length(ids)), ids)
+}
+
+# Internal: status string per cohort row.
+mouse_status_ <- function(cohort, exclusions) {
+  base <- dplyr::case_when(
+    !cohort$in_db ~ paste0("not in DB: ", dplyr::coalesce(cohort$reason, "no reason given")),
+    cohort$excluded ~ paste0("excluded: ", dplyr::coalesce(cohort$exclusion_reason, "no reason given")),
+    cohort$early ~ paste0("early: ", dplyr::coalesce(cohort$reason, "no reason given"),
+                          " (d ", as.numeric(cohort$end_date - cohort$bmt_date), ")"),
+    TRUE ~ "ok"
+  )
+  if (is.null(exclusions) || nrow(exclusions) == 0) return(base)
+  partial <- exclusions |>
+    dplyr::filter(!(is.na(.data$tissue) & is.na(.data$panel) & is.na(.data$condition) &
+                      is.na(.data$file_name) & is.na(.data$collected_at)))
+  if (nrow(partial) == 0) return(base)
+  partial$scope <- apply(
+    partial[, c("tissue", "panel", "condition", "file_name", "collected_at")], 1,
+    function(r) paste(trimws(stats::na.omit(r)), collapse = " ")
+  )
+  notes <- partial |>
+    dplyr::distinct(.data$mouse_id, .data$scope, .data$reason) |>
+    dplyr::summarise(
+      note = paste0("excl. ", .data$scope, " (", dplyr::coalesce(.data$reason, "no reason given"), ")",
+                    collapse = "; "),
+      .by = "mouse_id"
+    )
+  note <- notes$note[match(cohort$mouse_id, notes$mouse_id)]
+  dplyr::if_else(is.na(note), base, paste0(base, "; ", note))
+}
