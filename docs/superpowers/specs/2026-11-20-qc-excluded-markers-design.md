@@ -49,3 +49,11 @@ already explained by the meta workbook's `exclusions` sheet.
 
 Exact wording of the report notes; whether the cross is slightly larger than
 the circles for visibility.
+
+## Addendum 2026-11-20: label colours
+
+On plots that label points (FACS individuals, ELISA / histology outlier, ELISA
+CV), excluded samples get a red `mouse_ID` label on every point; outliers
+(and high-CV samples) get a black one. An excluded outlier gets only the red
+label. Two fixed-colour label layers (`qc_label_layers_()`), so no colour
+scale is touched. Batch plots stay unlabelled.

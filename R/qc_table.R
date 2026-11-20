@@ -182,9 +182,9 @@ qc_table_score_ <- function(data, var, group_col = NULL, log_scale = FALSE) {
 }
 
 # Boxplot + jitter of scored values; facets `var` (rows) x timepoint (columns,
-# plus tissue if several); flagged points labelled with `mouse_ID`. x = group,
-# or `batch_col` (points coloured by it) for the batch view. Samples in
-# `excluded_keys` (qc_excluded_keys_()) are drawn as crosses.
+# plus tissue if several); `mouse_ID` labels: flagged points black, samples
+# in `excluded_keys` (qc_excluded_keys_()) red and drawn as crosses. x =
+# group, or `batch_col` (points coloured by it) for the batch view.
 qc_table_plot_ <- function(scored, var, group_col = NULL, log_scale = FALSE,
                            batch_col = NULL, excluded_keys = NULL) {
   d <- scored[!is.na(scored$value) & (!isTRUE(log_scale) | scored$value > 0), ]
@@ -199,21 +199,10 @@ qc_table_plot_ <- function(scored, var, group_col = NULL, log_scale = FALSE,
   } else {
     qc_batch_label_(d[[group_col]])
   }
-  d$.label <- dplyr::if_else(d$flag, as.character(d$mouse_ID), "")
   d$.excluded <- qc_excluded_col_(qc_is_excluded_(d, excluded_keys), nrow(d))
+  d <- qc_add_labels_(d, d$flag)
   d$timepoint <- factor(d$timepoint, levels = qc_timepoint_levels_(d$timepoint))
   pos <- ggplot2::position_jitter(width = 0.15, height = 0, seed = 1)
-  label_layer <- if (qc_has_ggrepel_()) {
-    ggrepel::geom_text_repel(
-      ggplot2::aes(label = .label), position = pos, size = 3, colour = "red3",
-      min.segment.length = 0, max.overlaps = Inf, show.legend = FALSE
-    )
-  } else {
-    ggplot2::geom_text(
-      ggplot2::aes(label = .label), position = pos, size = 3, colour = "red3",
-      hjust = -0.2, show.legend = FALSE
-    )
-  }
   cols <- if (length(unique(d$tissue)) > 1) {
     ggplot2::vars(tissue, timepoint)
   } else {
@@ -229,7 +218,7 @@ qc_table_plot_ <- function(scored, var, group_col = NULL, log_scale = FALSE,
                             position = pos, size = 1.5)
   }
   p <- p +
-    label_layer +
+    qc_label_layers_(pos) +
     qc_excluded_shape_(d$.excluded) +
     ggplot2::facet_grid(rows = ggplot2::vars(.row), cols = cols,
                         scales = "free_y") +

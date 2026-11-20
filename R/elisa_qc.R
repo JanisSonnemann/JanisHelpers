@@ -117,9 +117,9 @@ elisa_qc_replicates_ <- function(data, max_cv = 20) {
 }
 
 # Jittered CVs (elisa_qc_cv_()) per analyte, facets timepoint (plus tissue if
-# several); dashed line at `max_cv`, points above it red and labelled with
-# mouse_ID; samples in `excluded_keys` (qc_excluded_keys_()) drawn as
-# crosses. NULL without any CV.
+# several); dashed line at `max_cv`, points above it red with a black
+# mouse_ID label; samples in `excluded_keys` (qc_excluded_keys_()) drawn as
+# crosses with a red label. NULL without any CV.
 elisa_qc_cv_plot_ <- function(cv, max_cv = 20, excluded_keys = NULL) {
   if (nrow(cv) == 0) {
     return(NULL)
@@ -129,19 +129,8 @@ elisa_qc_cv_plot_ <- function(cv, max_cv = 20, excluded_keys = NULL) {
   d$.excluded <- qc_excluded_col_(qc_is_excluded_(d, excluded_keys), nrow(d))
   d$timepoint <- factor(d$timepoint, levels = qc_timepoint_levels_(d$timepoint))
   d$.high <- d$cv > max_cv
-  d$.label <- dplyr::if_else(d$.high, as.character(d$mouse_ID), "")
+  d <- qc_add_labels_(d, d$.high)
   pos <- ggplot2::position_jitter(width = 0.15, height = 0, seed = 1)
-  label_layer <- if (qc_has_ggrepel_()) {
-    ggrepel::geom_text_repel(
-      ggplot2::aes(label = .label), position = pos, size = 3, colour = "red3",
-      min.segment.length = 0, max.overlaps = Inf, show.legend = FALSE
-    )
-  } else {
-    ggplot2::geom_text(
-      ggplot2::aes(label = .label), position = pos, size = 3, colour = "red3",
-      hjust = -0.2, show.legend = FALSE
-    )
-  }
   cols <- if (length(unique(d$tissue)) > 1) {
     ggplot2::vars(tissue, timepoint)
   } else {
@@ -152,7 +141,7 @@ elisa_qc_cv_plot_ <- function(cv, max_cv = 20, excluded_keys = NULL) {
                         colour = "red3") +
     ggplot2::geom_point(ggplot2::aes(colour = .high, shape = .excluded),
                         position = pos, alpha = 0.7, size = 1.5) +
-    label_layer +
+    qc_label_layers_(pos) +
     qc_excluded_shape_(d$.excluded) +
     ggplot2::scale_colour_manual(values = c("FALSE" = "grey20",
                                             "TRUE" = "red3"),

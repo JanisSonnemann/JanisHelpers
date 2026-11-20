@@ -236,7 +236,7 @@ test_that("qc_plot_individuals_ labels only flagged mice", {
   expect_s3_class(p, "ggplot")
   labs <- ggplot2::ggplot_build(p)$data[[which(vapply(
     p$layers, function(l) inherits(l$geom, c("GeomText", "GeomTextRepel")), logical(1)
-  ))]]$label
+  ))[1]]]$label
   expect_equal(unique(labs[labs != ""]), "m-3")
   expect_s3_class(p$facet, "FacetGrid")
 })
@@ -462,4 +462,35 @@ test_that("qc plots draw excluded files as crosses", {
   # older scored data without the column: all circles
   sc$excluded <- NULL
   expect_true(all(point_shapes_(qc_plot_individuals_(sc, s, "hierarchy")) == 16))
+})
+
+# Text layers' fixed colour, named by the non-empty labels each one draws.
+label_layers_ <- function(p) {
+  i <- which(vapply(p$layers, function(l) inherits(l$geom, c("GeomText", "GeomTextRepel")),
+                    logical(1)))
+  built <- ggplot2::ggplot_build(p)$data
+  stats::setNames(
+    vapply(p$layers[i], function(l) l$aes_params$colour, character(1)),
+    vapply(i, function(j) paste(sort(unique(setdiff(built[[j]]$label, ""))),
+                                collapse = ","), character(1))
+  )
+}
+
+test_that("outliers get black labels, excluded samples red ones", {
+  d <- fake_qc_data()
+  s <- fake_qc_settings(d)
+  # m-3 is the outlier; exclude m-10 (not an outlier) first
+  p <- qc_plot_individuals_(qc_score_(d, s, excluded_files = "m-10_spleen.fcs"),
+                            s, "hierarchy")
+  expect_equal(label_layers_(p), c("m-3" = "black", "m-10" = "red3"))
+  expect_equal(unique(p$data$.label[p$data$.label != ""]), "m-3")
+  # every row of the excluded mouse is labelled red, outlier or not
+  expect_true(all(p$data$.label_excl[p$data$mouse_ID == "m-10"] == "m-10"))
+  expect_true(all(p$data$.label_excl[p$data$mouse_ID != "m-10"] == ""))
+  # an excluded outlier gets only the red label
+  p2 <- qc_plot_individuals_(qc_score_(d, s, excluded_files = "m-3_spleen.fcs"),
+                             s, "hierarchy")
+  expect_true(all(p2$data$.label == ""))
+  expect_true(all(p2$data$.label_excl[p2$data$mouse_ID == "m-3"] == "m-3"))
+  expect_no_error(ggplot2::ggplot_build(p2))
 })

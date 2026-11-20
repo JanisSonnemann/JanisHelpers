@@ -223,6 +223,38 @@ qc_excluded_shape_ <- function(.excluded) {
   )
 }
 
+# mouse_ID label layers sharing the points' jitter `pos`: `.label` (outliers,
+# black) and `.label_excl` (samples on the exclusions sheet, red). Every row
+# carries both columns ("" = no label). Fixed colours, so no colour scale is
+# touched (batch views map colour to the batch).
+qc_label_layers_ <- function(pos) {
+  one <- function(col, colour) {
+    if (qc_has_ggrepel_()) {
+      ggrepel::geom_text_repel(
+        ggplot2::aes(label = .data[[col]]), position = pos, size = 3,
+        colour = colour, min.segment.length = 0, max.overlaps = Inf,
+        show.legend = FALSE
+      )
+    } else {
+      ggplot2::geom_text(
+        ggplot2::aes(label = .data[[col]]), position = pos, size = 3,
+        colour = colour, hjust = -0.2, show.legend = FALSE
+      )
+    }
+  }
+  list(one(".label", "black"), one(".label_excl", "red3"))
+}
+
+# Label columns for qc_label_layers_(): excluded samples get the red label
+# (the exclusion explains them), other flagged samples the black one.
+qc_add_labels_ <- function(d, flagged) {
+  ids <- as.character(d$mouse_ID)
+  excl <- d$.excluded == "TRUE"
+  d$.label <- dplyr::if_else(flagged & !excl, ids, "")
+  d$.label_excl <- dplyr::if_else(excl, ids, "")
+  d
+}
+
 # `.excluded` ("TRUE"/"FALSE") for the shape aesthetic from a logical vector
 # (NULL, e.g. no `excluded` column, = none excluded).
 qc_excluded_col_ <- function(excluded, n) {
@@ -270,32 +302,21 @@ qc_y_scale_ <- function(check) {
 }
 
 # Individuals plot: x = group, boxplot + jittered points, mouse_ID labels on
-# flagged values; facets population (MFI: marker) x tissue. NULL if no rows.
+# flagged values (black) and excluded samples (red); facets population (MFI: marker) x tissue. NULL if no rows.
 qc_plot_individuals_ <- function(scored, settings, check, condition = NULL,
                                  population = NULL) {
   d <- qc_plot_rows_(scored, settings, check, condition, population)
   if (is.null(d)) {
     return(NULL)
   }
-  # Label every row ("" if not flagged) so the labels share the points' jitter.
-  d$.label <- dplyr::if_else(d$flag, d$mouse_ID, "")
+  # Label every row ("" if not labelled) so the labels share the points' jitter.
+  d <- qc_add_labels_(d, d$flag)
   pos <- ggplot2::position_jitter(width = 0.15, height = 0, seed = 1)
-  label_layer <- if (qc_has_ggrepel_()) {
-    ggrepel::geom_text_repel(
-      ggplot2::aes(label = .label), position = pos, size = 3, colour = "red3",
-      min.segment.length = 0, max.overlaps = Inf, show.legend = FALSE
-    )
-  } else {
-    ggplot2::geom_text(
-      ggplot2::aes(label = .label), position = pos, size = 3, colour = "red3",
-      hjust = -0.2, show.legend = FALSE
-    )
-  }
   ggplot2::ggplot(d, ggplot2::aes(x = .group, y = .y, fill = .group)) +
     ggplot2::geom_boxplot(outlier.shape = NA, alpha = 0.5) +
     ggplot2::geom_point(ggplot2::aes(shape = .excluded), position = pos,
                         alpha = 0.7, size = 1.5) +
-    label_layer +
+    qc_label_layers_(pos) +
     qc_excluded_shape_(d$.excluded) +
     qc_y_scale_(check) +
     ggplot2::facet_grid(rows = ggplot2::vars(.row), cols = ggplot2::vars(tissue),

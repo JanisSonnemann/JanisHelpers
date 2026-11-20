@@ -290,6 +290,31 @@ test_that("qc_table_plot_ draws excluded samples as crosses", {
   expect_true(all(point_shapes_tbl_(qc_table_plot_(s, "analyte", "grp", FALSE)) == 16))
 })
 
+text_colours_ <- function(p) {
+  ls <- Filter(function(l) inherits(l$geom, c("GeomText", "GeomTextRepel")), p$layers)
+  unname(vapply(ls, function(l) l$aes_params$colour, character(1)))
+}
+
+test_that("qc_table_plot_ labels outliers black and excluded samples red", {
+  s <- qc_table_score_(synthetic_scores(), "analyte", "grp", FALSE)
+  s$batch <- rep(c("b1", "b2"), 3)
+  keys <- tibble::tibble(mouse_ID = "S2", tissue = "spleen", timepoint = "end")
+  p <- qc_table_plot_(s, "analyte", "grp", FALSE, excluded_keys = keys)
+  expect_equal(text_colours_(p), c("black", "red3"))
+  expect_equal(p$data$.label[p$data$.label != ""], "S6")
+  expect_equal(p$data$.label_excl[p$data$.label_excl != ""], "S2")
+  # batch view keeps the batch colour scale for points and fixed label colours
+  b <- qc_table_plot_(s, "analyte", "grp", FALSE, batch_col = "batch",
+                      excluded_keys = keys)
+  expect_equal(text_colours_(b), c("black", "red3"))
+  expect_no_error(ggplot2::ggplot_build(b))
+  # excluded outlier: red label only
+  keys$mouse_ID <- "S6"
+  p6 <- qc_table_plot_(s, "analyte", "grp", FALSE, excluded_keys = keys)
+  expect_true(all(p6$data$.label == ""))
+  expect_equal(p6$data$.label_excl[p6$data$.label_excl != ""], "S6")
+})
+
 test_that("elisa_qc_cv_plot_ draws excluded samples as crosses", {
   cv <- elisa_qc_cv_(fixture_data())
   m1 <- cv[cv$mouse_ID == "M1", ][1, ]
@@ -301,4 +326,7 @@ test_that("elisa_qc_cv_plot_ draws excluded samples as crosses", {
   expect_true(all(sh[hit] == 4))
   expect_true(all(sh[!hit] == 16))
   expect_true(all(point_shapes_tbl_(elisa_qc_cv_plot_(cv, 5)) == 16))
+  # M1 is above the limit and excluded: red label only
+  expect_true(all(p$data$.label[hit] == ""))
+  expect_true(all(p$data$.label_excl[hit] == "M1"))
 })
