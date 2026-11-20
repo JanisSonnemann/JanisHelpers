@@ -19,53 +19,84 @@
 
 library(JanisHelpers)
 
-final <- FALSE
+# ==============================================================================
+# INPUT -- fill in everything in this section
+# ==============================================================================
 
-# ---- experiment ---------------------------------------------------------------
+# ---- run mode ----------------------------------------------------------------
 
-exp_path  <- file.path("data", "26-1_BMT-mRNA-V4")
-meta_path <- file.path(exp_path, "meta", "meta_26-1.xlsx")
-meta      <- meta_read(meta_path)  # standard template
-mice      <- dplyr::filter(meta$meta, !is.na(mouse_ID))
-db_path   <- "~/databases/MPO_mRNA/MPO_mRNA.duckdb"
+final <- FALSE                                  # TRUE = export to the database
 
-# ---- assay --------------------------------------------------------------------
+# ---- experiment --------------------------------------------------------------
 
-path      <- file.path(exp_path, "raw", "ELISA", "spleen-restim-48h_26-1.xlsx")  # curated workbook
-# Wide sheet (one column per date, `final` = end-point)? Reshape it first:
-# path <- elisa_reshape_wide(file.path(exp_path, "raw", "ELISA", "anti-mpo-titer_26-1_wide.xlsx"),
-#                            analyte = "anti-MPO-titer")
-assay     <- "restim"                           # assay name in the database
-tissue    <- "spleen"                           # tissue of every sample in the file
+exp_code      <- "26-1"                         # experiment code in the database
+exp_name      <- "BMT-mRNA-V4"                  # experiment name in the database
+project       <- "MPO_mRNA"                     # project name in the database
+exp_dir       <- "26-1_BMT-mRNA-V4"             # experiment folder in data/
+meta_file     <- "meta_26-1.xlsx"               # meta workbook in <exp_dir>/meta/
+db_path       <- "~/databases/MPO_mRNA/MPO_mRNA.duckdb"
+snapshot_root <- file.path("data", "z_snapshots")
+
+# ---- assay -------------------------------------------------------------------
+
+elisa_file   <- "spleen-restim-48h_26-1.xlsx"   # curated workbook in <exp_dir>/raw/ELISA/
+assay        <- "restim"                        # assay name in the database
+tissue       <- "spleen"                        # tissue of every sample in the file
+
+# Wide sheet (one row per mouse, one column per date, `final` = end-point)?
+# Set wide <- TRUE: it is reshaped to <stem>_long.xlsx first (e.g.
+# elisa_file <- "anti-mpo-titer_26-1_wide.xlsx", wide_analyte <- "anti-MPO-titer").
+wide         <- FALSE
+wide_analyte <- NULL                            # analyte name if the sheet has no `analyte` column
 
 # Optional changes to the long table before saving (e.g. drop an analyte).
 prepare <- function(data) {
   data
 }
 
-# ---- run ------------------------------------------------------------------------
+# ---- QC report (defaults are usually fine) -------------------------------------
+
+group_col     <- "group"                        # outliers scored within these groups
+batch_col     <- "death_date"                   # batch plots per day
+expected_mice <- NULL                           # NULL = all mice in the meta sheet minus dropouts (`early`)
+max_cv        <- 20                             # replicate CV limit in percent
+log_scale     <- FALSE                          # TRUE = score / plot on a log axis
+
+# ==============================================================================
+# PIPELINE -- do not change anything below this line
+# ==============================================================================
+
+exp_path  <- file.path("data", exp_dir)
+meta_path <- file.path(exp_path, "meta", meta_file)
+meta      <- meta_read(meta_path)
+mice      <- dplyr::filter(meta$meta, !is.na(mouse_ID))
+if (is.null(expected_mice)) {
+  dropped <- if ("early" %in% names(mice)) !is.na(mice$early) else FALSE
+  expected_mice <- mice$mouse_ID[!dropped]
+}
+
+path <- file.path(exp_path, "raw", "ELISA", elisa_file)
+if (wide) path <- elisa_reshape_wide(path, analyte = wide_analyte)
 
 con <- if (final) {
   db_connect(path.expand(db_path)) |>
-    db_write_meta(meta, "26-1", "BMT-mRNA-V4", project = "MPO_mRNA")
+    db_write_meta(meta, exp_code, exp_name, project = project)
 }
 elisa_prep_run(
   final,
-  path       = path,
-  assay      = assay,
-  tissue     = tissue,
-  prepare    = prepare,
-  mice       = mice,
-  exclusions = meta$exclusions,                 # NULL if the sheet doesn't exist
-  con        = con,
-  meta_path  = meta_path,                       # final = TRUE also records the exclusions sheet
-  # QC report: outliers scored within groups, batch plots per day,
-  # completeness against all mice minus dropouts (`early`).
-  group_col     = "group",
-  batch_col     = "death_date",
-  expected_mice = mice$mouse_ID[is.na(mice$early)],
-  max_cv        = 20,                           # replicate CV limit in percent
-  log_scale     = FALSE,                        # TRUE = score / plot on a log axis
-  snapshot_root = file.path("data", "z_snapshots")
+  path          = path,
+  assay         = assay,
+  tissue        = tissue,
+  prepare       = prepare,
+  mice          = mice,
+  exclusions    = meta$exclusions,              # NULL if the sheet doesn't exist
+  con           = con,
+  meta_path     = meta_path,                    # final = TRUE also records the exclusions sheet
+  group_col     = group_col,
+  batch_col     = batch_col,
+  expected_mice = expected_mice,
+  max_cv        = max_cv,
+  log_scale     = log_scale,
+  snapshot_root = snapshot_root
 )
 if (!is.null(con)) DBI::dbDisconnect(con, shutdown = TRUE)

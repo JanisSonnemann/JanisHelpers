@@ -19,21 +19,29 @@
 
 library(JanisHelpers)
 
-final <- FALSE
+# ==============================================================================
+# INPUT -- fill in everything in this section
+# ==============================================================================
 
-# ---- experiment ---------------------------------------------------------------
+# ---- run mode ----------------------------------------------------------------
 
-exp_path  <- file.path("data", "26-1_BMT-mRNA-V4")
-meta_path <- file.path(exp_path, "meta", "meta_26-1.xlsx")
-meta      <- meta_read(meta_path)  # standard template
-mice      <- dplyr::filter(meta$meta, !is.na(mouse_ID))
-db_path   <- "~/databases/MPO_mRNA/MPO_mRNA.duckdb"
+final <- FALSE                                  # TRUE = export to the database
 
-# ---- assay --------------------------------------------------------------------
+# ---- experiment --------------------------------------------------------------
 
-path      <- file.path(exp_path, "raw", "histology", "histo_26-1.xlsx")  # curated workbook
-assay     <- "PAS"                              # assay name in the database
-tissue    <- "kidney"                           # tissue of every sample in the file
+exp_code      <- "26-1"                         # experiment code in the database
+exp_name      <- "BMT-mRNA-V4"                  # experiment name in the database
+project       <- "MPO_mRNA"                     # project name in the database
+exp_dir       <- "26-1_BMT-mRNA-V4"             # experiment folder in data/
+meta_file     <- "meta_26-1.xlsx"               # meta workbook in <exp_dir>/meta/
+db_path       <- "~/databases/MPO_mRNA/MPO_mRNA.duckdb"
+snapshot_root <- file.path("data", "z_snapshots")
+
+# ---- assay -------------------------------------------------------------------
+
+histo_file <- "histo_26-1.xlsx"                 # curated workbook in <exp_dir>/raw/histology/
+assay      <- "PAS"                             # assay name in the database
+tissue     <- "kidney"                          # tissue of every sample in the file
 
 # Changes to the long table before saving: derived ratio metrics, dropping a metric.
 # New score columns in the sheet are picked up as metrics automatically; a
@@ -55,28 +63,43 @@ prepare <- function(data) {
 # as variable names; FALSE = violation, NA = not checked).
 rules <- c("crescents <= gloms", "necrosis <= gloms", "abnormal_gloms <= gloms")
 
-# ---- run ------------------------------------------------------------------------
+# ---- QC report (defaults are usually fine) -------------------------------------
+
+group_col     <- "group"                        # outliers scored within these groups
+batch_col     <- "death_date"                   # batch column shown in the overview
+expected_mice <- NULL                           # NULL = all mice in the meta sheet minus dropouts (`early`)
+
+# ==============================================================================
+# PIPELINE -- do not change anything below this line
+# ==============================================================================
+
+exp_path  <- file.path("data", exp_dir)
+meta_path <- file.path(exp_path, "meta", meta_file)
+meta      <- meta_read(meta_path)
+mice      <- dplyr::filter(meta$meta, !is.na(mouse_ID))
+if (is.null(expected_mice)) {
+  dropped <- if ("early" %in% names(mice)) !is.na(mice$early) else FALSE
+  expected_mice <- mice$mouse_ID[!dropped]
+}
 
 con <- if (final) {
   db_connect(path.expand(db_path)) |>
-    db_write_meta(meta, "26-1", "BMT-mRNA-V4", project = "MPO_mRNA")
+    db_write_meta(meta, exp_code, exp_name, project = project)
 }
 histo_prep_run(
   final,
-  path       = path,
-  assay      = assay,
-  tissue     = tissue,
-  prepare    = prepare,
-  mice       = mice,
-  exclusions = meta$exclusions,                 # NULL if the sheet doesn't exist
-  con        = con,
-  meta_path  = meta_path,                       # final = TRUE also records the exclusions sheet
-  # QC report: outliers scored within groups (batch column shown in the
-  # overview), completeness against all mice minus dropouts (`early`).
-  group_col     = "group",
-  batch_col     = "death_date",
-  expected_mice = mice$mouse_ID[is.na(mice$early)],
+  path          = file.path(exp_path, "raw", "histology", histo_file),
+  assay         = assay,
+  tissue        = tissue,
+  prepare       = prepare,
+  mice          = mice,
+  exclusions    = meta$exclusions,              # NULL if the sheet doesn't exist
+  con           = con,
+  meta_path     = meta_path,                    # final = TRUE also records the exclusions sheet
+  group_col     = group_col,
+  batch_col     = batch_col,
+  expected_mice = expected_mice,
   rules         = rules,
-  snapshot_root = file.path("data", "z_snapshots")
+  snapshot_root = snapshot_root
 )
 if (!is.null(con)) DBI::dbDisconnect(con, shutdown = TRUE)
