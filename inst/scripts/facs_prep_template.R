@@ -24,7 +24,8 @@ final <- FALSE
 # ---- experiment ---------------------------------------------------------------
 
 exp_path  <- file.path("data", "26-1_BMT-mRNA-V4")
-meta      <- meta_read(file.path(exp_path, "meta", "meta_26-1.xlsx"))  # standard template
+meta_path <- file.path(exp_path, "meta", "meta_26-1.xlsx")
+meta      <- meta_read(meta_path)  # standard template
 mice      <- dplyr::filter(meta$meta, !is.na(mouse_ID))
 db_path   <- "~/databases/MPO_mRNA/MPO_mRNA.duckdb"
 
@@ -60,6 +61,7 @@ facs_prep_run(
   mice       = mice,
   exclusions = meta$exclusions,                 # NULL if the sheet doesn't exist
   con        = con,
+  meta_path  = meta_path,                       # final = TRUE also records the exclusions sheet
   condition_keyword = NA_character_,            # e.g. "restimulation" for multi-well panels
   # QC report: outliers scored within groups, batch plots per staining day,
   # completeness against all mice minus dropouts (`early`).

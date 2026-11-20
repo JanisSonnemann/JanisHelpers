@@ -16,6 +16,7 @@ histo_prep_run(
   group_col = NULL,
   batch_col = NULL,
   ...,
+  meta_path = NULL,
   data_dir = "data",
   snapshot_root = NULL,
   overwrite = NULL
@@ -49,6 +50,11 @@ sheet. \code{NULL} = nothing excluded.}
 \item{...}{Further QC settings passed to \code{\link[=histo_prep_save]{histo_prep_save()}}
 (\code{expected_mice}, \code{rules}, \code{end_dates}). Used only when
 \code{final = FALSE}.}
+
+\item{meta_path}{Path of the meta workbook, or \code{NULL}. With \code{final = TRUE}
+the \code{exclusions} sheet is also written to the database as the
+experiment's rule set (\code{\link[=db_write_exclusions]{db_write_exclusions()}}), with this path
+(relative to \code{data_dir}) as its source.}
 
 \item{data_dir}{The project's \verb{data/} folder, see \code{\link[=db_export_histo]{db_export_histo()}}.}
 

@@ -148,3 +148,46 @@ test_that("histo_prep_run(final = TRUE) needs a connection", {
   expect_error(histo_prep_run(TRUE, path, "PAS"), "con")
   expect_error(histo_prep_run("yes", path, "PAS"), "final")
 })
+
+# ---- final run records the exclusion rule set ---------------------------------
+
+histo_final_setup <- function(env = parent.frame()) {
+  con <- local_test_db(env)
+  db_write_experiment(con, experiment_code = "26-1")
+  db_write_subjects(con, tibble::tibble(
+    mouse_id = paste0("M", 1:4), experiment_code = "26-1",
+    end_date = as.Date("2026-06-10")
+  ))
+  path <- local_histo_dir(env)
+  Sys.setFileTime(path, Sys.time() - 3600)
+  suppressMessages(histo_prep_save(read_histo_fixture(path), path, "PAS"))
+  paths <- histo_prep_paths_(path)
+  dir.create(dirname(paths$qc))
+  writeLines("<html></html>", paths$qc)
+  Sys.setFileTime(paths$qc, Sys.time() + 10)
+  list(con = con, path = path, data_dir = dirname(path))
+}
+
+test_that("histo_prep_run(final = TRUE) writes the exclusion set", {
+  s <- histo_final_setup()
+  ex <- tibble::tibble(mouse_ID = "M2", reason = "torn section")
+  suppressMessages(histo_prep_run(TRUE, s$path, "PAS", exclusions = ex,
+                                  con = s$con, data_dir = s$data_dir))
+  expect_equal(count_rows_(s$con, "exclusion_sets"), 1)
+  expect_equal(
+    DBI::dbGetQuery(s$con, "SELECT reason FROM exclusion_rules")$reason,
+    "torn section")
+})
+
+test_that("histo_prep_run meta_path fills source_file", {
+  s <- histo_final_setup()
+  meta_file <- file.path(s$data_dir, "meta.xlsx")
+  file.create(meta_file)
+  ex <- tibble::tibble(mouse_ID = "M2", reason = "torn section")
+  suppressMessages(histo_prep_run(TRUE, s$path, "PAS", exclusions = ex,
+                                  con = s$con, meta_path = meta_file,
+                                  data_dir = s$data_dir))
+  expect_equal(
+    DBI::dbGetQuery(s$con, "SELECT source_file FROM exclusion_sets")$source_file,
+    "meta.xlsx")
+})

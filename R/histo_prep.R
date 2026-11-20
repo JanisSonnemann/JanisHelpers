@@ -172,6 +172,10 @@ histo_prep_load <- function(path) {
 #' @param ... Further QC settings passed to [histo_prep_save()]
 #'   (`expected_mice`, `rules`, `end_dates`). Used only when
 #'   `final = FALSE`.
+#' @param meta_path Path of the meta workbook, or `NULL`. With `final = TRUE`
+#'   the `exclusions` sheet is also written to the database as the
+#'   experiment's rule set ([db_write_exclusions()]), with this path
+#'   (relative to `data_dir`) as its source.
 #' @param data_dir The project's `data/` folder, see [db_export_histo()].
 #' @param snapshot_root Folder for dated snapshots after an export. `NULL`
 #'   (default) = none.
@@ -190,7 +194,7 @@ histo_prep_load <- function(path) {
 histo_prep_run <- function(final, path, assay, tissue = NA_character_,
                            prepare = identity, mice = NULL, exclusions = NULL,
                            con = NULL, group_col = NULL, batch_col = NULL,
-                           ..., data_dir = "data", snapshot_root = NULL,
+                           ..., meta_path = NULL, data_dir = "data", snapshot_root = NULL,
                            overwrite = NULL) {
   if (!is.logical(final) || length(final) != 1L || is.na(final)) {
     stop("`final` must be TRUE or FALSE.", call. = FALSE)
@@ -201,6 +205,7 @@ histo_prep_run <- function(final, path, assay, tissue = NA_character_,
            call. = FALSE)
     }
     prep <- histo_prep_load(path)
+    write_prep_exclusions_(con, prep, exclusions, meta_path, data_dir)
     id <- db_export_histo(con, prep, exclusions, data_dir = data_dir,
                           overwrite = overwrite)
     if (!is.null(id) && !is.null(snapshot_root)) db_snapshot(con, snapshot_root)

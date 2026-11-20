@@ -322,6 +322,10 @@ facs_prep_load <- function(wsp_path, panel_dir) {
 #'   (`expected_mice`, `expected_tissues`, `qc_populations`,
 #'   `qc_mfi_populations`, `qc_metrics`, `min_events`). Used only when
 #'   `final = FALSE`.
+#' @param meta_path Path of the meta workbook, or `NULL`. With `final = TRUE`
+#'   the `exclusions` sheet is also written to the database as the
+#'   experiment's rule set ([db_write_exclusions()]), with this path
+#'   (relative to `data_dir`) as its source.
 #' @param data_dir The project's `data/` folder; provenance paths are stored
 #'   relative to it (see [db_export_facs()]).
 #' @param snapshot_root Folder for dated database snapshots after an export.
@@ -350,7 +354,7 @@ facs_prep_run <- function(final, wsp_path, panel_dir, assay,
                           prepare = identity, mice = NULL, exclusions = NULL,
                           con = NULL, condition_keyword = NA_character_,
                           wsp_group = NULL, group_col = NULL, batch_col = NULL,
-                          ..., data_dir = "data", snapshot_root = NULL,
+                          ..., meta_path = NULL, data_dir = "data", snapshot_root = NULL,
                           overwrite = NULL) {
   if (!is.logical(final) || length(final) != 1L || is.na(final)) {
     stop("`final` must be TRUE or FALSE.", call. = FALSE)
@@ -365,6 +369,7 @@ facs_prep_run <- function(final, wsp_path, panel_dir, assay,
            call. = FALSE)
     }
     prep <- facs_prep_load(wsp_path, panel_dir)
+    write_prep_exclusions_(con, prep, exclusions, meta_path, data_dir)
     id <- db_export_facs(con, prep, exclusions, data_dir = data_dir,
                          overwrite = overwrite)
     if (!is.null(id) && !is.null(snapshot_root)) db_snapshot(con, snapshot_root)

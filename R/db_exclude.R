@@ -335,3 +335,41 @@ rules_without_match_ <- function(con, experiment_code) {
   out$collected_at <- as.Date(out$collected_at)
   out
 }
+
+# Internal: the single experiment code the prep's mice belong to. Mice not
+# registered at all are left to the export's own error.
+experiment_code_of_prep_ <- function(con, prep) {
+  mice <- unique(stats::na.omit(as.character(prep$data$mouse_ID)))
+  found <- if (length(mice) == 0) {
+    character()
+  } else {
+    DBI::dbGetQuery(
+      con,
+      paste0("SELECT DISTINCT e.experiment_code FROM subjects s ",
+             "JOIN experiments e ON e.experiment_id = s.experiment_id ",
+             "WHERE s.mouse_id IN (",
+             paste(rep("?", length(mice)), collapse = ", "), ")"),
+      params = as.list(mice)
+    )$experiment_code
+  }
+  if (length(found) == 0) {
+    stop("None of the prep's mice is registered in the database; register ",
+         "the experiment first (db_write_meta()).", call. = FALSE)
+  }
+  if (length(found) > 1) {
+    stop("The prep's mice span several experiments: ",
+         paste(sort(found), collapse = ", "), ".", call. = FALSE)
+  }
+  found
+}
+
+# Internal: record the exclusions sheet as the experiment's rule set.
+write_prep_exclusions_ <- function(con, prep, exclusions, meta_path, data_dir) {
+  source_file <- if (is.null(meta_path)) {
+    NA_character_
+  } else {
+    relative_to_data_dir_(meta_path, data_dir)
+  }
+  db_write_exclusions(con, exclusions, experiment_code_of_prep_(con, prep),
+                      source_file = source_file)
+}

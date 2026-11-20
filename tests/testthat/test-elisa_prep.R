@@ -109,3 +109,47 @@ test_that("elisa_prep_run(final = TRUE) needs a connection", {
   expect_error(elisa_prep_run(TRUE, path, "restim"), "con")
   expect_error(elisa_prep_run("yes", path, "restim"), "final")
 })
+
+# ---- final run records the exclusion rule set ---------------------------------
+
+elisa_final_setup <- function(env = parent.frame()) {
+  con <- local_test_db(env)
+  db_write_experiment(con, experiment_code = "26-1")
+  db_write_subjects(con, tibble::tibble(
+    mouse_id = c("M1", "M2"), experiment_code = "26-1",
+    end_date = as.Date("2026-06-10")
+  ))
+  path <- local_elisa_dir(env)
+  Sys.setFileTime(path, Sys.time() - 3600)
+  suppressMessages(elisa_prep_save(read_elisa_fixture(path), path, "restim"))
+  paths <- elisa_prep_paths_(path)
+  dir.create(dirname(paths$qc))
+  writeLines("<html></html>", paths$qc)
+  Sys.setFileTime(paths$qc, Sys.time() + 10)
+  list(con = con, path = path, data_dir = dirname(path))
+}
+
+test_that("elisa_prep_run(final = TRUE) writes the exclusion set", {
+  s <- elisa_final_setup()
+  ex <- tibble::tibble(mouse_ID = "M2", reason = "bad plate")
+  suppressMessages(elisa_prep_run(TRUE, s$path, "restim", exclusions = ex,
+                                  con = s$con, data_dir = s$data_dir))
+  expect_equal(count_rows_(s$con, "exclusion_sets"), 1)
+  expect_equal(count_rows_(s$con, "exclusion_rules"), 1)
+  expect_equal(
+    DBI::dbGetQuery(s$con, "SELECT reason FROM exclusion_rules")$reason,
+    "bad plate")
+})
+
+test_that("elisa_prep_run meta_path fills source_file", {
+  s <- elisa_final_setup()
+  meta_file <- file.path(s$data_dir, "meta.xlsx")
+  file.create(meta_file)
+  ex <- tibble::tibble(mouse_ID = "M2", reason = "bad plate")
+  suppressMessages(elisa_prep_run(TRUE, s$path, "restim", exclusions = ex,
+                                  con = s$con, meta_path = meta_file,
+                                  data_dir = s$data_dir))
+  expect_equal(
+    DBI::dbGetQuery(s$con, "SELECT source_file FROM exclusion_sets")$source_file,
+    "meta.xlsx")
+})

@@ -18,6 +18,7 @@ facs_prep_run(
   group_col = NULL,
   batch_col = NULL,
   ...,
+  meta_path = NULL,
   data_dir = "data",
   snapshot_root = NULL,
   overwrite = NULL
@@ -61,6 +62,11 @@ and batch columns for the QC report, see \code{\link[=facs_prep_save]{facs_prep_
 (\code{expected_mice}, \code{expected_tissues}, \code{qc_populations},
 \code{qc_mfi_populations}, \code{qc_metrics}, \code{min_events}). Used only when
 \code{final = FALSE}.}
+
+\item{meta_path}{Path of the meta workbook, or \code{NULL}. With \code{final = TRUE}
+the \code{exclusions} sheet is also written to the database as the
+experiment's rule set (\code{\link[=db_write_exclusions]{db_write_exclusions()}}), with this path
+(relative to \code{data_dir}) as its source.}
 
 \item{data_dir}{The project's \verb{data/} folder; provenance paths are stored
 relative to it (see \code{\link[=db_export_facs]{db_export_facs()}}).}

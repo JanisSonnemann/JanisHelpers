@@ -358,3 +358,64 @@ test_that("facs_select_populations errors on labels for unselected populations",
     "`labels` name\\(s\\) not in the selection: 'CD4\\+#'"
   )
 })
+
+# ---- final run records the exclusion rule set ---------------------------------
+
+facs_final_setup <- function(env = parent.frame()) {
+  con <- local_test_db(env)
+  db_write_experiment(con, experiment_code = "25-7")
+  db_write_subjects(con, tibble::tibble(
+    mouse_id = c("25-7-1", "25-7-2"), experiment_code = "25-7",
+    end_date = as.Date("2026-06-10")
+  ))
+  d <- local_prep_dirs(env)
+  suppressMessages(local_loaded_prep(d, two_files))
+  list(con = con, d = d)
+}
+
+test_that("facs_prep_run(final = TRUE) writes the exclusion set", {
+  s <- facs_final_setup()
+  ex <- tibble::tibble(mouse_ID = "25-7-2", reason = "clots")
+  suppressMessages(facs_prep_run(
+    final = TRUE, wsp_path = s$d$wsp_path, panel_dir = s$d$panel_dir,
+    assay = "overview", exclusions = ex, con = s$con, data_dir = s$d$data_dir
+  ))
+  expect_equal(count_rows_(s$con, "exclusion_sets"), 1)
+  expect_equal(
+    DBI::dbGetQuery(s$con, "SELECT reason FROM exclusion_rules")$reason,
+    "clots")
+})
+
+test_that("facs_prep_run meta_path fills source_file", {
+  s <- facs_final_setup()
+  meta_file <- file.path(s$d$data_dir, "meta.xlsx")
+  file.create(meta_file)
+  ex <- tibble::tibble(mouse_ID = "25-7-2", reason = "clots")
+  suppressMessages(facs_prep_run(
+    final = TRUE, wsp_path = s$d$wsp_path, panel_dir = s$d$panel_dir,
+    assay = "overview", exclusions = ex, con = s$con,
+    meta_path = meta_file, data_dir = s$d$data_dir
+  ))
+  expect_equal(
+    DBI::dbGetQuery(s$con, "SELECT source_file FROM exclusion_sets")$source_file,
+    "meta.xlsx")
+})
+
+test_that("facs_prep_run(final = TRUE) errors for a prep spanning two experiments", {
+  con <- local_test_db()
+  db_write_experiment(con, experiment_code = "25-7")
+  db_write_experiment(con, experiment_code = "25-8")
+  db_write_subjects(con, tibble::tibble(
+    mouse_id = "25-7-1", experiment_code = "25-7", end_date = as.Date("2026-06-10")))
+  db_write_subjects(con, tibble::tibble(
+    mouse_id = "25-7-2", experiment_code = "25-8", end_date = as.Date("2026-06-10")))
+  d <- local_prep_dirs()
+  suppressMessages(local_loaded_prep(d, two_files))
+  expect_error(
+    suppressMessages(facs_prep_run(
+      final = TRUE, wsp_path = d$wsp_path, panel_dir = d$panel_dir,
+      assay = "overview", con = con, data_dir = d$data_dir
+    )),
+    "25-7.*25-8"
+  )
+})
