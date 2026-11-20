@@ -101,6 +101,8 @@ test_that("an empty sheet writes an empty set", {
   suppressMessages(db_write_exclusions(con, ex_sheet, "E1"))
   expect_identical(db_write_exclusions(con, ex_sheet[0, ], "E1"), 2L)
   expect_equal(nrow(current_exclusion_rules_(con, "E1")), 0)
+  expect_message(db_write_exclusions(con, NULL, "E1"), "unchanged")
+  expect_equal(count_rows_(con, "exclusion_sets"), 2)
   suppressMessages(db_write_exclusions(con, ex_sheet, "E1"))
   expect_identical(db_write_exclusions(con, NULL, "E1"), 4L)
   expect_equal(nrow(current_exclusion_rules_(con, "E1")), 0)
@@ -135,5 +137,5 @@ test_that("an unknown panel only messages", {
 test_that("rules for mice without samples are reported", {
   con <- local_test_db()
   seed_exclusion_fixture(con)
-  expect_message(db_write_exclusions(con, ex_sheet, "E1"), "match no stored row")
+  expect_message(db_write_exclusions(con, ex_sheet, "E1"), "match no stored row.*m1|m1.*match no stored row")
 })

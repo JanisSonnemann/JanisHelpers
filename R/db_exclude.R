@@ -154,15 +154,6 @@ db_write_exclusions <- function(con, exclusions, experiment_code,
     )
   }
 
-  known_panels <- DBI::dbGetQuery(con, "SELECT DISTINCT assay_name FROM assays")$assay_name
-  unknown_panels <- setdiff(stats::na.omit(rules$panel), known_panels)
-  if (length(unknown_panels) > 0) {
-    message(
-      "Panel(s) not registered yet: ", paste(unknown_panels, collapse = ", "),
-      ". The rules are stored and apply once that panel is exported."
-    )
-  }
-
   current_id <- current_exclusion_set_id_(con, exp_id)
   if (!is.na(current_id)) {
     current <- current_exclusion_rules_(con, experiment_code) |>
@@ -172,6 +163,15 @@ db_write_exclusions <- function(con, exclusions, experiment_code,
               current_id, ").")
       return(invisible(current_id))
     }
+  }
+
+  known_panels <- DBI::dbGetQuery(con, "SELECT DISTINCT assay_name FROM assays")$assay_name
+  unknown_panels <- setdiff(stats::na.omit(rules$panel), known_panels)
+  if (length(unknown_panels) > 0) {
+    message(
+      "Panel(s) not registered yet: ", paste(unknown_panels, collapse = ", "),
+      ". The rules are stored and apply once that panel is exported."
+    )
   }
 
   unmatched <- rules_without_match_(con, rules)
