@@ -450,3 +450,18 @@ test_that("db_query_subjects / db_load_experiment work on an old file opened rea
   expect_equal(dat$meta$mouse_id, "25-7-1")
   expect_equal(nrow(dat$overview), 1)
 })
+
+test_that("a scope-free rule dated on the end date flags the FACS end-point stains", {
+  con <- local_test_db()
+  seed_flag_fixture(con)
+  suppressMessages(db_write_exclusions(con, tibble::tibble(
+    mouse_ID = "M3", collected_at = as.Date("2026-06-10"), reason = "r_end_any"),
+    "26-1"))
+  facs <- dplyr::collect(db_query_facs(con))
+  expect_true(all(facs$excluded[facs$mouse_id == "M3"]))
+  expect_equal(unique(facs$exclusion_reason[facs$mouse_id == "M3"]), "r_end_any")
+  expect_false(any(facs$excluded[facs$mouse_id != "M3"]))
+  # not mouse-wide: the subject itself is not flagged
+  subj <- dplyr::collect(db_query_subjects(con))
+  expect_false(subj$excluded_mouse_wide[subj$mouse_id == "M3"])
+})

@@ -169,7 +169,8 @@ test_that("exclusions holds the current rule set", {
 test_that("default load drops flagged rows and facility-ID dropouts", {
   con <- local_load_db(); seed_exclusions_(con)
   DBI::dbExecute(con, "UPDATE subjects SET id_source = 'facility' WHERE mouse_id = '26-1-3'")
-  expect_message(dat <- db_load_experiment(con, "26-1"), "26-1-1")
+  expect_message(dat <- db_load_experiment(con, "26-1"),
+                 "Dropping mouse(s) excluded mouse-wide: 26-1-1", fixed = TRUE)
   expect_equal(sort(dat$meta$mouse_id), "26-1-2")
   expect_false(any(c("id_source", "excluded_mouse_wide", "exclusion_reason") %in% names(dat$meta)))
   for (u in c("overview", "Treg", "histo")) {

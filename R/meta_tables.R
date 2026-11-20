@@ -147,7 +147,8 @@ cohort_input_ <- function(workbook, dat, group_col) {
 }
 
 # Internal: map a workbook `meta` sheet (meta_read() names) or a DB subjects
-# table to one shape. Dates become Date; `early` is logical.
+# table to one shape. Dates become Date; `early` is logical. DB rows with
+# id_source "facility" get mouse_id NA and the facility ID as ear_tag.
 cohort_normalise_ <- function(cohort) {
   pick <- function(...) {
     for (nm in c(...)) if (nm %in% names(cohort)) return(cohort[[nm]])
@@ -156,9 +157,16 @@ cohort_normalise_ <- function(cohort) {
   early <- pick("early")
   early <- if (is.logical(early)) dplyr::coalesce(early, FALSE) else
     !is.na(early) & !tolower(trimws(as.character(early))) %in% c("", "no", "false")
+  # DB subjects keyed by their facility ID (dropouts without a mouse_ID): no
+  # mouse_id, the facility ID as ear tag -- as in the workbook
+  mouse_id <- as.character(pick("mouse_ID", "mouse_id"))
+  ear_tag <- as.character(pick("id", "ID", "mdc_id"))
+  facility <- dplyr::coalesce(as.character(pick("id_source")) == "facility", FALSE)
+  ear_tag[facility] <- dplyr::coalesce(ear_tag[facility], mouse_id[facility])
+  mouse_id[facility] <- NA_character_
   tibble::tibble(
-    mouse_id = as.character(pick("mouse_ID", "mouse_id")),
-    ear_tag = as.character(pick("id", "ID", "mdc_id")),
+    mouse_id = mouse_id,
+    ear_tag = ear_tag,
     group = as.character(pick("group", "treatment_group")),
     sex = as.character(pick("sex")),
     cage = as.character(pick("cage")),

@@ -18,7 +18,7 @@ columns are filled with \code{NA}.}
 }
 \value{
 Invisibly, the number of rows newly inserted (updates of
-\code{early} / \code{early_reason} do not count).
+\code{early} / \code{early_reason} / \code{end_date} do not count).
 }
 \description{
 Bulk-inserts subject rows. \code{data} must already be shaped to match the
@@ -26,7 +26,8 @@ Bulk-inserts subject rows. \code{data} must already be shaped to match the
 \code{experiment_code} identifying an experiment already registered via
 \code{\link[=db_write_experiment]{db_write_experiment()}}. Rows whose \code{mouse_id} already exists are not
 inserted again; their \code{early} / \code{early_reason} are updated when \code{data} has
-those columns, all other columns stay untouched. Errors (writing nothing)
+those columns and a stored \code{NA} \code{end_date} is filled from \code{data}; all other
+columns stay untouched. Errors (writing nothing)
 if a stored \code{end_date} differs from a non-\code{NA} incoming one -- end-point
 samples are keyed by it. Also errors if an incoming \code{mdc_id} is already
 stored for a different \code{mouse_id} (one facility ID = one subject; a dropout

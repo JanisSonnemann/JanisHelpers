@@ -272,6 +272,33 @@ test_that("db_write_subjects still returns only newly inserted rows", {
   expect_equal(db_write_subjects(con, dplyr::mutate(d, early = TRUE)), 0)
 })
 
+test_that("db_write_subjects fills a stored NA end_date, never blanks one", {
+  con <- local_test_db()
+  db_write_experiment(con, "25-7")
+  end_of <- function(id) {
+    DBI::dbGetQuery(con, "SELECT end_date FROM subjects WHERE mouse_id = ?",
+                    params = list(id))$end_date
+  }
+  # without early / early_reason columns
+  d <- tibble::tibble(mouse_id = "a", experiment_code = "25-7")
+  db_write_subjects(con, d)
+  expect_true(is.na(end_of("a")))
+  expect_equal(db_write_subjects(con, dplyr::mutate(d, end_date = as.Date("2026-06-10"))), 0)
+  expect_equal(end_of("a"), as.Date("2026-06-10"))
+  db_write_subjects(con, d)
+  expect_equal(end_of("a"), as.Date("2026-06-10"))
+  # with early / early_reason columns
+  e <- tibble::tibble(mouse_id = "b", experiment_code = "25-7", early = TRUE,
+                      early_reason = "sick")
+  db_write_subjects(con, e)
+  db_write_subjects(con, dplyr::mutate(e, end_date = as.Date("2026-05-01")))
+  expect_equal(end_of("b"), as.Date("2026-05-01"))
+  # a changed non-NA end_date is still refused
+  expect_error(
+    db_write_subjects(con, dplyr::mutate(d, end_date = as.Date("2026-07-01"))),
+    "end_date differs")
+})
+
 test_that("db_write_samples defaults collected_at to the subject's end_date", {
   con <- local_test_db(); seed_minimal_fixture(con)
   got <- DBI::dbGetQuery(con, "SELECT collected_at FROM samples")$collected_at

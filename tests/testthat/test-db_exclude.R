@@ -240,3 +240,13 @@ test_that("the prep helper leaves the rule set unchanged when exclusions is NULL
   expect_equal(count_rows_(con, "exclusion_sets"), 2)
   expect_equal(nrow(current_exclusion_rules_(con, "E1")), 0)
 })
+
+test_that("rows differing only in decided_on compare unchanged in any order", {
+  con <- local_test_db()
+  seed_exclusion_fixture(con)
+  sheet <- tibble::tibble(mouse_ID = "m1", reason = "r",
+                          date = as.Date(c("2026-01-01", "2026-02-01")))
+  suppressMessages(db_write_exclusions(con, sheet, "E1"))
+  expect_message(db_write_exclusions(con, sheet[2:1, ], "E1"), "unchanged")
+  expect_equal(count_rows_(con, "exclusion_sets"), 1)
+})

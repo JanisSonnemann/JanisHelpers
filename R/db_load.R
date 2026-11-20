@@ -130,7 +130,7 @@ db_load_experiment <- function(con, experiment, names = NULL, group_levels = NUL
     dropped <- sort(cohort$mouse_id[cohort$excluded_mouse_wide])
     if (length(dropped) > 0) {
       message(
-        "Dropping mouse(s) excluded from every import unit: ",
+        "Dropping mouse(s) excluded mouse-wide: ",
         paste(dropped, collapse = ", "), " (keep_excluded = TRUE keeps them)."
       )
     }

@@ -262,7 +262,9 @@ current_exclusion_rules_ <- function(con, experiment_code) {
 sort_exclusions_ <- function(x) {
   scope <- c("tissue", "panel", "condition", "file_name", "collected_at")
   x <- tibble::as_tibble(x)
-  dplyr::arrange(x, dplyr::across(dplyr::all_of(c("mouse_id", scope, "reason"))))
+  dplyr::arrange(
+    x, dplyr::across(dplyr::all_of(c("mouse_id", scope, "reason", "decided_on")))
+  )
 }
 
 # Internal: exclusions sheet -> rule columns (validated, sorted). `""` -> NA;

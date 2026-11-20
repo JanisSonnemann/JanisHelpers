@@ -223,9 +223,20 @@ test_that("meta_summary_table uses dat$cohort when workbook is NULL", {
   expect_equal(tb_total(tb, "Excluded"), 1)
 })
 
+test_that("facility-ID subjects get no mouse_id and the facility ID as ear tag", {
+  co <- cohort_normalise_(tb_cohort)
+  expect_true(is.na(co$mouse_id[5]))
+  expect_equal(co$ear_tag[5], "D-1")
+  expect_equal(co$mouse_id[1:4], tb_cohort$mouse_id[1:4])
+  # a stored mdc_id stays the ear tag
+  co2 <- cohort_normalise_(dplyr::mutate(tb_cohort, mdc_id = paste0("F", 1:5)))
+  expect_equal(co2$ear_tag, paste0("F", 1:5))
+  expect_true(is.na(co2$mouse_id[5]))
+})
+
 test_that("meta_mouse_table shows DB dropouts", {
   expect_no_message(d <- meta_mouse_table(tb_dat_db)[["_data"]])
-  expect_match(d$status[d$mouse_id %in% "D-1"], "^early: died at bleed")
+  expect_match(d$status[d$ear_tag %in% "D-1"], "^early: died at bleed")
   expect_equal(d$status[d$mouse_id %in% "x-4"], "excluded: no response")
   expect_false(any(grepl("not in DB", d$status)))
 })
@@ -259,7 +270,8 @@ test_that("cohort tables work on a real db_load_experiment() list", {
   expect_equal(tb_total(tb, "Excluded"), 1)
   expect_equal(tb_total(tb, "Analysed"), 1)
   d <- meta_mouse_table(dat)[["_data"]]
-  expect_equal(d$status[d$mouse_id == "26-1-2"], "excluded: bad")
-  expect_match(d$status[d$mouse_id == "D-1"], "^early: died at bleed")
+  expect_equal(d$status[d$mouse_id %in% "26-1-2"], "excluded: bad")
+  expect_match(d$status[d$ear_tag %in% "D-1"], "^early: died at bleed")
+  expect_true(is.na(d$mouse_id[d$ear_tag %in% "D-1"]))
   expect_false(any(grepl("not in DB", d$status)))
 })

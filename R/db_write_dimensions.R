@@ -36,7 +36,8 @@ fill_missing_cols_ <- function(data, cols) {
 #' `experiment_code` identifying an experiment already registered via
 #' [db_write_experiment()]. Rows whose `mouse_id` already exists are not
 #' inserted again; their `early` / `early_reason` are updated when `data` has
-#' those columns, all other columns stay untouched. Errors (writing nothing)
+#' those columns and a stored `NA` `end_date` is filled from `data`; all other
+#' columns stay untouched. Errors (writing nothing)
 #' if a stored `end_date` differs from a non-`NA` incoming one -- end-point
 #' samples are keyed by it. Also errors if an incoming `mdc_id` is already
 #' stored for a different `mouse_id` (one facility ID = one subject; a dropout
@@ -51,7 +52,7 @@ fill_missing_cols_ <- function(data, cols) {
 #'   `id_source` (`"mouse_ID"` (default) or `"facility"`). Missing optional
 #'   columns are filled with `NA`.
 #' @returns Invisibly, the number of rows newly inserted (updates of
-#'   `early` / `early_reason` do not count).
+#'   `early` / `early_reason` / `end_date` do not count).
 #' @export
 db_write_subjects <- function(con, data) {
   update_early <- any(c("early", "early_reason") %in% names(data))
@@ -117,11 +118,12 @@ db_write_subjects <- function(con, data) {
     WHERE s.mouse_id NOT IN (SELECT mouse_id FROM subjects)
   ")$n
 
-  on_conflict <- if (update_early) {
-    "DO UPDATE SET early = excluded.early, early_reason = excluded.early_reason"
-  } else {
-    "DO NOTHING"
-  }
+  # a stored NA end_date is filled from the incoming one (a changed non-NA
+  # one was refused above); early / early_reason only when `data` has them
+  on_conflict <- paste0(
+    "DO UPDATE SET end_date = COALESCE(subjects.end_date, excluded.end_date)",
+    if (update_early) ", early = excluded.early, early_reason = excluded.early_reason"
+  )
   DBI::dbExecute(con, paste("
     INSERT INTO subjects (
       mouse_id, experiment_id, mdc_id, cage, mouse_strain, generation,
