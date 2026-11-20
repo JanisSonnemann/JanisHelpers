@@ -67,7 +67,7 @@ load_quiet_ <- function(...) suppressMessages(db_load_experiment(...))
 test_that("returns meta + exclusions + one tibble per import unit in domain order", {
   con <- local_load_db()
   dat <- load_quiet_(con, "26-1")
-  expect_equal(names(dat), c("meta", "exclusions", "overview", "Treg", "anti-mpo-titer", "histo"))
+  expect_equal(names(dat), c("meta", "cohort", "exclusions", "overview", "Treg", "anti-mpo-titer", "histo"))
   expect_equal(nrow(dat$meta), 3)
   for (el in dat) expect_s3_class(el, "tbl_df")
   expect_true(all(dat$overview$experiment_code == "26-1"))
@@ -84,13 +84,13 @@ test_that("automatic names strip the code literally and only at the end", {
   expect_equal(JanisHelpers:::unit_names_("overview-26-10", "26-1"), "overview-26-10")
   expect_equal(JanisHelpers:::unit_names_("overview-2621", "26-1"), "overview-2621")
   con <- local_load_db()
-  expect_equal(names(load_quiet_(con, "26-10")), c("meta", "exclusions", "overview"))
+  expect_equal(names(load_quiet_(con, "26-10")), c("meta", "cohort", "exclusions", "overview"))
 })
 
 test_that("names overrides selected units; unknown unit errors", {
   con <- local_load_db()
   dat <- load_quiet_(con, "26-1", names = c(titer = "anti-mpo-titer_26-1_long"))
-  expect_equal(names(dat), c("meta", "exclusions", "overview", "Treg", "titer", "histo"))
+  expect_equal(names(dat), c("meta", "cohort", "exclusions", "overview", "Treg", "titer", "histo"))
   expect_error(load_quiet_(con, "26-1", names = c(x = "nope")), "nope.*histo_26-1")
 })
 
@@ -99,6 +99,7 @@ test_that("colliding, reserved or empty names error", {
   expect_error(load_quiet_(con, "26-1", names = c(overview = "Treg_26-1")), "overview")
   expect_error(load_quiet_(con, "26-1", names = c(meta = "histo_26-1")), "meta")
   expect_error(load_quiet_(con, "26-1", names = c(exclusions = "histo_26-1")), "exclusions")
+  expect_error(load_quiet_(con, "26-1", names = c(cohort = "histo_26-1")), "cohort")
   expect_error(load_quiet_(con, "26-1", names = stats::setNames("histo_26-1", "")), "name")
 })
 
@@ -144,60 +145,71 @@ test_that("works on a read-only connection", {
   expect_equal(nrow(dat$meta), 3)
 })
 
-# Import log + exclusions on top of seed_load_fixture():
-# 26-1-1 excluded mouse-wide in the current import of all four units;
-# 26-1-2 excluded mouse-wide only in a superseded overview import, and only
-# for kidney in the current imports.
-seed_exclusions_ <- function(con) {
-  log_ <- function(domain, unit) {
-    JanisHelpers:::write_import_log_(con, domain, "26-1", unit,
-                                     source_file = paste0(unit, ".x"), rows_written = 1)
+# Rule set on top of seed_load_fixture(): 26-1-1 excluded mouse-wide, 26-1-2
+# only for the kidney tissue (matches no stored data, so nothing is flagged).
+seed_exclusions_ <- function(con, rules = NULL) {
+  if (is.null(rules)) {
+    rules <- tibble::tibble(
+      mouse_ID = c("26-1-1", "26-1-2"), tissue = c(NA, "kidney"),
+      reason = "bad", decided_on = as.Date("2026-11-17")
+    )
   }
-  old <- log_("facs", "overview-26-1")
-  ids <- c(
-    log_("facs", "overview-26-1"), log_("facs", "Treg_26-1"),
-    log_("elisa", "anti-mpo-titer_26-1_long"), log_("histo", "histo_26-1")
-  )
-  ex <- function(id, mouse, tissue = NA_character_) {
-    DBI::dbExecute(con, "INSERT INTO import_exclusions
-      (import_id, mouse_id, tissue, reason, decided_on, n_files_matched)
-      VALUES (?, ?, ?, ?, ?, 1)",
-      params = list(id, mouse, tissue, "bad", as.Date("2026-11-17")))
-  }
-  for (id in ids) ex(id, "26-1-1")
-  ex(old, "26-1-2")
-  for (id in ids) ex(id, "26-1-2", "kidney")
+  suppressMessages(db_write_exclusions(con, rules, "26-1"))
   invisible(con)
 }
 
-test_that("exclusions lists current-import rows only", {
+test_that("exclusions holds the current rule set", {
   con <- local_load_db(); seed_exclusions_(con)
   dat <- load_quiet_(con, "26-1")
-  expect_named(dat$exclusions, c("import_unit", "mouse_id", "tissue", "panel",
+  expect_named(dat$exclusions, c("exclusion_set_id", "mouse_id", "tissue", "panel",
     "condition", "file_name", "collected_at", "reason", "decided_on"))
-  expect_equal(nrow(dat$exclusions), 8)
-  expect_equal(sum(dat$exclusions$mouse_id == "26-1-1"), 4)
-  expect_true(all(dat$exclusions$tissue[dat$exclusions$mouse_id == "26-1-2"] == "kidney"))
-  expect_setequal(unique(dat$exclusions$import_unit),
-    c("overview-26-1", "Treg_26-1", "anti-mpo-titer_26-1_long", "histo_26-1"))
+  expect_equal(nrow(dat$exclusions), 2)
 })
 
-test_that("keep_excluded = FALSE drops mice excluded mouse-wide everywhere", {
+test_that("default load drops flagged rows and facility-ID dropouts", {
   con <- local_load_db(); seed_exclusions_(con)
+  DBI::dbExecute(con, "UPDATE subjects SET id_source = 'facility' WHERE mouse_id = '26-1-3'")
   expect_message(dat <- db_load_experiment(con, "26-1"), "26-1-1")
-  expect_false("26-1-1" %in% dat$meta$mouse_id)
-  expect_true("26-1-2" %in% dat$meta$mouse_id)
+  expect_equal(sort(dat$meta$mouse_id), "26-1-2")
+  expect_false(any(c("id_source", "excluded_mouse_wide", "exclusion_reason") %in% names(dat$meta)))
+  for (u in c("overview", "Treg", "histo")) {
+    expect_false("26-1-1" %in% dat[[u]]$mouse_id)
+    expect_false(any(c("excluded", "exclusion_reason") %in% names(dat[[u]])))
+  }
+  # only 26-1-2 remains (26-1-1 excluded, 26-1-3 facility ID)
+  expect_equal(nrow(dat$overview), 3)
+  expect_equal(nrow(dat$histo), 1)
+  expect_equal(nrow(dat[["anti-mpo-titer"]]), 0)
 })
 
-test_that("keep_excluded = TRUE keeps all subjects", {
+test_that("keep_excluded keeps flagged rows with flags", {
   con <- local_load_db(); seed_exclusions_(con)
   dat <- load_quiet_(con, "26-1", keep_excluded = TRUE)
   expect_equal(nrow(dat$meta), 3)
+  expect_true(all(c("id_source", "excluded_mouse_wide") %in% names(dat$meta)))
+  expect_equal(nrow(dat$overview), 9)
+  expect_true(all(c("excluded", "exclusion_reason") %in% names(dat$overview)))
+  expect_equal(sum(dat$overview$excluded), 3)
+  expect_true(all(dat$overview$mouse_id[dat$overview$excluded] == "26-1-1"))
+  expect_true(dat[["anti-mpo-titer"]]$excluded)
 })
 
-test_that("no import_log rows -> empty exclusions, all mice kept", {
-  con <- local_load_db()
+test_that("cohort holds every subject including dropouts", {
+  con <- local_load_db(); seed_exclusions_(con)
+  DBI::dbExecute(con, "UPDATE subjects SET id_source = 'facility' WHERE mouse_id = '26-1-3'")
   dat <- load_quiet_(con, "26-1")
+  expect_equal(nrow(dat$cohort), 3)
+  expect_true(all(c("id_source", "excluded_mouse_wide") %in% names(dat$cohort)))
+  expect_equal(nrow(dat$meta), 1)
+})
+
+test_that("no rule set gives a message; an empty set counts as recorded", {
+  con <- local_load_db()
+  expect_message(dat <- db_load_experiment(con, "26-1"),
+                 "No exclusions recorded for experiment")
   expect_equal(nrow(dat$exclusions), 0)
   expect_equal(nrow(dat$meta), 3)
+  expect_equal(nrow(dat$overview), 9)
+  seed_exclusions_(con, tibble::tibble(mouse_ID = character(), reason = character()))
+  expect_no_message(db_load_experiment(con, "26-1"))
 })

@@ -29,22 +29,27 @@ listed is an error; \code{NA} groups stay \code{NA}.}
 \item{subject_cols}{Columns of \code{meta} joined onto each measurement tibble
 (by \code{experiment_code} + \code{mouse_id}). Default \code{"group"}.}
 
-\item{keep_excluded}{If \code{FALSE} (default), mice excluded mouse-wide in the
-current import of every import unit are dropped from \code{meta} (with a
-message). \code{TRUE} keeps all subjects.}
+\item{keep_excluded}{If \code{FALSE} (default), rows flagged \code{excluded} are
+dropped from every import unit, mice excluded mouse-wide and mice with a
+facility ID (\code{id_source == "facility"}) are dropped from \code{meta} (with a
+message for the excluded ones), and the flag columns are removed. \code{TRUE}
+keeps all rows and subjects, with \code{excluded} / \code{exclusion_reason} in the
+units and \code{id_source} / \code{excluded_mouse_wide} / \code{exclusion_reason} in
+\code{meta}.}
 }
 \value{
-A named list: \code{meta} (one row per mouse, columns as
-\code{\link[=db_query_subjects]{db_query_subjects()}}), \code{exclusions} (exclusion rows of the current
-imports: \code{import_unit}, \code{mouse_id}, \code{tissue}, \code{panel}, \code{condition},
-\code{file_name}, \code{collected_at}, \code{reason}, \code{decided_on}), then one collected
-tibble per import unit -- FACS panels, then ELISA, then histology, each
-alphabetical by import unit.
+A named list: \code{meta} (analysed mice, columns as
+\code{\link[=db_query_subjects]{db_query_subjects()}}), \code{cohort} (every subject of the experiment, with
+all \code{\link[=db_query_subjects]{db_query_subjects()}} columns), \code{exclusions} (the current exclusion
+rules: \code{exclusion_set_id}, \code{mouse_id}, \code{tissue}, \code{panel}, \code{condition},
+\code{file_name}, \code{collected_at}, \code{reason}, \code{decided_on}; a message says when
+none were recorded), then one collected tibble per import unit -- FACS
+panels, then ELISA, then histology, each alphabetical by import unit.
 }
 \description{
 Collects everything stored for one experiment into a single list, so an
 analysis document keeps one object in its workspace: subject meta, the
-exclusions applied at export, and one tibble per import unit (FACS panel =
+cohort, the current exclusion rules, and one tibble per import unit (FACS panel =
 \code{wsp_root}, ELISA / histology file = \code{import_unit}). Each measurement tibble
 gets the requested subject columns joined with \code{\link[=meta_annotate]{meta_annotate()}}; FACS
 tibbles get their panel's population display order via

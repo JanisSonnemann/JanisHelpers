@@ -2,7 +2,7 @@
 #'
 #' Collects everything stored for one experiment into a single list, so an
 #' analysis document keeps one object in its workspace: subject meta, the
-#' exclusions applied at export, and one tibble per import unit (FACS panel =
+#' cohort, the current exclusion rules, and one tibble per import unit (FACS panel =
 #' `wsp_root`, ELISA / histology file = `import_unit`). Each measurement tibble
 #' gets the requested subject columns joined with [meta_annotate()]; FACS
 #' tibbles get their panel's population display order via
@@ -24,15 +24,20 @@
 #'   listed is an error; `NA` groups stay `NA`.
 #' @param subject_cols Columns of `meta` joined onto each measurement tibble
 #'   (by `experiment_code` + `mouse_id`). Default `"group"`.
-#' @param keep_excluded If `FALSE` (default), mice excluded mouse-wide in the
-#'   current import of every import unit are dropped from `meta` (with a
-#'   message). `TRUE` keeps all subjects.
-#' @returns A named list: `meta` (one row per mouse, columns as
-#'   [db_query_subjects()]), `exclusions` (exclusion rows of the current
-#'   imports: `import_unit`, `mouse_id`, `tissue`, `panel`, `condition`,
-#'   `file_name`, `collected_at`, `reason`, `decided_on`), then one collected
-#'   tibble per import unit -- FACS panels, then ELISA, then histology, each
-#'   alphabetical by import unit.
+#' @param keep_excluded If `FALSE` (default), rows flagged `excluded` are
+#'   dropped from every import unit, mice excluded mouse-wide and mice with a
+#'   facility ID (`id_source == "facility"`) are dropped from `meta` (with a
+#'   message for the excluded ones), and the flag columns are removed. `TRUE`
+#'   keeps all rows and subjects, with `excluded` / `exclusion_reason` in the
+#'   units and `id_source` / `excluded_mouse_wide` / `exclusion_reason` in
+#'   `meta`.
+#' @returns A named list: `meta` (analysed mice, columns as
+#'   [db_query_subjects()]), `cohort` (every subject of the experiment, with
+#'   all [db_query_subjects()] columns), `exclusions` (the current exclusion
+#'   rules: `exclusion_set_id`, `mouse_id`, `tissue`, `panel`, `condition`,
+#'   `file_name`, `collected_at`, `reason`, `decided_on`; a message says when
+#'   none were recorded), then one collected tibble per import unit -- FACS
+#'   panels, then ELISA, then histology, each alphabetical by import unit.
 #' @examples
 #' \dontrun{
 #' dat <- local({
@@ -55,25 +60,25 @@ db_load_experiment <- function(con, experiment, names = NULL, group_levels = NUL
     )
   }
 
-  meta <- db_query_subjects(con) |>
+  cohort <- db_query_subjects(con) |>
     dplyr::filter(.data$experiment_code == !!experiment) |>
     dplyr::collect()
   if (!is.null(group_levels)) {
-    unknown <- setdiff(stats::na.omit(unique(meta$group)), group_levels)
+    unknown <- setdiff(stats::na.omit(unique(cohort$group)), group_levels)
     if (length(unknown) > 0) {
       stop(
         "Group(s) not in `group_levels`: ", paste(unknown, collapse = ", "), ".",
         call. = FALSE
       )
     }
-    meta <- dplyr::mutate(meta, group = factor(.data$group, levels = group_levels))
+    cohort <- dplyr::mutate(cohort, group = factor(.data$group, levels = group_levels))
   }
   subject_cols <- setdiff(subject_cols, c("experiment_code", "mouse_id"))
-  missing_cols <- setdiff(subject_cols, base::names(meta))
+  missing_cols <- setdiff(subject_cols, base::names(cohort))
   if (length(missing_cols) > 0) {
     stop(
       "`subject_cols` not in the subject meta: ", paste(missing_cols, collapse = ", "),
-      ". Available: ", paste(base::names(meta), collapse = ", "), ".",
+      ". Available: ", paste(base::names(cohort), collapse = ", "), ".",
       call. = FALSE
     )
   }
@@ -99,29 +104,44 @@ db_load_experiment <- function(con, experiment, names = NULL, group_levels = NUL
 
   el_names <- resolve_unit_names_(units, experiment, names)
 
-  exclusions <- load_exclusions_(con, experiment)
+  exclusions <- current_exclusion_rules_(con, experiment)
+  if (!DBI::dbGetQuery(con, "
+    SELECT COUNT(*) AS n FROM exclusion_sets s JOIN experiments e USING (experiment_id)
+    WHERE e.experiment_code = ?", params = list(experiment))$n > 0) {
+    message("No exclusions recorded for experiment ", experiment, ".")
+  }
+
+  meta <- cohort
   if (!keep_excluded) {
-    dropped <- fully_excluded_mice_(exclusions, units)
+    meta <- dplyr::filter(meta, .data$id_source != "facility")
+    dropped <- sort(cohort$mouse_id[cohort$excluded_mouse_wide])
     if (length(dropped) > 0) {
       message(
         "Dropping mouse(s) excluded from every import unit: ",
         paste(dropped, collapse = ", "), " (keep_excluded = TRUE keeps them)."
       )
-      meta <- dplyr::filter(meta, !.data$mouse_id %in% dropped)
     }
+    meta <- meta |>
+      dplyr::filter(!.data$excluded_mouse_wide) |>
+      dplyr::select(!c("id_source", "excluded_mouse_wide", "exclusion_reason"))
   }
 
   join_cols <- dplyr::select(meta, "experiment_code", "mouse_id", dplyr::all_of(subject_cols))
   tibbles <- lapply(seq_along(units), function(i) {
     d <- domains[[unit_domain[i]]]
     d <- dplyr::select(d[d$unit_ == units[i], ], !"unit_")
+    if (!keep_excluded) {
+      d <- d |>
+        dplyr::filter(!.data$excluded, .data$mouse_id %in% meta$mouse_id) |>
+        dplyr::select(!c("excluded", "exclusion_reason"))
+    }
     d <- meta_annotate(d, join_cols, by = c("experiment_code", "mouse_id"))
     if (unit_domain[i] == "facs") d <- facs_order_populations(d)
     d
   })
   base::names(tibbles) <- el_names
 
-  c(list(meta = meta, exclusions = exclusions), tibbles)
+  c(list(meta = meta, cohort = cohort, exclusions = exclusions), tibbles)
 }
 
 # Internal: list element names for import units -- automatic names, then the
@@ -145,11 +165,11 @@ resolve_unit_names_ <- function(units, experiment, overrides) {
   bad <- unique(c(
     out[is.na(out) | out == ""],
     out[duplicated(out)],
-    intersect(out, c("meta", "exclusions"))
+    intersect(out, c("meta", "cohort", "exclusions"))
   ))
   if (length(bad) > 0 || any(is.na(out) | out == "")) {
     stop(
-      "Element name(s) empty, duplicated or reserved (meta, exclusions): ",
+      "Element name(s) empty, duplicated or reserved (meta, cohort, exclusions): ",
       paste(ifelse(is.na(bad) | bad == "", "<empty name>", bad), collapse = ", "),
       ". Set them with `names = c(new_name = \"import_unit\")`.",
       call. = FALSE
@@ -171,32 +191,9 @@ unit_names_ <- function(units, experiment) {
   out
 }
 
-# Internal: distinct exclusion rows of the experiment's current imports
-# (current = latest import_id per import unit in import_log).
-load_exclusions_ <- function(con, experiment) {
-  current <- dplyr::tbl(con, "import_log") |>
-    dplyr::filter(.data$experiment_code == !!experiment) |>
-    dplyr::group_by(.data$import_unit) |>
-    dplyr::filter(.data$import_id == max(.data$import_id, na.rm = TRUE)) |>
-    dplyr::ungroup() |>
-    dplyr::select("import_id", "import_unit")
-  dplyr::tbl(con, "import_exclusions") |>
-    dplyr::inner_join(current, by = "import_id") |>
-    dplyr::select(
-      "import_unit", "mouse_id", "tissue", "panel", "condition", "file_name",
-      "collected_at", "reason", "decided_on"
-    ) |>
-    dplyr::distinct() |>
-    dplyr::collect() |>
-    dplyr::mutate(
-      collected_at = as.Date(.data$collected_at),
-      decided_on = as.Date(.data$decided_on)
-    ) |>
-    dplyr::arrange(.data$import_unit, .data$mouse_id)
-}
-
 # Internal: mice with a mouse-wide exclusion (no tissue / panel / condition /
 # file / date restriction) in every one of `units`.
+# TODO(Task 8): still used by meta_tables.R; deleted there.
 fully_excluded_mice_ <- function(exclusions, units) {
   if (length(units) == 0 || nrow(exclusions) == 0) return(character())
   mouse_wide <- exclusions |>
