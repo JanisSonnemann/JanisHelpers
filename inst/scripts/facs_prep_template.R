@@ -1,5 +1,6 @@
 # FACS prep script for one panel -- copy into the project and adapt.
-# Template: system.file("scripts", "facs_prep_template.R", package = "JanisHelpers")
+# Copy a clean version of this template to the current working directory (then rename it):
+# file.copy(system.file("scripts", "facs_prep_template.R", package = "JanisHelpers"), ".")
 #
 # One self-contained script per panel; the pipeline logic lives in
 # JanisHelpers (facs_prep_run(), db_write_meta()).
@@ -27,6 +28,7 @@ exp_path  <- file.path("data", "26-1_BMT-mRNA-V4")
 meta_path <- file.path(exp_path, "meta", "meta_26-1.xlsx")
 meta      <- meta_read(meta_path)  # standard template
 mice      <- dplyr::filter(meta$meta, !is.na(mouse_ID))
+calc_meta <- meta_clean(meta)      # volumes + organ weights for facs_calc_count_per_g()
 db_path   <- "~/databases/MPO_mRNA/MPO_mRNA.duckdb"
 
 # ---- panel --------------------------------------------------------------------
@@ -41,9 +43,21 @@ assay     <- "overview"                         # panel's assay name in the data
 selection <- c("live_CD45+")
 
 prepare <- function(data) {
-  data |>
+  data <- data |>
     facs_select_populations(selection) |>
     facs_calc_pct_of(ref_pop = "live_CD45+")
+  # Counts per g organ (column names = the meta workbook's facs_volumes /
+  # organ_weights headers -- check names(calc_meta)):
+  # data <- facs_calc_count_per_g(
+  #   data,
+  #   meta = calc_meta,
+  #   vol_total = "total_vol",
+  #   vol_stained = "ov_vol",
+  #   vol_resuspended = "resuspend_vol",
+  #   vol_measured = "measured_vol",
+  #   organ_piece_weight = "facs_weight"
+  # )
+  data
 }
 
 # ---- run ------------------------------------------------------------------------

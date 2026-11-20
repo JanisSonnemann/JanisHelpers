@@ -1,6 +1,6 @@
 # ELISA prep script for one curated file -- copy into the project and adapt.
-# Copy this script and a blank curated sheet into the project (run once from the project root, adapt the targets):
-# file.copy(system.file(c("scripts/elisa_prep_template.R", "templates/elisa_curated_template.xlsx"), package = "JanisHelpers"), c("data/26-1_BMT-mRNA-V4/src/elisa_prep_26-1_spleen-restim-48h.R", "data/26-1_BMT-mRNA-V4/raw/ELISA/spleen-restim-48h_26-1.xlsx"))
+# Copy a clean version of this template and a blank curated sheet to the current working directory (then rename them):
+# file.copy(system.file(c("scripts/elisa_prep_template.R", "templates/elisa_curated_template.xlsx"), package = "JanisHelpers"), ".")
 #
 # One self-contained script per curated .xlsx; the pipeline logic lives in
 # JanisHelpers (elisa_prep_run(), db_write_meta()).
